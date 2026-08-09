@@ -1,0 +1,19 @@
+{
+  "name": "com.oojjrs.oplat.steam",
+  "displayName": "OOJJRS' Unity Steam Platform",
+  "version": "1.0.0",
+  "unity": "6000.0",
+  "description": "Steamworks.NET adapter for OOJJRS' Unity Platform.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oojjrs/unity_oplat.git?path=/Packages/Steam"
+  },
+  "author": {
+    "name": "oojjrs",
+    "email": "oojjrs@gmail.com"
+  },
+  "dependencies": {
+    "com.oojjrs.oplat": "1.0.0",
+    "com.rlabrecque.steamworks.net": "2025.163.0"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "com.oojjrs.oplat": "file:Core",
+    "com.oojjrs.oplat.steam": "file:Steam",
+    "com.rlabrecque.steamworks.net": "https://github.com/rlabrecque/Steamworks.NET.git?path=/com.rlabrecque.steamworks.net#2025.164.0",
+    "com.unity.ide.visualstudio": "2.0.27",
+    "com.unity.modules.jsonserialize": "1.0.0"
+  }
+}

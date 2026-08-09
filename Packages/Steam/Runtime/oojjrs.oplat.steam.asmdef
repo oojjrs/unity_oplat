@@ -1,0 +1,19 @@
+{
+    "name": "oojjrs.oplat.steam",
+    "rootNamespace": "oojjrs.oplat.steam",
+    "references": [
+        "oojjrs.oplat",
+        "com.rlabrecque.steamworks.net"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UNITY_EDITOR || OOJJRS_STORE_STEAM"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

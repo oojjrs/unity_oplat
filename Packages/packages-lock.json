@@ -1,0 +1,63 @@
+{
+  "dependencies": {
+    "com.oojjrs.oplat": {
+      "version": "file:Core",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
+    "com.oojjrs.oplat.steam": {
+      "version": "file:Steam",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.oojjrs.oplat": "1.0.0",
+        "com.rlabrecque.steamworks.net": "2025.163.0"
+      }
+    },
+    "com.rlabrecque.steamworks.net": {
+      "version": "https://github.com/rlabrecque/Steamworks.NET.git?path=/com.rlabrecque.steamworks.net#2025.164.0",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "03ffbd8d18d443a084f213615ea84c802e3e8e5d"
+    },
+    "com.unity.ext.nunit": {
+      "version": "2.0.5",
+      "depth": 2,
+      "source": "builtin",
+      "dependencies": {}
+    },
+    "com.unity.ide.visualstudio": {
+      "version": "2.0.27",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {
+        "com.unity.test-framework": "1.1.33"
+      },
+      "url": "https://packages.unity.com"
+    },
+    "com.unity.test-framework": {
+      "version": "1.6.0",
+      "depth": 1,
+      "source": "builtin",
+      "dependencies": {
+        "com.unity.ext.nunit": "2.0.3",
+        "com.unity.modules.imgui": "1.0.0",
+        "com.unity.modules.jsonserialize": "1.0.0"
+      }
+    },
+    "com.unity.modules.imgui": {
+      "version": "1.0.0",
+      "depth": 2,
+      "source": "builtin",
+      "dependencies": {}
+    },
+    "com.unity.modules.jsonserialize": {
+      "version": "1.0.0",
+      "depth": 0,
+      "source": "builtin",
+      "dependencies": {}
+    }
+  }
+}
