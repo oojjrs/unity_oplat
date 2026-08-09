@@ -14,7 +14,6 @@
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
 *.log
-/steam_appid.txt
 
 # By default unity supports Blender asset imports, *.blend1 blender files do not need to be commited to version control.
 *.blend1
