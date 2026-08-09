@@ -1,9 +1,9 @@
 {
   "name": "com.oojjrs.oplat",
   "displayName": "OOJJRS' Unity Platform",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "unity": "6000.0",
-  "description": "Common contracts for PC distribution platform integrations.",
+  "description": "Platform authentication initialization for Unity projects.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/oojjrs/unity_oplat.git?path=/Packages/src"
