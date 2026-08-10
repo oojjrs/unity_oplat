@@ -1,9 +1,10 @@
 using System.Threading;
 using System.Threading.Tasks;
+using UnityEngine;
 
 namespace oojjrs.oplat.anonymous
 {
-    internal sealed class AnonymousPlatform : MyPlatform.PlatformInterface
+    internal sealed class AnonymousPlatform : MonoBehaviour, MyPlatform.PlatformInterface
     {
         async Task MyPlatform.PlatformInterface.RunAsync(CancellationToken cancellationToken)
         {

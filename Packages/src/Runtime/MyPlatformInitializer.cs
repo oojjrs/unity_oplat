@@ -30,18 +30,28 @@ namespace oojjrs.oplat
             }
 
             var cancellationToken = destroyCancellationToken;
+            var platform = MyPlatform.CreatePlatform(_callback.InitialType);
             try
             {
-                await MyPlatform.CreatePlatform(_callback.InitialType).RunAsync(cancellationToken);
+                await platform.RunAsync(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                MyPlatform.DestroyPlatform(platform);
                 return;
+            }
+            catch
+            {
+                MyPlatform.DestroyPlatform(platform);
+                throw;
             }
 
             if (callbackObject == null)
+            {
+                MyPlatform.DestroyPlatform(platform);
                 return;
+            }
 
             _callback.OnOk();
         }
