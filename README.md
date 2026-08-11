@@ -24,11 +24,15 @@ Git 패키지의 의존성만으로는 다른 Git 패키지의 위치를 해석�
 
 1. GameObject에 `MyPlatformInitializer`를 추가한다.
 2. 같은 GameObject의 컴포넌트에서 `MyPlatformInitializer.CallbackInterface`를 구현한다.
-3. `InitialType`으로 `Anonymous` 또는 `Steam`을 반환하고, 초기화 이후 작업은 `OnOk()`에서 시작한다.
+3. `InitialType`으로 `Anonymous` 또는 `Steam`을 반환하고, 초기화 이후 작업은 `OnOk(MyPlatformServiceInterface service)`에서 시작한다.
+
+`service.Account`와 `service.Nickname`으로 계정 식별자와 표시 이름을 가져온다. `Anonymous`는 기기 고유 식별자와 기기 이름을 사용하며, 플랫폼에서 지원하지 않는 값은 기기 이름이나 제품 이름으로 대체한다. Steam은 SteamID와 현재 persona name을 사용한다.
+
+`Account`는 클라이언트에서 조회한 식별 문자열이며 서버 인증 증명이 아니다.
 
 플랫폼별 구현은 별도 어셈블리에서 자동 등록되므로 소비자가 `AnonymousPlatform`이나 `SteamPlatform` 같은 구체 타입을 직접 참조하지 않는다.
 
-플랫폼 구현은 별도 `DontDestroyOnLoad` GameObject의 `MonoBehaviour`로 생성된다. 따라서 `MyPlatformInitializer`는 `OnOk()` 이후 삭제해도 된다.
+플랫폼 구현은 별도 `DontDestroyOnLoad` GameObject의 `MonoBehaviour`로 생성된다. 따라서 `MyPlatformInitializer`는 `OnOk(MyPlatformServiceInterface service)` 이후 삭제해도 된다.
 
 `Steam`은 Steamworks.NET의 `SteamAPI.InitEx`로 초기화한다. 이후 `SteamPlatform`이 매 프레임 콜백을 처리하고, 플랫폼 오브젝트가 파괴될 때 Steam API를 종료한다. Play Mode 중 스크립트를 다시 컴파일했다면 Play Mode를 재시작한다.
 

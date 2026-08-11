@@ -12,7 +12,7 @@ namespace oojjrs.oplat
 {
     internal static class MyPlatform
     {
-        internal interface PlatformInterface
+        internal interface PlatformInterface : MyPlatformServiceInterface
         {
             Task RunAsync(CancellationToken cancellationToken);
         }

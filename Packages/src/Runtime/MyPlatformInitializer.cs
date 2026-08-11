@@ -10,7 +10,7 @@ namespace oojjrs.oplat
         {
             MyPlatformTypeEnum InitialType { get; }
 
-            void OnOk();
+            void OnOk(MyPlatformServiceInterface service);
         }
 
         private CallbackInterface _callback;
@@ -53,7 +53,7 @@ namespace oojjrs.oplat
                 return;
             }
 
-            _callback.OnOk();
+            _callback.OnOk(platform);
         }
     }
 }

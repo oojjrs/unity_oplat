@@ -11,7 +11,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.oojjrs.oplat": "1.1.1",
+        "com.oojjrs.oplat": "1.2.0",
         "com.rlabrecque.steamworks.net": "2025.165.0"
       }
     },

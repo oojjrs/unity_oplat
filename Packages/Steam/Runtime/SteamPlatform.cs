@@ -10,6 +10,9 @@ namespace oojjrs.oplat.steam
     {
         private bool _isInitialized;
 
+        string MyPlatformServiceInterface.Account => SteamUser.GetSteamID().ToString();
+        string MyPlatformServiceInterface.Nickname => SteamFriends.GetPersonaName();
+
         private void OnDestroy()
         {
             if (_isInitialized == false)
