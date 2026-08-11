@@ -1,7 +1,4 @@
 using UnityEngine;
-using UnityEngine.Scripting;
-
-[assembly: AlwaysLinkAssembly]
 
 namespace oojjrs.oplat.anonymous
 {

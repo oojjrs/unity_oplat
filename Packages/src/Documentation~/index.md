@@ -34,6 +34,6 @@ Unity 패키지 manifest는 Git 의존성 위치를 전파하지 못하므로 �
 
 플랫폼 구현은 별도 `DontDestroyOnLoad` GameObject의 `MonoBehaviour`로 생성된다. `MyPlatformInitializer`는 `OnOk(MyPlatformServiceInterface service)` 이후 삭제해도 플랫폼 수명 주기에 영향을 주지 않는다.
 
-Steam 구현은 Windows, macOS, Linux Standalone 대상에서만 컴파일된다. Steam 클라이언트가 실행 중이어야 하며 App ID는 Steam 실행 컨텍스트 또는 개발용 `steam_appid.txt`로 제공한다. 개발용 파일은 배포 빌드에 포함하지 않는다.
+Steam 구현은 소비 프로젝트에 `STEAMWORKS_NET`이 정의된 경우에만 컴파일된다. Steamworks.NET은 기본 설정에서 Standalone 대상에 이 심볼을 자동으로 추가한다. Steam 클라이언트가 실행 중이어야 하며 App ID는 Steam 실행 컨텍스트 또는 개발용 `steam_appid.txt`로 제공한다. 개발용 파일은 배포 빌드에 포함하지 않는다.
 
 초기화는 `SteamAPI.InitEx`를 사용한다. 초기화 후 `SteamPlatform`이 매 프레임 콜백을 처리하고, 플랫폼 오브젝트가 파괴될 때 Steam API를 종료한다. Play Mode 중 스크립트를 다시 컴파일했다면 Play Mode를 재시작한다.

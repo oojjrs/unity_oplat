@@ -1,4 +1,4 @@
-#if UNITY_STANDALONE_WIN || UNITY_STANDALONE_LINUX || UNITY_STANDALONE_OSX
+#if STEAMWORKS_NET
 using UnityEngine;
 
 namespace oojjrs.oplat.steam
