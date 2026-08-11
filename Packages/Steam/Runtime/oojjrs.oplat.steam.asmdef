@@ -1,6 +1,6 @@
 {
     "name": "oojjrs.oplat.steam",
-    "rootNamespace": "oojjrs.oplat.steam",
+    "rootNamespace": "",
     "references": [
         "GUID:11232399baee07e4aa38615228ff6954",
         "GUID:68bd7fdb68ef2684e982e8a9825b18a5"

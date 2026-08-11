@@ -1,6 +1,6 @@
 {
     "name": "oojjrs.oplat.anonymous",
-    "rootNamespace": "oojjrs.oplat.anonymous",
+    "rootNamespace": "",
     "references": [
         "GUID:11232399baee07e4aa38615228ff6954"
     ],
