@@ -4,24 +4,18 @@ Unity 프로젝트의 플랫폼 인증 초기화를 한 진입점으로 묶는 �
 
 ## 설치
 
-Steamworks.NET은 OpenUPM에서 전이 설치된다. 소비 프로젝트의 `Packages/manifest.json`에 다음 scoped registry를 추가한 뒤 `com.oojjrs.oplat`만 설치한다.
+소비 프로젝트의 `Packages/manifest.json`에 Oplat과 Steamworks.NET Git 패키지를 함께 선언한다.
 
 ```json
 {
-  "scopedRegistries": [
-    {
-      "name": "OpenUPM",
-      "url": "https://package.openupm.com",
-      "scopes": [
-        "com.rlabrecque.steamworks.net"
-      ]
-    }
-  ],
   "dependencies": {
-    "com.oojjrs.oplat": "https://github.com/oojjrs/unity_oplat.git?path=/Packages/src"
+    "com.oojjrs.oplat": "https://github.com/oojjrs/unity_oplat.git?path=/Packages/src",
+    "com.rlabrecque.steamworks.net": "https://github.com/rlabrecque/Steamworks.NET.git?path=/com.rlabrecque.steamworks.net#ba71581f1ed7349e8d0f17ddc6f135dd3bc8a6a3"
   }
 }
 ```
+
+Unity 패키지 manifest는 Git 의존성 위치를 전파하지 못하므로 두 항목을 소비 프로젝트에 직접 선언한다. Steamworks.NET은 호환성이 확인된 revision으로 고정한다.
 
 ## 사용법
 

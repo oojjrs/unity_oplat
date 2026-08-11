@@ -11,8 +11,5 @@
   "author": {
     "name": "oojjrs",
     "email": "oojjrs@gmail.com"
-  },
-  "dependencies": {
-    "com.rlabrecque.steamworks.net": "2025.164.1"
   }
 }
