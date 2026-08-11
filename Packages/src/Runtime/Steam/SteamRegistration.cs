@@ -1,7 +1,5 @@
+#if UNITY_STANDALONE_WIN || UNITY_STANDALONE_LINUX || UNITY_STANDALONE_OSX
 using UnityEngine;
-using UnityEngine.Scripting;
-
-[assembly: AlwaysLinkAssembly]
 
 namespace oojjrs.oplat.steam
 {
@@ -14,3 +12,4 @@ namespace oojjrs.oplat.steam
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if UNITY_STANDALONE_WIN || UNITY_STANDALONE_LINUX || UNITY_STANDALONE_OSX
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -43,3 +44,4 @@ namespace oojjrs.oplat.steam
         }
     }
 }
+#endif

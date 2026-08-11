@@ -2,23 +2,30 @@
 
 Unity 프로젝트의 플랫폼 인증 초기화를 한 진입점으로 묶는 `com.oojjrs.oplat` 패키지다.
 
-코어 패키지는 `Anonymous` 초기화를 제공하고, Steam 어댑터 패키지를 함께 설치하면 `Steam` 초기화를 사용할 수 있다. 다른 `MyPlatformTypeEnum` 값을 선택하면 아직 `NotImplementedException`이 발생한다.
+하나의 패키지와 `oojjrs.oplat` 어셈블리에서 `Anonymous`와 `Steam` 초기화를 제공한다. 다른 `MyPlatformTypeEnum` 값을 선택하면 아직 `NotImplementedException`이 발생한다.
 
 ## 설치
 
-Steam 프로젝트는 `Packages/manifest.json`에 코어, Steam 어댑터, Steamworks.NET을 모두 선언하고 Standalone 빌드 프로필에 `STEAMWORKS_NET` scripting define을 추가한다.
+Steamworks.NET은 OpenUPM에서 전이 설치된다. 소비 프로젝트의 `Packages/manifest.json`에 OpenUPM scoped registry와 Oplat 패키지만 선언한다.
 
 ```json
 {
+  "scopedRegistries": [
+    {
+      "name": "OpenUPM",
+      "url": "https://package.openupm.com",
+      "scopes": [
+        "com.rlabrecque.steamworks.net"
+      ]
+    }
+  ],
   "dependencies": {
-    "com.oojjrs.oplat": "https://github.com/oojjrs/unity_oplat.git?path=/Packages/src",
-    "com.oojjrs.oplat.steam": "https://github.com/oojjrs/unity_oplat.git?path=/Packages/Steam",
-    "com.rlabrecque.steamworks.net": "https://github.com/rlabrecque/Steamworks.NET.git?path=/com.rlabrecque.steamworks.net#ba71581f1ed7349e8d0f17ddc6f135dd3bc8a6a3"
+    "com.oojjrs.oplat": "https://github.com/oojjrs/unity_oplat.git?path=/Packages/src"
   }
 }
 ```
 
-Git 패키지의 의존성만으로는 다른 Git 패키지의 위치를 해석할 수 없으므로 소비 프로젝트 manifest에 세 항목을 직접 선언한다.
+기존 `scopedRegistries`나 `dependencies`가 있다면 위 항목을 해당 배열과 객체에 합친다. Oplat은 Steamworks.NET `2025.164.1`에 의존한다.
 
 ## 사용
 
@@ -30,7 +37,7 @@ Git 패키지의 의존성만으로는 다른 Git 패키지의 위치를 해석�
 
 `Account`는 클라이언트에서 조회한 식별 문자열이며 서버 인증 증명이 아니다.
 
-플랫폼별 구현은 별도 어셈블리에서 자동 등록되므로 소비자가 `AnonymousPlatform`이나 `SteamPlatform` 같은 구체 타입을 직접 참조하지 않는다.
+플랫폼별 구현은 패키지 내부에서 자동 등록되므로 소비자가 `AnonymousPlatform`이나 `SteamPlatform` 같은 구체 타입을 직접 참조하지 않는다.
 
 플랫폼 구현은 별도 `DontDestroyOnLoad` GameObject의 `MonoBehaviour`로 생성된다. 따라서 `MyPlatformInitializer`는 `OnOk(MyPlatformServiceInterface service)` 이후 삭제해도 된다.
 
@@ -38,7 +45,8 @@ Git 패키지의 의존성만으로는 다른 Git 패키지의 위치를 해석�
 
 Steam 클라이언트가 실행 중이어야 하며 App ID는 Steam 실행 컨텍스트 또는 개발용 `steam_appid.txt`로 제공한다. 개발용 파일은 배포 빌드에 포함하지 않는다.
 
+Steam 구현은 Windows, macOS, Linux Standalone 대상에서만 컴파일된다. 다른 대상에서는 `Anonymous`를 사용할 수 있다.
+
 ## 구조
 
-- `Packages/src`: 코어 런타임과 익명 인증 구현
-- `Packages/Steam`: Steamworks.NET 초기화 어댑터
+- `Packages/src`: 코어 런타임과 Anonymous 및 Steam 구현

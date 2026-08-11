@@ -4,23 +4,16 @@
       "version": "file:src",
       "depth": 0,
       "source": "embedded",
-      "dependencies": {}
-    },
-    "com.oojjrs.oplat.steam": {
-      "version": "file:Steam",
-      "depth": 0,
-      "source": "embedded",
       "dependencies": {
-        "com.oojjrs.oplat": "1.2.0",
-        "com.rlabrecque.steamworks.net": "2025.165.0"
+        "com.rlabrecque.steamworks.net": "2025.164.1"
       }
     },
     "com.rlabrecque.steamworks.net": {
-      "version": "https://github.com/rlabrecque/Steamworks.NET.git?path=/com.rlabrecque.steamworks.net#ba71581f1ed7349e8d0f17ddc6f135dd3bc8a6a3",
-      "depth": 0,
-      "source": "git",
+      "version": "2025.164.1",
+      "depth": 1,
+      "source": "registry",
       "dependencies": {},
-      "hash": "ba71581f1ed7349e8d0f17ddc6f135dd3bc8a6a3"
+      "url": "https://package.openupm.com"
     },
     "com.unity.ext.nunit": {
       "version": "2.0.5",
