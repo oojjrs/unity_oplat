@@ -9,22 +9,29 @@ namespace oojjrs.oplat.steam
 {
     internal sealed class SteamPlatform : MonoBehaviour, MyPlatform.PlatformInterface
     {
+        private const int ProfileSpriteLoadTimeoutMilliseconds = 5000;
+
+        private Callback<AvatarImageLoaded_t> _avatarImageLoadedCallback;
+        private TaskCompletionSource<bool> _avatarImageLoadedSource;
         private bool _isInitialized;
-        private Sprite _profileImage;
-        private Texture2D _profileImageTexture;
+        private Sprite _profileSprite;
+        private Texture2D _profileSpriteTexture;
 
         string MyPlatformServiceInterface.Account => SteamUser.GetSteamID().ToString();
         bool MyPlatformServiceInterface.IsAlive => (this != null) && _isInitialized;
         string MyPlatformServiceInterface.Nickname => SteamFriends.GetPersonaName();
-        Sprite MyPlatformServiceInterface.ProfileImage => _profileImage;
+        Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
 
         private void OnDestroy()
         {
-            if (_profileImage != null)
-                Destroy(_profileImage);
+            _avatarImageLoadedSource?.TrySetCanceled();
+            _avatarImageLoadedCallback?.Dispose();
 
-            if (_profileImageTexture != null)
-                Destroy(_profileImageTexture);
+            if (_profileSprite != null)
+                Destroy(_profileSprite);
+
+            if (_profileSpriteTexture != null)
+                Destroy(_profileSpriteTexture);
 
             if (_isInitialized == false)
                 return;
@@ -38,40 +45,91 @@ namespace oojjrs.oplat.steam
                 SteamAPI.RunCallbacks();
         }
 
-        Task MyPlatform.PlatformInterface.RunAsync(CancellationToken cancellationToken)
+        async Task MyPlatform.PlatformInterface.RunAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (_isInitialized)
-                return Task.CompletedTask;
+                return;
 
             var result = SteamAPI.InitEx(out var errorMessage);
             if (result != ESteamAPIInitResult.k_ESteamAPIInitResult_OK)
                 throw new InvalidOperationException($"Steam initialization failed ({result}): {errorMessage}");
 
             _isInitialized = true;
-            _profileImage = CreateProfileImage();
-            return Task.CompletedTask;
+            _profileSprite = await LoadProfileSpriteAsync(cancellationToken);
         }
 
-        private Sprite CreateProfileImage()
+        private Sprite CreateProfileSprite(int imageHandle)
         {
-            var imageHandle = SteamFriends.GetMediumFriendAvatar(SteamUser.GetSteamID());
             if (imageHandle <= 0)
                 return null;
 
             if (SteamUtils.GetImageSize(imageHandle, out var width, out var height) == false)
                 return null;
 
-            var data = new byte[checked((int)(width * height * 4))];
+            var textureWidth = checked((int)width);
+            var textureHeight = checked((int)height);
+            var data = new byte[checked(textureWidth * textureHeight * 4)];
             if (SteamUtils.GetImageRGBA(imageHandle, data, data.Length) == false)
                 return null;
 
-            _profileImageTexture = new Texture2D(checked((int)width), checked((int)height), TextureFormat.RGBA32, false);
-            _profileImageTexture.LoadRawTextureData(data);
-            _profileImageTexture.Apply(false, true);
+            FlipVertically(data, textureWidth, textureHeight);
 
-            var rect = new Rect(0f, 0f, _profileImageTexture.width, _profileImageTexture.height);
-            return Sprite.Create(_profileImageTexture, rect, new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+            _profileSpriteTexture = new Texture2D(textureWidth, textureHeight, TextureFormat.RGBA32, false);
+            _profileSpriteTexture.LoadRawTextureData(data);
+            _profileSpriteTexture.Apply(false, true);
+
+            var rect = new Rect(0f, 0f, _profileSpriteTexture.width, _profileSpriteTexture.height);
+            return Sprite.Create(_profileSpriteTexture, rect, new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+        }
+
+        private static void FlipVertically(byte[] data, int width, int height)
+        {
+            var rowSize = checked(width * 4);
+            var row = new byte[rowSize];
+
+            for (var top = 0; top < height / 2; ++top)
+            {
+                var bottom = height - top - 1;
+                Buffer.BlockCopy(data, top * rowSize, row, 0, rowSize);
+                Buffer.BlockCopy(data, bottom * rowSize, data, top * rowSize, rowSize);
+                Buffer.BlockCopy(row, 0, data, bottom * rowSize, rowSize);
+            }
+        }
+
+        private async Task<Sprite> LoadProfileSpriteAsync(CancellationToken cancellationToken)
+        {
+            var steamId = SteamUser.GetSteamID();
+            var source = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _avatarImageLoadedSource = source;
+            _avatarImageLoadedCallback = Callback<AvatarImageLoaded_t>.Create(callback =>
+            {
+                if (callback.m_steamID == steamId)
+                    source.TrySetResult(true);
+            });
+
+            try
+            {
+                var imageHandle = SteamFriends.GetLargeFriendAvatar(steamId);
+                if (imageHandle != -1)
+                    return CreateProfileSprite(imageHandle);
+
+                if (await Task.WhenAny(source.Task, Task.Delay(ProfileSpriteLoadTimeoutMilliseconds, cancellationToken)) != source.Task)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return null;
+                }
+
+                await source.Task;
+                cancellationToken.ThrowIfCancellationRequested();
+                return CreateProfileSprite(SteamFriends.GetLargeFriendAvatar(steamId));
+            }
+            finally
+            {
+                _avatarImageLoadedSource = null;
+                _avatarImageLoadedCallback.Dispose();
+                _avatarImageLoadedCallback = null;
+            }
         }
     }
 }

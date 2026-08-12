@@ -7,7 +7,7 @@ namespace oojjrs.oplat.anonymous
     internal sealed class AnonymousPlatform : MonoBehaviour, MyPlatform.PlatformInterface
     {
         private bool _isInitialized;
-        private Sprite _profileImage;
+        private Sprite _profileSprite;
 
         string MyPlatformServiceInterface.Account
         {
@@ -22,7 +22,7 @@ namespace oojjrs.oplat.anonymous
         }
         bool MyPlatformServiceInterface.IsAlive => (this != null) && _isInitialized;
         string MyPlatformServiceInterface.Nickname => DeviceName;
-        Sprite MyPlatformServiceInterface.ProfileImage => _profileImage;
+        Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
 
         private string DeviceName
         {
@@ -46,11 +46,11 @@ namespace oojjrs.oplat.anonymous
             if (_isInitialized)
                 return;
 
-            var profileImageRequest = Resources.LoadAsync<Sprite>("AnonymousProfile");
-            await Awaitable.FromAsyncOperation(profileImageRequest, cancellationToken);
+            var profileSpriteRequest = Resources.LoadAsync<Sprite>("AnonymousProfile");
+            await Awaitable.FromAsyncOperation(profileSpriteRequest, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
-            _profileImage = profileImageRequest.asset as Sprite;
+            _profileSprite = profileSpriteRequest.asset as Sprite;
             _isInitialized = true;
         }
     }

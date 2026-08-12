@@ -7,6 +7,6 @@ namespace oojjrs.oplat
         string Account { get; }
         bool IsAlive { get; }
         string Nickname { get; }
-        Sprite ProfileImage { get; }
+        Sprite ProfileSprite { get; }
     }
 }
