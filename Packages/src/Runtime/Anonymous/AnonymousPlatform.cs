@@ -21,6 +21,7 @@ namespace oojjrs.oplat.anonymous
             }
         }
         bool MyPlatformServiceInterface.IsAlive => (this != null) && _isInitialized;
+        bool MyPlatformServiceInterface.IsRestartRequired => false;
         string MyPlatformServiceInterface.Nickname => DeviceName;
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
 
@@ -40,7 +41,7 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
-        async Task MyPlatform.PlatformInterface.RunAsync(CancellationToken cancellationToken)
+        async Task MyPlatform.PlatformInterface.RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (_isInitialized)

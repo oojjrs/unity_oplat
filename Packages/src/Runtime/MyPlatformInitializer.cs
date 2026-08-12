@@ -8,9 +8,10 @@ namespace oojjrs.oplat
     {
         public interface CallbackInterface
         {
+            uint AppId { get; }
             MyPlatformTypeEnum InitialType { get; }
 
-            void OnOk(MyPlatformServiceInterface service);
+            void OnResult(MyPlatformServiceInterface service);
         }
 
         private CallbackInterface _callback;
@@ -33,7 +34,7 @@ namespace oojjrs.oplat
             var platform = MyPlatform.CreatePlatform(_callback.InitialType);
             try
             {
-                await platform.RunAsync(cancellationToken);
+                await platform.RunAsync(_callback, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -53,7 +54,7 @@ namespace oojjrs.oplat
                 return;
             }
 
-            _callback.OnOk(platform);
+            _callback.OnResult(platform);
         }
     }
 }

@@ -6,6 +6,7 @@ namespace oojjrs.oplat
     {
         string Account { get; }
         bool IsAlive { get; }
+        bool IsRestartRequired { get; }
         string Nickname { get; }
         Sprite ProfileSprite { get; }
     }

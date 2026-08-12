@@ -14,11 +14,13 @@ namespace oojjrs.oplat.steam
         private Callback<AvatarImageLoaded_t> _avatarImageLoadedCallback;
         private TaskCompletionSource<bool> _avatarImageLoadedSource;
         private bool _isInitialized;
+        private bool _isRestartRequired;
         private Sprite _profileSprite;
         private Texture2D _profileSpriteTexture;
 
         string MyPlatformServiceInterface.Account => SteamUser.GetSteamID().ToString();
         bool MyPlatformServiceInterface.IsAlive => (this != null) && _isInitialized;
+        bool MyPlatformServiceInterface.IsRestartRequired => _isRestartRequired;
         string MyPlatformServiceInterface.Nickname => SteamFriends.GetPersonaName();
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
 
@@ -45,17 +47,32 @@ namespace oojjrs.oplat.steam
                 SteamAPI.RunCallbacks();
         }
 
-        async Task MyPlatform.PlatformInterface.RunAsync(CancellationToken cancellationToken)
+        async Task MyPlatform.PlatformInterface.RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (_isInitialized)
                 return;
+
+            var appId = callback.AppId;
+            if (appId == 0)
+                throw new ArgumentOutOfRangeException(nameof(appId), "Steam App ID must be greater than zero.");
+
+            if (Application.isEditor == false)
+            {
+                _isRestartRequired = SteamAPI.RestartAppIfNecessary(new AppId_t(appId));
+                if (_isRestartRequired)
+                    return;
+            }
 
             var result = SteamAPI.InitEx(out var errorMessage);
             if (result != ESteamAPIInitResult.k_ESteamAPIInitResult_OK)
                 throw new InvalidOperationException($"Steam initialization failed ({result}): {errorMessage}");
 
             _isInitialized = true;
+            var actualAppId = SteamUtils.GetAppID().m_AppId;
+            if (actualAppId != callback.AppId)
+                throw new InvalidOperationException($"Steam initialized with App ID {actualAppId}, but {callback.AppId} was expected.");
+
             _profileSprite = await LoadProfileSpriteAsync(cancellationToken);
         }
 

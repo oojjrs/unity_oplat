@@ -10,7 +10,7 @@ namespace oojjrs.oplat
     {
         internal interface PlatformInterface : MyPlatformServiceInterface
         {
-            Task RunAsync(CancellationToken cancellationToken);
+            Task RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken);
         }
 
         private static readonly Dictionary<MyPlatformTypeEnum, Func<PlatformInterface>> __platformFactories = new();
