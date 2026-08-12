@@ -6,6 +6,9 @@ namespace oojjrs.oplat.anonymous
 {
     internal sealed class AnonymousPlatform : MonoBehaviour, MyPlatform.PlatformInterface
     {
+        private bool _isInitialized;
+        private Sprite _profileImage;
+
         string MyPlatformServiceInterface.Account
         {
             get
@@ -17,7 +20,9 @@ namespace oojjrs.oplat.anonymous
                 return DeviceName;
             }
         }
+        bool MyPlatformServiceInterface.IsAlive => (this != null) && _isInitialized;
         string MyPlatformServiceInterface.Nickname => DeviceName;
+        Sprite MyPlatformServiceInterface.ProfileImage => _profileImage;
 
         private string DeviceName
         {
@@ -37,8 +42,16 @@ namespace oojjrs.oplat.anonymous
 
         async Task MyPlatform.PlatformInterface.RunAsync(CancellationToken cancellationToken)
         {
-            // 한 턴 쉬어서 다른 녀석들과 타이밍을 맞춘다.
-            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (_isInitialized)
+                return;
+
+            var profileImageRequest = Resources.LoadAsync<Sprite>("AnonymousProfile");
+            await Awaitable.FromAsyncOperation(profileImageRequest, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            _profileImage = profileImageRequest.asset as Sprite;
+            _isInitialized = true;
         }
     }
 }

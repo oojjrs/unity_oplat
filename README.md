@@ -25,7 +25,11 @@ Unity 패키지 manifest는 Git 의존성 위치를 전파하지 못하므로 �
 2. 같은 GameObject의 컴포넌트에서 `MyPlatformInitializer.CallbackInterface`를 구현한다.
 3. `InitialType`으로 `Anonymous` 또는 `Steam`을 반환하고, 초기화 이후 작업은 `OnOk(MyPlatformServiceInterface service)`에서 시작한다.
 
-`service.Account`와 `service.Nickname`으로 계정 식별자와 표시 이름을 가져온다. `Anonymous`는 기기 고유 식별자와 기기 이름을 사용하며, 플랫폼에서 지원하지 않는 값은 기기 이름이나 제품 이름으로 대체한다. Steam은 SteamID와 현재 persona name을 사용한다.
+`service.Account`, `service.Nickname`, `service.ProfileImage`로 계정 식별자, 표시 이름, 프로필 이미지를 가져온다. `Anonymous`는 기기 고유 식별자와 기기 이름, 패키지 기본 프로필 이미지를 사용하며 플랫폼에서 지원하지 않는 값은 기기 이름이나 제품 이름으로 대체한다. Steam은 SteamID, 현재 persona name, 현재 사용자의 중간 크기 프로필 이미지를 사용한다. 프로필 이미지를 가져오지 못하면 `ProfileImage`는 `null`이다.
+
+`ProfileImage`가 반환하는 `Sprite`의 수명은 플랫폼 서비스가 관리하므로 소비자가 직접 파괴하지 않는다.
+
+플랫폼 서비스를 장기간 보관하는 경우 `service.IsAlive`를 확인한 뒤 접근한다.
 
 `Account`는 클라이언트에서 조회한 식별 문자열이며 서버 인증 증명이 아니다.
 
