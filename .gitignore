@@ -6,6 +6,7 @@
 # See: https://github.com/github/gitignore/tree/main/Global
 #
 .utmp/
+$*
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
