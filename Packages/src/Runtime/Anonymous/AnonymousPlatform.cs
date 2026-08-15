@@ -8,38 +8,16 @@ namespace oojjrs.oplat.anonymous
     {
         private readonly AnonymousNet _net = new();
 
+        private string _account;
         private bool _isInitialized;
+        private string _nickname;
         private Sprite _profileSprite;
 
-        string MyPlatformServiceInterface.Account
-        {
-            get
-            {
-                var account = SystemInfo.deviceUniqueIdentifier;
-                if (string.IsNullOrEmpty(account) == false && account != SystemInfo.unsupportedIdentifier)
-                    return account;
-
-                return ((MyPlatformServiceInterface)this).Nickname;
-            }
-        }
+        string MyPlatformServiceInterface.Account => _account ?? GetAccount(GetNickname());
         bool MyPlatformServiceInterface.IsAlive => (this != null) && _isInitialized;
         bool MyPlatformServiceInterface.IsRestartRequired => false;
         MyNetInterface MyPlatformServiceInterface.Net => _net;
-        string MyPlatformServiceInterface.Nickname
-        {
-            get
-            {
-                var deviceName = SystemInfo.deviceName;
-                if (string.IsNullOrEmpty(deviceName) == false && deviceName != SystemInfo.unsupportedIdentifier)
-                    return deviceName;
-
-                var productName = Application.productName;
-                if (string.IsNullOrEmpty(productName) == false)
-                    return productName;
-
-                return nameof(AnonymousPlatform);
-            }
-        }
+        string MyPlatformServiceInterface.Nickname => _nickname ?? GetNickname();
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
 
         private void OnDestroy()
@@ -53,17 +31,50 @@ namespace oojjrs.oplat.anonymous
             if (_isInitialized)
                 return;
 
+            var nickname = GetNickname();
+            var account = GetAccount(nickname);
+            var instanceId = callback.AnonymousInstanceId?.Trim();
+            if (string.IsNullOrEmpty(instanceId) == false)
+            {
+                account = $"{account}:{callback.AppId}:{instanceId}";
+                nickname = $"{nickname} [{instanceId}]";
+            }
+
+            _account = account;
+            _nickname = nickname;
+
             var profileSpriteRequest = Resources.LoadAsync<Sprite>("AnonymousProfile");
             await Awaitable.FromAsyncOperation(profileSpriteRequest, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
             _profileSprite = profileSpriteRequest.asset as Sprite;
 
-            var service = (MyPlatformServiceInterface)this;
-            await _net.AuthenticateAsync(service.Account, service.Nickname, cancellationToken);
+            await _net.AuthenticateAsync(_account, _nickname, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
             _isInitialized = true;
+        }
+
+        private static string GetAccount(string nickname)
+        {
+            var account = SystemInfo.deviceUniqueIdentifier;
+            if (string.IsNullOrEmpty(account) == false && account != SystemInfo.unsupportedIdentifier)
+                return account;
+
+            return nickname;
+        }
+
+        private static string GetNickname()
+        {
+            var deviceName = SystemInfo.deviceName;
+            if (string.IsNullOrEmpty(deviceName) == false && deviceName != SystemInfo.unsupportedIdentifier)
+                return deviceName;
+
+            var productName = Application.productName;
+            if (string.IsNullOrEmpty(productName) == false)
+                return productName;
+
+            return nameof(AnonymousPlatform);
         }
     }
 }

@@ -8,6 +8,7 @@ namespace oojjrs.oplat
     {
         public interface CallbackInterface
         {
+            string AnonymousInstanceId { get; }
             uint AppId { get; }
             MyPlatformTypeEnum InitialType { get; }
 

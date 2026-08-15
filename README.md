@@ -23,10 +23,12 @@ Unity 패키지 manifest는 Git 의존성 위치를 전파하지 못하므로 �
 
 1. GameObject에 `MyPlatformInitializer`를 추가한다.
 2. 같은 GameObject의 컴포넌트에서 `MyPlatformInitializer.CallbackInterface`를 구현한다.
-3. `AppId`로 앱 식별자를, `InitialType`으로 `Anonymous` 또는 `Steam`을 반환한다. Steam에는 Depot ID가 아닌 게임의 App ID를 사용한다.
+3. `AppId`로 앱 식별자를, `InitialType`으로 `Anonymous` 또는 `Steam`을 반환한다. `AnonymousInstanceId`에는 로컬 Anonymous 실행 인스턴스를 구분할 안정적인 값을 반환한다. Steam에는 Depot ID가 아닌 게임의 App ID를 사용한다.
 4. 플랫폼 실행 결과는 `OnResult(MyPlatformServiceInterface service)`에서 처리한다.
 
 `service.Account`, `service.Nickname`, `service.ProfileSprite`로 계정 식별자, 표시 이름, 프로필 이미지를 가져온다. `Anonymous`는 기기 고유 식별자와 기기 이름, 패키지 기본 프로필 이미지를 사용하며 플랫폼에서 지원하지 않는 값은 기기 이름이나 제품 이름으로 대체한다. Steam은 SteamID, 현재 persona name, 현재 사용자의 큰 크기 프로필 이미지를 사용한다. 프로필 이미지를 가져오지 못하면 `ProfileSprite`는 `null`이다.
+
+`CallbackInterface.AnonymousInstanceId`는 `Anonymous`에서만 사용한다. `null`, 빈 문자열 또는 공백이면 기존 기기 기반 값을 그대로 사용한다. 값이 있으면 앞뒤 공백을 제거한 뒤 Account에 App ID와 함께 붙이고 Nickname에도 표시하여 같은 기기의 로컬 실행 인스턴스를 구분한다. 같은 논리 인스턴스에는 실행할 때마다 같은 값을 제공해야 하며, 명령행 인자나 테스트 런처 등 값의 출처는 소비 프로젝트가 결정한다.
 
 `ProfileSprite`가 반환하는 `Sprite`의 수명은 플랫폼 서비스가 관리하므로 소비자가 직접 파괴하지 않는다.
 
