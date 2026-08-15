@@ -4,8 +4,10 @@ using UnityEngine;
 
 namespace oojjrs.oplat.anonymous
 {
-    internal sealed class AnonymousPlatform : MonoBehaviour, MyPlatform.PlatformInterface
+    internal class AnonymousPlatform : MonoBehaviour, MyPlatform.PlatformInterface
     {
+        private readonly AnonymousNet _net = new();
+
         private bool _isInitialized;
         private Sprite _profileSprite;
 
@@ -17,15 +19,13 @@ namespace oojjrs.oplat.anonymous
                 if (string.IsNullOrEmpty(account) == false && account != SystemInfo.unsupportedIdentifier)
                     return account;
 
-                return DeviceName;
+                return ((MyPlatformServiceInterface)this).Nickname;
             }
         }
         bool MyPlatformServiceInterface.IsAlive => (this != null) && _isInitialized;
         bool MyPlatformServiceInterface.IsRestartRequired => false;
-        string MyPlatformServiceInterface.Nickname => DeviceName;
-        Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
-
-        private string DeviceName
+        MyNetInterface MyPlatformServiceInterface.Net => _net;
+        string MyPlatformServiceInterface.Nickname
         {
             get
             {
@@ -40,6 +40,7 @@ namespace oojjrs.oplat.anonymous
                 return nameof(AnonymousPlatform);
             }
         }
+        Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
 
         async Task MyPlatform.PlatformInterface.RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken)
         {

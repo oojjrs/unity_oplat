@@ -7,9 +7,11 @@ using UnityEngine;
 
 namespace oojjrs.oplat.steam
 {
-    internal sealed class SteamPlatform : MonoBehaviour, MyPlatform.PlatformInterface
+    internal class SteamPlatform : MonoBehaviour, MyPlatform.PlatformInterface
     {
         private const int ProfileSpriteLoadTimeoutMilliseconds = 5000;
+
+        private readonly SteamNet _net = new();
 
         private Callback<AvatarImageLoaded_t> _avatarImageLoadedCallback;
         private TaskCompletionSource<bool> _avatarImageLoadedSource;
@@ -21,6 +23,7 @@ namespace oojjrs.oplat.steam
         string MyPlatformServiceInterface.Account => SteamUser.GetSteamID().ToString();
         bool MyPlatformServiceInterface.IsAlive => (this != null) && _isInitialized;
         bool MyPlatformServiceInterface.IsRestartRequired => _isRestartRequired;
+        MyNetInterface MyPlatformServiceInterface.Net => _net;
         string MyPlatformServiceInterface.Nickname => SteamFriends.GetPersonaName();
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
 

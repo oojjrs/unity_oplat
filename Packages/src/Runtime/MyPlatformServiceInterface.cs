@@ -7,6 +7,7 @@ namespace oojjrs.oplat
         string Account { get; }
         bool IsAlive { get; }
         bool IsRestartRequired { get; }
+        MyNetInterface Net { get; }
         string Nickname { get; }
         Sprite ProfileSprite { get; }
     }
