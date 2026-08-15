@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,22 +8,6 @@ namespace oojjrs.oplat.anonymous.controllers
 {
     internal static class AnonymousServerAuthenticate
     {
-        private static async Task<string> ReadContentAsync(HttpListenerRequest request)
-        {
-            if (request.HasEntityBody == false)
-                throw new FormatException("Anonymous authentication request body is empty.");
-
-            try
-            {
-                using (var reader = new StreamReader(request.InputStream, request.ContentEncoding))
-                    return await reader.ReadToEndAsync();
-            }
-            catch (ArgumentException exception)
-            {
-                throw new FormatException("Invalid anonymous authentication request encoding.", exception);
-            }
-        }
-
         internal static async Task RunAsync(HttpListenerRequest request, HttpListenerResponse response, AnonymousServerSession.State state)
         {
             if (request.HttpMethod != "POST")
@@ -39,7 +22,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 AnonymousNetAuthenticationProtocol.RequestArgument requestArgument;
                 try
                 {
-                    requestArgument = JsonUtility.FromJson<AnonymousNetAuthenticationProtocol.RequestArgument>(await ReadContentAsync(request));
+                    requestArgument = JsonUtility.FromJson<AnonymousNetAuthenticationProtocol.RequestArgument>(await AnonymousServer.ReadContentAsync(request));
                 }
                 catch (ArgumentException exception)
                 {

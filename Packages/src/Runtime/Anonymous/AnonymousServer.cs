@@ -36,6 +36,22 @@ namespace oojjrs.oplat.anonymous
             return Address + relativePath;
         }
 
+        internal static async Task<string> ReadContentAsync(HttpListenerRequest request)
+        {
+            if (request.HasEntityBody == false)
+                throw new FormatException("Anonymous request body is empty.");
+
+            try
+            {
+                using (var reader = new StreamReader(request.InputStream, request.ContentEncoding))
+                    return await reader.ReadToEndAsync();
+            }
+            catch (ArgumentException exception)
+            {
+                throw new FormatException("Invalid anonymous request encoding.", exception);
+            }
+        }
+
         private async void ListenAsync()
         {
             try

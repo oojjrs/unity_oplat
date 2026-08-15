@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,22 +8,6 @@ namespace oojjrs.oplat.anonymous.controllers
 {
     internal static class AnonymousServerCreateRoom
     {
-        private static async Task<string> ReadContentAsync(HttpListenerRequest request)
-        {
-            if (request.HasEntityBody == false)
-                throw new FormatException("Anonymous room request body is empty.");
-
-            try
-            {
-                using (var reader = new StreamReader(request.InputStream, request.ContentEncoding))
-                    return await reader.ReadToEndAsync();
-            }
-            catch (ArgumentException exception)
-            {
-                throw new FormatException("Invalid anonymous room request encoding.", exception);
-            }
-        }
-
         internal static async Task RunAsync(HttpListenerRequest request, HttpListenerResponse response, AnonymousServerRoom.State roomState, AnonymousServerSession.State sessionState)
         {
             if (request.HttpMethod != "POST")
@@ -45,7 +28,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 AnonymousNetRoomProtocol.RoomRequestArgument args;
                 try
                 {
-                    args = JsonUtility.FromJson<AnonymousNetRoomProtocol.RoomRequestArgument>(await ReadContentAsync(request));
+                    args = JsonUtility.FromJson<AnonymousNetRoomProtocol.RoomRequestArgument>(await AnonymousServer.ReadContentAsync(request));
                 }
                 catch (ArgumentException exception)
                 {
