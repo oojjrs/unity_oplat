@@ -1,6 +1,5 @@
 ﻿using oojjrs.oplat.anonymous.controllers;
 using System;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -9,18 +8,16 @@ namespace oojjrs.oplat.anonymous
 {
     internal class AnonymousNetLobbyService : MyNetLobbyServiceInterface
     {
-        private readonly HttpClient _client;
-        private readonly CancellationToken _lifetimeCancellationToken;
+        private readonly AnonymousNet _net;
 
-        internal AnonymousNetLobbyService(HttpClient client, CancellationToken lifetimeCancellationToken)
+        internal AnonymousNetLobbyService(AnonymousNet net)
         {
-            _client = client;
-            _lifetimeCancellationToken = lifetimeCancellationToken;
+            _net = net;
         }
 
         Task MyNetLobbyServiceInterface.RefreshAsync(MyNetLobbyServiceInterface.ResultInterface result)
         {
-            return RefreshAsync(_lifetimeCancellationToken, result);
+            return RefreshAsync(CancellationToken.None, result);
         }
 
         Task MyNetLobbyServiceInterface.StartAsync(MyNetLobbyServiceInterface.ConfigInterface config, MyNetLobbyServiceInterface.ResultInterface result)
@@ -32,45 +29,38 @@ namespace oojjrs.oplat.anonymous
         {
         }
 
-        private async Task RefreshAsync(CancellationToken cancellationToken, MyNetLobbyServiceInterface.ResultInterface result)
+        private async Task RefreshAsync(CancellationToken callerCancellationToken, MyNetLobbyServiceInterface.ResultInterface result)
         {
-            MyNetRoomInterface[] rooms;
-            try
+            using (var cancellationSource = _net.CreateCancellationSource(callerCancellationToken))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                _lifetimeCancellationToken.ThrowIfCancellationRequested();
-                using (var response = await _client.GetAsync(AnonymousServer.GetUri(AnonymousServer.ApiGetRooms), cancellationToken))
+                var cancellationToken = cancellationSource.Token;
+                MyNetRoomInterface[] rooms;
+                try
+                {
+                    using (var response = await _net.GetAsync(AnonymousServer.ApiGetRooms, cancellationToken))
+                    {
+                        response.EnsureSuccessStatusCode();
+
+                        var content = await response.Content.ReadAsStringAsync();
+                        var roomsData = JsonUtility.FromJson<AnonymousServerGetRooms.ResponseArgument>(content);
+                        if ((roomsData == null) || (roomsData.Rooms == null))
+                            throw new FormatException("Invalid anonymous rooms response.");
+
+                        rooms = new MyNetRoomInterface[roomsData.Rooms.Length];
+                        for (var index = 0; index < roomsData.Rooms.Length; ++index)
+                            rooms[index] = AnonymousNetRoomService.ConvertRoom(roomsData.Rooms[index]);
+                    }
+                }
+                catch (Exception exception)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    response.EnsureSuccessStatusCode();
-
-                    var content = await response.Content.ReadAsStringAsync();
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    var roomsData = JsonUtility.FromJson<AnonymousServerGetRooms.ResponseArgument>(content);
-                    if ((roomsData == null) || (roomsData.Rooms == null))
-                        throw new FormatException("Invalid anonymous rooms response.");
-
-                    rooms = new MyNetRoomInterface[roomsData.Rooms.Length];
-                    for (var index = 0; index < roomsData.Rooms.Length; ++index)
-                        rooms[index] = AnonymousNetRoomService.ConvertRoom(roomsData.Rooms[index]);
+                    result.OnException(new MyNetSessionException("Failed to get anonymous rooms.", exception));
+                    return;
                 }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested || _lifetimeCancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception exception)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                _lifetimeCancellationToken.ThrowIfCancellationRequested();
-                result.OnException(new MyNetSessionException("Failed to get anonymous rooms.", exception));
-                return;
-            }
 
-            cancellationToken.ThrowIfCancellationRequested();
-            _lifetimeCancellationToken.ThrowIfCancellationRequested();
-            result.OnOk(rooms);
+                cancellationToken.ThrowIfCancellationRequested();
+                result.OnOk(rooms);
+            }
         }
     }
 }

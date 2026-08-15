@@ -128,14 +128,12 @@ namespace oojjrs.oplat.anonymous
 
         internal async Task StartAsync(CancellationToken cancellationToken)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             await StartSemaphore.WaitAsync(cancellationToken);
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 lock (StateLock)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
                     if (_isShutdown)
                         throw new ObjectDisposedException(nameof(AnonymousServer));
 

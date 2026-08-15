@@ -1,148 +1,128 @@
-﻿using System;
+﻿using oojjrs.oplat.anonymous.controllers;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
-using oojjrs.oplat.anonymous.controllers;
 using UnityEngine;
 
 namespace oojjrs.oplat.anonymous
 {
     internal class AnonymousNetRoomService : MyNetRoomServiceInterface
     {
-        private readonly HttpClient _client;
-        private readonly CancellationToken _lifetimeCancellationToken;
+        private readonly AnonymousNet _net;
 
-        internal AnonymousNetRoomService(HttpClient client, CancellationToken lifetimeCancellationToken)
+        internal AnonymousNetRoomService(AnonymousNet net)
         {
-            _client = client;
-            _lifetimeCancellationToken = lifetimeCancellationToken;
+            _net = net;
         }
 
         async Task MyNetRoomServiceInterface.CreateAsync(MyNetRoomServiceInterface.CreateConfigInterface config, MyNetRoomServiceInterface.CreateResultInterface result)
         {
-            var cancellationToken = config.CancellationToken;
-            MyNetRoomInterface room;
-            try
+            using (var cancellationSource = _net.CreateCancellationSource(config.CancellationToken))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                _lifetimeCancellationToken.ThrowIfCancellationRequested();
-
-                var requestContent = JsonUtility.ToJson(new AnonymousServerCreateRoom.RequestArgument()
+                var cancellationToken = cancellationSource.Token;
+                MyNetRoomInterface room;
+                try
                 {
-                    IsLocked = config.IsLocked,
-                    IsPrivate = config.IsPrivate,
-                    MaxPlayers = config.MaxPlayers,
-                    Password = config.Password,
-                    PlayerFields = ConvertFields(config.PlayerFields),
-                    PlayerNickname = config.PlayerNickname,
-                    RoomFields = ConvertFields(config.RoomFields),
-                    Title = config.Title,
-                });
-                using (var content = new StringContent(requestContent, Encoding.UTF8, "application/json"))
-                {
-                    using (var response = await _client.PostAsync(AnonymousServer.GetUri(AnonymousServer.ApiCreateRoom), content, cancellationToken))
+                    var requestContent = JsonUtility.ToJson(new AnonymousServerCreateRoom.RequestArgument()
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        response.EnsureSuccessStatusCode();
+                        IsLocked = config.IsLocked,
+                        IsPrivate = config.IsPrivate,
+                        MaxPlayers = config.MaxPlayers,
+                        Password = config.Password,
+                        PlayerFields = ConvertFields(config.PlayerFields),
+                        PlayerNickname = config.PlayerNickname,
+                        RoomFields = ConvertFields(config.RoomFields),
+                        Title = config.Title,
+                    });
+                    using (var content = new StringContent(requestContent, Encoding.UTF8, "application/json"))
+                    {
+                        using (var response = await _net.PostAsync(AnonymousServer.ApiCreateRoom, content, cancellationToken))
+                        {
+                            response.EnsureSuccessStatusCode();
 
-                        var responseContent = await response.Content.ReadAsStringAsync();
-                        cancellationToken.ThrowIfCancellationRequested();
-
-                        room = ConvertRoom(JsonUtility.FromJson<AnonymousServerCreateRoom.ResponseArgument>(responseContent));
+                            var responseContent = await response.Content.ReadAsStringAsync();
+                            room = ConvertRoom(JsonUtility.FromJson<AnonymousServerCreateRoom.ResponseArgument>(responseContent));
+                        }
                     }
                 }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested || _lifetimeCancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception exception)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                _lifetimeCancellationToken.ThrowIfCancellationRequested();
-                result.OnException(new MyNetSessionException("Failed to create anonymous room.", exception));
-                return;
-            }
+                catch (Exception exception)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    result.OnException(new MyNetSessionException("Failed to create anonymous room.", exception));
+                    return;
+                }
 
-            cancellationToken.ThrowIfCancellationRequested();
-            _lifetimeCancellationToken.ThrowIfCancellationRequested();
-            result.OnOk(room);
+                cancellationToken.ThrowIfCancellationRequested();
+                result.OnOk(room);
+            }
         }
 
         async Task MyNetRoomServiceInterface.ExitAsync(MyNetRoomServiceInterface.ExitConfigInterface config, MyNetRoomServiceInterface.ExitResultInterface result)
         {
-            var cancellationToken = config.CancellationToken;
-            cancellationToken.ThrowIfCancellationRequested();
-            _lifetimeCancellationToken.ThrowIfCancellationRequested();
-
-            var playerId = config.PlayerId;
-            var roomId = config.RoomId;
-            if (string.IsNullOrWhiteSpace(playerId))
+            using (var cancellationSource = _net.CreateCancellationSource(config.CancellationToken))
             {
-                result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyPlayerId);
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(roomId))
-            {
-                result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyRoomId);
-                return;
-            }
-
-            MyNetInterface.CatchInterface.FailureEnum? failure = null;
-            try
-            {
-                var requestContent = JsonUtility.ToJson(new AnonymousServerExitRoom.RequestArgument()
+                var cancellationToken = cancellationSource.Token;
+                var playerId = config.PlayerId;
+                var roomId = config.RoomId;
+                if (string.IsNullOrWhiteSpace(playerId))
                 {
-                    PlayerId = playerId,
-                    RoomId = roomId,
-                });
-                using (var content = new StringContent(requestContent, Encoding.UTF8, "application/json"))
+                    result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyPlayerId);
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(roomId))
                 {
-                    using (var response = await _client.PostAsync(AnonymousServer.GetUri(AnonymousServer.ApiExitRoom), content, cancellationToken))
+                    result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyRoomId);
+                    return;
+                }
+
+                MyNetInterface.CatchInterface.FailureEnum? failure = null;
+                try
+                {
+                    var requestContent = JsonUtility.ToJson(new AnonymousServerExitRoom.RequestArgument()
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
-
-                        switch (response.StatusCode)
+                        PlayerId = playerId,
+                        RoomId = roomId,
+                    });
+                    using (var content = new StringContent(requestContent, Encoding.UTF8, "application/json"))
+                    {
+                        using (var response = await _net.PostAsync(AnonymousServer.ApiExitRoom, content, cancellationToken))
                         {
-                            case HttpStatusCode.NotFound:
-                                failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
-                                break;
-                            case HttpStatusCode.Forbidden:
-                                failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
-                                break;
-                            default:
-                                response.EnsureSuccessStatusCode();
-                                break;
+                            switch (response.StatusCode)
+                            {
+                                case HttpStatusCode.NotFound:
+                                    failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
+                                    break;
+                                case HttpStatusCode.Forbidden:
+                                    failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
+                                    break;
+                                default:
+                                    response.EnsureSuccessStatusCode();
+                                    break;
+                            }
                         }
                     }
                 }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested || _lifetimeCancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception exception)
-            {
+                catch (Exception exception)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    result.OnException(new MyNetSessionException("Failed to exit anonymous room.", exception));
+                    return;
+                }
+
                 cancellationToken.ThrowIfCancellationRequested();
-                _lifetimeCancellationToken.ThrowIfCancellationRequested();
-                result.OnException(new MyNetSessionException("Failed to exit anonymous room.", exception));
-                return;
-            }
+                if (failure.HasValue)
+                {
+                    result.OnFailed(failure.Value);
+                    return;
+                }
 
-            cancellationToken.ThrowIfCancellationRequested();
-            _lifetimeCancellationToken.ThrowIfCancellationRequested();
-            if (failure.HasValue)
-            {
-                result.OnFailed(failure.Value);
-                return;
+                result.OnOk(roomId, playerId);
             }
-
-            result.OnOk(roomId, playerId);
         }
 
         Task MyNetRoomServiceInterface.JoinAsync(MyNetRoomServiceInterface.JoinConfigInterface config, MyNetRoomServiceInterface.JoinResultInterface result)

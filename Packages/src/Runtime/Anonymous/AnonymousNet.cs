@@ -21,61 +21,62 @@ namespace oojjrs.oplat.anonymous
         internal AnonymousNet()
         {
             _lifetimeCancellationToken = _lifetimeCancellationSource.Token;
-            _lobby = new(_client, _lifetimeCancellationToken);
-            _room = new(_client, _lifetimeCancellationToken);
+            _lobby = new(this);
+            _room = new(this);
         }
 
         MyNetLobbyServiceInterface MyNetInterface.Lobby => _lobby;
         MyNetPlayerServiceInterface MyNetInterface.Player { get; } = new AnonymousNetPlayerService();
         MyNetRoomServiceInterface MyNetInterface.Room => _room;
 
-        internal async Task AuthenticateAsync(string account, string nickname, CancellationToken cancellationToken)
+        internal async Task AuthenticateAsync(string account, string nickname, CancellationToken callerCancellationToken)
         {
-            try
+            using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                _lifetimeCancellationToken.ThrowIfCancellationRequested();
-
-                await EnsureLaunchServerAsync(cancellationToken);
-                _lifetimeCancellationToken.ThrowIfCancellationRequested();
-
-                var requestContent = JsonUtility.ToJson(new AnonymousServerAuthenticate.RequestArgument()
+                var cancellationToken = cancellationSource.Token;
+                try
                 {
-                    Account = account,
-                    Nickname = nickname,
-                });
-                using (var content = new StringContent(requestContent, Encoding.UTF8, "application/json"))
-                {
-                    using (var response = await _client.PostAsync(AnonymousServer.GetUri(AnonymousServer.ApiAuthenticate), content, cancellationToken))
+                    await EnsureLaunchServerAsync(cancellationToken);
+
+                    var requestContent = JsonUtility.ToJson(new AnonymousServerAuthenticate.RequestArgument()
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        response.EnsureSuccessStatusCode();
+                        Account = account,
+                        Nickname = nickname,
+                    });
+                    using (var content = new StringContent(requestContent, Encoding.UTF8, "application/json"))
+                    {
+                        using (var response = await PostAsync(AnonymousServer.ApiAuthenticate, content, cancellationToken))
+                        {
+                            response.EnsureSuccessStatusCode();
 
-                        var responseContent = await response.Content.ReadAsStringAsync();
-                        cancellationToken.ThrowIfCancellationRequested();
+                            var responseContent = await response.Content.ReadAsStringAsync();
+                            var responseArgument = JsonUtility.FromJson<AnonymousServerAuthenticate.ResponseArgument>(responseContent);
+                            if ((responseArgument == null) || string.IsNullOrEmpty(responseArgument.Token))
+                                throw new FormatException("Invalid anonymous authentication response.");
 
-                        var responseArgument = JsonUtility.FromJson<AnonymousServerAuthenticate.ResponseArgument>(responseContent);
-                        if ((responseArgument == null) || string.IsNullOrEmpty(responseArgument.Token))
-                            throw new FormatException("Invalid anonymous authentication response.");
-
-                        cancellationToken.ThrowIfCancellationRequested();
-                        _lifetimeCancellationToken.ThrowIfCancellationRequested();
-                        _client.DefaultRequestHeaders.Remove(AnonymousServerAuthenticate.SessionHeader);
-                        _client.DefaultRequestHeaders.Add(AnonymousServerAuthenticate.SessionHeader, responseArgument.Token);
+                            cancellationToken.ThrowIfCancellationRequested();
+                            _client.DefaultRequestHeaders.Remove(AnonymousServerAuthenticate.SessionHeader);
+                            _client.DefaultRequestHeaders.Add(AnonymousServerAuthenticate.SessionHeader, responseArgument.Token);
+                        }
                     }
                 }
+                catch (Exception)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    throw;
+                }
             }
-            catch (Exception)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                _lifetimeCancellationToken.ThrowIfCancellationRequested();
-                throw;
-            }
+        }
+
+        internal CancellationTokenSource CreateCancellationSource(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _lifetimeCancellationToken.ThrowIfCancellationRequested();
+            return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeCancellationToken);
         }
 
         private async Task EnsureLaunchServerAsync(CancellationToken cancellationToken)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 await _server.StartAsync(cancellationToken);
@@ -92,12 +93,16 @@ namespace oojjrs.oplat.anonymous
             cancellationToken.ThrowIfCancellationRequested();
         }
 
+        internal Task<HttpResponseMessage> GetAsync(string api, CancellationToken cancellationToken)
+        {
+            return _client.GetAsync(AnonymousServer.GetUri(api), cancellationToken);
+        }
+
         private async Task<bool> IsAvailableAsync(CancellationToken cancellationToken)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                using (var response = await _client.GetAsync(AnonymousServer.GetUri(AnonymousServer.ApiHealth), cancellationToken))
+                using (var response = await GetAsync(AnonymousServer.ApiHealth, cancellationToken))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     if (response.StatusCode != HttpStatusCode.OK)
@@ -118,6 +123,11 @@ namespace oojjrs.oplat.anonymous
             {
                 return false;
             }
+        }
+
+        internal Task<HttpResponseMessage> PostAsync(string api, HttpContent content, CancellationToken cancellationToken)
+        {
+            return _client.PostAsync(AnonymousServer.GetUri(api), content, cancellationToken);
         }
 
         internal void Shutdown()
