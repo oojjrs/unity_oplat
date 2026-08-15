@@ -8,6 +8,21 @@ namespace oojjrs.oplat.anonymous.controllers
 {
     internal static class AnonymousServerAuthenticate
     {
+        [Serializable]
+        internal record RequestArgument
+        {
+            public string Account;
+            public string Nickname;
+        }
+
+        [Serializable]
+        internal record ResponseArgument
+        {
+            public string Token;
+        }
+
+        internal const string SessionHeader = "X-Oplat-Session";
+
         internal static async Task RunAsync(HttpListenerRequest request, HttpListenerResponse response, AnonymousServerSession.State state)
         {
             if (request.HttpMethod != "POST")
@@ -16,13 +31,13 @@ namespace oojjrs.oplat.anonymous.controllers
                 return;
             }
 
-            AnonymousNetAuthenticationProtocol.ResponseArgument responseArgument;
+            ResponseArgument responseArgument;
             try
             {
-                AnonymousNetAuthenticationProtocol.RequestArgument requestArgument;
+                RequestArgument requestArgument;
                 try
                 {
-                    requestArgument = JsonUtility.FromJson<AnonymousNetAuthenticationProtocol.RequestArgument>(await AnonymousServer.ReadContentAsync(request));
+                    requestArgument = JsonUtility.FromJson<RequestArgument>(await AnonymousServer.ReadContentAsync(request));
                 }
                 catch (ArgumentException exception)
                 {
@@ -32,7 +47,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 if ((requestArgument == null) || string.IsNullOrEmpty(requestArgument.Account) || string.IsNullOrEmpty(requestArgument.Nickname))
                     throw new FormatException("Invalid anonymous authentication request.");
 
-                responseArgument = new AnonymousNetAuthenticationProtocol.ResponseArgument
+                responseArgument = new ResponseArgument
                 {
                     Token = state.Create(requestArgument.Account, requestArgument.Nickname),
                 };

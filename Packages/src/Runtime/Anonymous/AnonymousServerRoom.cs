@@ -1,6 +1,7 @@
 using System.Collections.Generic;
+using oojjrs.oplat.anonymous.controllers;
 
-namespace oojjrs.oplat.anonymous.controllers
+namespace oojjrs.oplat.anonymous
 {
     internal static class AnonymousServerRoom
     {

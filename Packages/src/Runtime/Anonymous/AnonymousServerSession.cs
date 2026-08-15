@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using oojjrs.oplat.anonymous.controllers;
 
-namespace oojjrs.oplat.anonymous.controllers
+namespace oojjrs.oplat.anonymous
 {
     internal static class AnonymousServerSession
     {
@@ -31,7 +32,7 @@ namespace oojjrs.oplat.anonymous.controllers
 
             internal bool TryGetSession(HttpListenerRequest request, out Session session)
             {
-                var token = request.Headers[AnonymousNetAuthenticationProtocol.SessionHeader];
+                var token = request.Headers[AnonymousServerAuthenticate.SessionHeader];
                 if (string.IsNullOrEmpty(token))
                 {
                     session = null;

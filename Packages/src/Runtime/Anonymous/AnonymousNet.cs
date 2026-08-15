@@ -1,4 +1,5 @@
-﻿using System;
+﻿using oojjrs.oplat.anonymous.controllers;
+using System;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -38,7 +39,12 @@ namespace oojjrs.oplat.anonymous
                 await EnsureLaunchServerAsync(cancellationToken);
                 _lifetimeCancellationToken.ThrowIfCancellationRequested();
 
-                using (var content = new StringContent(new AnonymousNetAuthenticationProtocol.RequestArgument(account, nickname).ToJson(), Encoding.UTF8, "application/json"))
+                var requestContent = JsonUtility.ToJson(new AnonymousServerAuthenticate.RequestArgument()
+                {
+                    Account = account,
+                    Nickname = nickname,
+                });
+                using (var content = new StringContent(requestContent, Encoding.UTF8, "application/json"))
                 {
                     using (var response = await _client.PostAsync(AnonymousServer.GetUri(AnonymousServer.ApiAuthenticate), content, cancellationToken))
                     {
@@ -48,14 +54,14 @@ namespace oojjrs.oplat.anonymous
                         var responseContent = await response.Content.ReadAsStringAsync();
                         cancellationToken.ThrowIfCancellationRequested();
 
-                        var responseArgument = JsonUtility.FromJson<AnonymousNetAuthenticationProtocol.ResponseArgument>(responseContent);
+                        var responseArgument = JsonUtility.FromJson<AnonymousServerAuthenticate.ResponseArgument>(responseContent);
                         if ((responseArgument == null) || string.IsNullOrEmpty(responseArgument.Token))
                             throw new FormatException("Invalid anonymous authentication response.");
 
                         cancellationToken.ThrowIfCancellationRequested();
                         _lifetimeCancellationToken.ThrowIfCancellationRequested();
-                        _client.DefaultRequestHeaders.Remove(AnonymousNetAuthenticationProtocol.SessionHeader);
-                        _client.DefaultRequestHeaders.Add(AnonymousNetAuthenticationProtocol.SessionHeader, responseArgument.Token);
+                        _client.DefaultRequestHeaders.Remove(AnonymousServerAuthenticate.SessionHeader);
+                        _client.DefaultRequestHeaders.Add(AnonymousServerAuthenticate.SessionHeader, responseArgument.Token);
                     }
                 }
             }
