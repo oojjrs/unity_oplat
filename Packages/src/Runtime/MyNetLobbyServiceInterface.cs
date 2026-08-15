@@ -17,7 +17,7 @@ namespace oojjrs.oplat
             void OnOk(IEnumerable<MyNetRoomInterface> rooms);
         }
 
-        void Refresh();
+        Task RefreshAsync(ResultInterface result);
         Task StartAsync(ConfigInterface config, ResultInterface result);
         void Stop();
     }

@@ -17,14 +17,23 @@ namespace oojjrs.oplat.anonymous
             _lifetimeCancellationToken = lifetimeCancellationToken;
         }
 
-        void MyNetLobbyServiceInterface.Refresh()
+        Task MyNetLobbyServiceInterface.RefreshAsync(MyNetLobbyServiceInterface.ResultInterface result)
+        {
+            return RefreshAsync(_lifetimeCancellationToken, result);
+        }
+
+        Task MyNetLobbyServiceInterface.StartAsync(MyNetLobbyServiceInterface.ConfigInterface config, MyNetLobbyServiceInterface.ResultInterface result)
+        {
+            return RefreshAsync(config.CancellationToken, result);
+        }
+
+        void MyNetLobbyServiceInterface.Stop()
         {
             throw new NotImplementedException();
         }
 
-        async Task MyNetLobbyServiceInterface.StartAsync(MyNetLobbyServiceInterface.ConfigInterface config, MyNetLobbyServiceInterface.ResultInterface result)
+        private async Task RefreshAsync(CancellationToken cancellationToken, MyNetLobbyServiceInterface.ResultInterface result)
         {
-            var cancellationToken = config.CancellationToken;
             MyNetRoomInterface[] rooms;
             try
             {
@@ -62,11 +71,6 @@ namespace oojjrs.oplat.anonymous
             cancellationToken.ThrowIfCancellationRequested();
             _lifetimeCancellationToken.ThrowIfCancellationRequested();
             result.OnOk(rooms);
-        }
-
-        void MyNetLobbyServiceInterface.Stop()
-        {
-            throw new NotImplementedException();
         }
     }
 }

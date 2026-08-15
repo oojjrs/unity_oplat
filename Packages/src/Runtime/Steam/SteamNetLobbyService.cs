@@ -4,7 +4,7 @@ namespace oojjrs.oplat.steam
 {
     internal class SteamNetLobbyService : MyNetLobbyServiceInterface
     {
-        void MyNetLobbyServiceInterface.Refresh()
+        Task MyNetLobbyServiceInterface.RefreshAsync(MyNetLobbyServiceInterface.ResultInterface result)
         {
             throw new System.NotImplementedException();
         }
