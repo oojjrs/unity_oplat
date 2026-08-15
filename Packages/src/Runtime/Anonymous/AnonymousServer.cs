@@ -11,13 +11,15 @@ namespace oojjrs.oplat.anonymous
     internal sealed class AnonymousServer
     {
         private const string Address = "http://127.0.0.1:45831/";
+        internal const string ApiAuthenticate = "authenticate";
         internal const string ApiCreateRoom = "create_room";
         internal const string ApiGetRooms = "get_rooms";
         internal const string ApiHealth = "health";
-        internal const string HealthResponse = "oojjrs.oplat.anonymous/5";
+        internal const string HealthResponse = "oojjrs.oplat.anonymous/6";
 
         private readonly HttpListener Listener = new();
         private readonly AnonymousServerRoom.State RoomState = new();
+        private readonly AnonymousServerSession.State SessionState = new();
         private readonly SemaphoreSlim StartSemaphore = new(1, 1);
         private readonly object StateLock = new();
 
@@ -81,14 +83,17 @@ namespace oojjrs.oplat.anonymous
             {
                 switch (request.Url.AbsolutePath[1..])
                 {
+                    case ApiAuthenticate:
+                        await AnonymousServerAuthenticate.RunAsync(request, response, SessionState);
+                        break;
                     case ApiHealth:
                         await AnonymousServerHealth.RunAsync(request, response);
                         break;
                     case ApiGetRooms:
-                        await AnonymousServerGetRooms.RunAsync(request, response, RoomState);
+                        await AnonymousServerGetRooms.RunAsync(request, response, RoomState, SessionState);
                         break;
                     case ApiCreateRoom:
-                        await AnonymousServerCreateRoom.RunAsync(request, response, RoomState);
+                        await AnonymousServerCreateRoom.RunAsync(request, response, RoomState, SessionState);
                         break;
                     default:
                         response.StatusCode = (int)HttpStatusCode.NotFound;

@@ -25,11 +25,17 @@ namespace oojjrs.oplat.anonymous.controllers
             }
         }
 
-        internal static async Task RunAsync(HttpListenerRequest request, HttpListenerResponse response, AnonymousServerRoom.State state)
+        internal static async Task RunAsync(HttpListenerRequest request, HttpListenerResponse response, AnonymousServerRoom.State roomState, AnonymousServerSession.State sessionState)
         {
             if (request.HttpMethod != "POST")
             {
                 response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
+                return;
+            }
+
+            if (sessionState.TryGetSession(request, out var session) == false)
+            {
+                response.StatusCode = (int)HttpStatusCode.Unauthorized;
                 return;
             }
 
@@ -46,7 +52,7 @@ namespace oojjrs.oplat.anonymous.controllers
                     throw new FormatException("Invalid anonymous room request.", exception);
                 }
 
-                if ((args == null) || string.IsNullOrEmpty(args.HostId) || (args.MaxPlayers < 1))
+                if ((args == null) || (args.MaxPlayers < 1))
                     throw new FormatException("Invalid anonymous room request.");
 
                 if (args.PlayerFields != null)
@@ -56,10 +62,10 @@ namespace oojjrs.oplat.anonymous.controllers
 
                 room = new AnonymousNetRoomProtocol.CreateResponseArgument()
                 {
-                    Code = CreateRoomCode(state),
+                    Code = CreateRoomCode(roomState),
                     Fields = args.RoomFields ?? Array.Empty<AnonymousNetRoomProtocol.FieldData>(),
                     HasPassword = string.IsNullOrEmpty(args.Password) == false,
-                    HostId = args.HostId,
+                    HostId = session.Account,
                     Id = Guid.NewGuid().ToString("N"),
                     IsLocked = args.IsLocked,
                     IsPrivate = args.IsPrivate,
@@ -69,7 +75,7 @@ namespace oojjrs.oplat.anonymous.controllers
                     new AnonymousNetRoomProtocol.PlayerData()
                     {
                         Fields = args.PlayerFields ?? Array.Empty<AnonymousNetRoomProtocol.FieldData>(),
-                        Id = args.HostId,
+                        Id = session.Account,
                         IsHost = true,
                         Nickname = args.PlayerNickname,
                     },
@@ -77,7 +83,7 @@ namespace oojjrs.oplat.anonymous.controllers
                     Title = args.Title,
                 };
 
-                state.Rooms.Add(new AnonymousServerRoom.RoomSecret(args.Password, room));
+                roomState.Rooms.Add(new AnonymousServerRoom.RoomSecret(args.Password, room));
             }
             catch (FormatException)
             {

@@ -8,7 +8,6 @@ namespace oojjrs.oplat
     {
         public interface CreateConfigInterface
         {
-            string Account { get; }
             CancellationToken CancellationToken { get; }
             bool IsLocked { get; }
             bool IsPrivate { get; }

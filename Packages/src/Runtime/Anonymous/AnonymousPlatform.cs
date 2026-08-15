@@ -58,6 +58,11 @@ namespace oojjrs.oplat.anonymous
             cancellationToken.ThrowIfCancellationRequested();
 
             _profileSprite = profileSpriteRequest.asset as Sprite;
+
+            var service = (MyPlatformServiceInterface)this;
+            await _net.AuthenticateAsync(service.Account, service.Nickname, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
             _isInitialized = true;
         }
     }

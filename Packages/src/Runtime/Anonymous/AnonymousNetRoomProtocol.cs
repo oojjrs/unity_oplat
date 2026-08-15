@@ -12,7 +12,6 @@ namespace oojjrs.oplat.anonymous
         {
             public bool IsLocked;
             public bool IsPrivate;
-            public string HostId;
             public int MaxPlayers;
             public string Password;
             public FieldData[] PlayerFields;
@@ -22,7 +21,6 @@ namespace oojjrs.oplat.anonymous
 
             public RoomRequestArgument(MyNetRoomServiceInterface.CreateConfigInterface config)
             {
-                HostId = config.Account;
                 IsLocked = config.IsLocked;
                 IsPrivate = config.IsPrivate;
                 MaxPlayers = config.MaxPlayers;

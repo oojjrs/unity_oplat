@@ -8,7 +8,7 @@ namespace oojjrs.oplat.anonymous.controllers
 {
     internal static class AnonymousServerGetRooms
     {
-        internal static async Task RunAsync(HttpListenerRequest request, HttpListenerResponse response, AnonymousServerRoom.State state)
+        internal static async Task RunAsync(HttpListenerRequest request, HttpListenerResponse response, AnonymousServerRoom.State roomState, AnonymousServerSession.State sessionState)
         {
             if (request.HttpMethod != "GET")
             {
@@ -16,9 +16,15 @@ namespace oojjrs.oplat.anonymous.controllers
                 return;
             }
 
+            if (sessionState.TryGetSession(request, out _) == false)
+            {
+                response.StatusCode = (int)HttpStatusCode.Unauthorized;
+                return;
+            }
+
             var responseContent = JsonUtility.ToJson(new AnonymousNetRoomProtocol.RoomsData()
             {
-                Rooms = state.Rooms.Where(secret => secret.Room.IsPrivate == false).Select(secret => secret.Room with
+                Rooms = roomState.Rooms.Where(secret => secret.Room.IsPrivate == false).Select(secret => secret.Room with
                 {
                     Fields = secret.Room.Fields.Where(field => field.Visibility == MyNetInterface.Field.VisibilityEnum.Public).ToArray(),
                     Players = secret.Room.Players.Select(player => player with { Fields = player.Fields.Where(field => field.Visibility == MyNetInterface.Field.VisibilityEnum.Public).ToArray() }).ToArray(),

@@ -10,13 +10,11 @@ namespace oojjrs.oplat.anonymous
     {
         private readonly HttpClient _client;
         private readonly CancellationToken _lifetimeCancellationToken;
-        private readonly AnonymousNet _parent;
 
-        internal AnonymousNetLobbyService(HttpClient client, CancellationToken lifetimeCancellationToken, AnonymousNet parent)
+        internal AnonymousNetLobbyService(HttpClient client, CancellationToken lifetimeCancellationToken)
         {
             _client = client;
             _lifetimeCancellationToken = lifetimeCancellationToken;
-            _parent = parent;
         }
 
         void MyNetLobbyServiceInterface.Refresh()
@@ -32,9 +30,6 @@ namespace oojjrs.oplat.anonymous
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 _lifetimeCancellationToken.ThrowIfCancellationRequested();
-                await _parent.EnsureLaunchServerAsync(cancellationToken);
-
-                cancellationToken.ThrowIfCancellationRequested();
                 using (var response = await _client.GetAsync(AnonymousServer.GetUri(AnonymousServer.ApiGetRooms), cancellationToken))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
