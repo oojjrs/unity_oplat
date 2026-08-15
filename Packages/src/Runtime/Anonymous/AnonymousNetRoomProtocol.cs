@@ -53,6 +53,24 @@ namespace oojjrs.oplat.anonymous
         }
 
         [Serializable]
+        internal record ExitRequestArgument
+        {
+            public string PlayerId;
+            public string RoomId;
+
+            internal ExitRequestArgument(string playerId, string roomId)
+            {
+                PlayerId = playerId;
+                RoomId = roomId;
+            }
+
+            internal string ToJson()
+            {
+                return JsonUtility.ToJson(this);
+            }
+        }
+
+        [Serializable]
         internal record FieldData
         {
             public string Key;
