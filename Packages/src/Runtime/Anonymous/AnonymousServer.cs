@@ -13,7 +13,10 @@ namespace oojjrs.oplat.anonymous
 
         private const string HealthAddress = Address + "health";
         private const string HealthPath = "/health";
-        private const string HealthResponse = "oojjrs.oplat.anonymous/1";
+        private const string HealthResponse = "oojjrs.oplat.anonymous/2";
+        private const string RoomsAddress = Address + "rooms";
+        private const string RoomsPath = "/rooms";
+        private const string RoomsResponse = "[]";
 
         private readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(1) };
         private readonly HttpListener Listener = new();
@@ -34,22 +37,57 @@ namespace oojjrs.oplat.anonymous
             var response = context.Response;
             try
             {
-                if ((request.HttpMethod != "GET") || (request.Url.AbsolutePath != HealthPath))
+                if (request.HttpMethod != "GET")
                 {
                     response.StatusCode = (int)HttpStatusCode.NotFound;
                     return;
                 }
 
-                var responseData = Encoding.UTF8.GetBytes(HealthResponse);
+                string responseContent;
+                var requestPath = request.Url.AbsolutePath;
+                if (requestPath == HealthPath)
+                {
+                    response.ContentType = "text/plain; charset=utf-8";
+                    responseContent = HealthResponse;
+                }
+                else if (requestPath == RoomsPath)
+                {
+                    response.ContentType = "application/json; charset=utf-8";
+                    responseContent = RoomsResponse;
+                }
+                else
+                {
+                    response.StatusCode = (int)HttpStatusCode.NotFound;
+                    return;
+                }
+
+                var responseData = Encoding.UTF8.GetBytes(responseContent);
                 response.ContentEncoding = Encoding.UTF8;
                 response.ContentLength64 = responseData.Length;
-                response.ContentType = "text/plain; charset=utf-8";
                 response.StatusCode = (int)HttpStatusCode.OK;
+
                 await response.OutputStream.WriteAsync(responseData, 0, responseData.Length).ConfigureAwait(false);
             }
             finally
             {
                 response.Close();
+            }
+        }
+
+        internal async Task<MyNetRoomInterface[]> GetRoomsAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using (var response = await Client.GetAsync(RoomsAddress, cancellationToken))
+            {
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (string.Equals(responseContent, RoomsResponse, StringComparison.Ordinal) == false)
+                    throw new FormatException("Invalid anonymous rooms response.");
+
+                return Array.Empty<MyNetRoomInterface>();
             }
         }
 
@@ -113,6 +151,7 @@ namespace oojjrs.oplat.anonymous
 
                         Listener.Start();
                         _isOwner = true;
+
                         ListenAsync();
                     }
                 }

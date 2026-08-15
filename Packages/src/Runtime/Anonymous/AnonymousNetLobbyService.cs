@@ -18,8 +18,21 @@ namespace oojjrs.oplat.anonymous
 
         async Task MyNetLobbyServiceInterface.StartAsync(MyNetLobbyServiceInterface.ConfigInterface config, MyNetLobbyServiceInterface.ResultInterface result)
         {
-            config.CancellationToken.ThrowIfCancellationRequested();
-            await _server.StartAsync(config.CancellationToken);
+            try
+            {
+                config.CancellationToken.ThrowIfCancellationRequested();
+                await _server.StartAsync(config.CancellationToken);
+
+                result.OnOk(await _server.GetRoomsAsync(config.CancellationToken));
+            }
+            catch (System.OperationCanceledException) when (config.CancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (System.Exception exception)
+            {
+                result.OnException(new MyNetSessionException("Failed to get anonymous rooms.", exception));
+            }
         }
 
         void MyNetLobbyServiceInterface.Stop()
