@@ -8,6 +8,51 @@ namespace oojjrs.oplat.anonymous.controllers
 {
     internal static class AnonymousServerCreateRoom
     {
+        [Serializable]
+        internal record FieldData
+        {
+            public string Key;
+            public string Value;
+            public MyNetInterface.Field.VisibilityEnum Visibility;
+        }
+
+        [Serializable]
+        internal record PlayerData
+        {
+            public FieldData[] Fields;
+            public string Id;
+            public bool IsHost;
+            public string Nickname;
+        }
+
+        [Serializable]
+        internal record RequestArgument
+        {
+            public bool IsLocked;
+            public bool IsPrivate;
+            public int MaxPlayers;
+            public string Password;
+            public FieldData[] PlayerFields;
+            public string PlayerNickname;
+            public FieldData[] RoomFields;
+            public string Title;
+        }
+
+        [Serializable]
+        internal record ResponseArgument
+        {
+            public string Code;
+            public FieldData[] Fields;
+            public bool HasPassword;
+            public string HostId;
+            public string Id;
+            public bool IsLocked;
+            public bool IsPrivate;
+            public int MaxPlayers;
+            public PlayerData[] Players;
+            public string Title;
+        }
+
         internal static async Task RunAsync(HttpListenerRequest request, HttpListenerResponse response, AnonymousServerRoom.State roomState, AnonymousServerSession.State sessionState)
         {
             if (request.HttpMethod != "POST")
@@ -22,13 +67,13 @@ namespace oojjrs.oplat.anonymous.controllers
                 return;
             }
 
-            AnonymousNetRoomProtocol.CreateResponseArgument room;
+            ResponseArgument room;
             try
             {
-                AnonymousNetRoomProtocol.RoomRequestArgument args;
+                RequestArgument args;
                 try
                 {
-                    args = JsonUtility.FromJson<AnonymousNetRoomProtocol.RoomRequestArgument>(await AnonymousServer.ReadContentAsync(request));
+                    args = JsonUtility.FromJson<RequestArgument>(await AnonymousServer.ReadContentAsync(request));
                 }
                 catch (ArgumentException exception)
                 {
@@ -39,14 +84,14 @@ namespace oojjrs.oplat.anonymous.controllers
                     throw new FormatException("Invalid anonymous room request.");
 
                 if (args.PlayerFields != null)
-                    AnonymousNetRoomProtocol.ValidateFields(args.PlayerFields);
+                    ValidateFields(args.PlayerFields);
                 if (args.RoomFields != null)
-                    AnonymousNetRoomProtocol.ValidateFields(args.RoomFields);
+                    ValidateFields(args.RoomFields);
 
-                room = new AnonymousNetRoomProtocol.CreateResponseArgument()
+                room = new ResponseArgument()
                 {
                     Code = CreateRoomCode(roomState),
-                    Fields = args.RoomFields ?? Array.Empty<AnonymousNetRoomProtocol.FieldData>(),
+                    Fields = args.RoomFields ?? Array.Empty<FieldData>(),
                     HasPassword = string.IsNullOrEmpty(args.Password) == false,
                     HostId = session.Account,
                     Id = Guid.NewGuid().ToString("N"),
@@ -55,14 +100,14 @@ namespace oojjrs.oplat.anonymous.controllers
                     MaxPlayers = args.MaxPlayers,
                     Players = new[]
                     {
-                    new AnonymousNetRoomProtocol.PlayerData()
-                    {
-                        Fields = args.PlayerFields ?? Array.Empty<AnonymousNetRoomProtocol.FieldData>(),
-                        Id = session.Account,
-                        IsHost = true,
-                        Nickname = args.PlayerNickname,
+                        new PlayerData()
+                        {
+                            Fields = args.PlayerFields ?? Array.Empty<FieldData>(),
+                            Id = session.Account,
+                            IsHost = true,
+                            Nickname = args.PlayerNickname,
+                        },
                     },
-                },
                     Title = args.Title,
                 };
 
@@ -94,6 +139,15 @@ namespace oojjrs.oplat.anonymous.controllers
                 while (state.RoomCodes.Add(code) == false);
 
                 return code;
+            }
+        }
+
+        private static void ValidateFields(FieldData[] fields)
+        {
+            foreach (var field in fields)
+            {
+                if ((field == null) || (Enum.IsDefined(typeof(MyNetInterface.Field.VisibilityEnum), field.Visibility) == false))
+                    throw new FormatException("Invalid anonymous field data.");
             }
         }
     }

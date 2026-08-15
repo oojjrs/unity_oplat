@@ -6,14 +6,14 @@ namespace oojjrs.oplat.anonymous.controllers
     {
         internal sealed class RoomSecret
         {
-            internal RoomSecret(string password, AnonymousNetRoomProtocol.CreateResponseArgument room)
+            internal RoomSecret(string password, AnonymousServerCreateRoom.ResponseArgument room)
             {
                 Password = password;
                 Room = room;
             }
 
             internal string Password { get; }
-            internal AnonymousNetRoomProtocol.CreateResponseArgument Room { get; }
+            internal AnonymousServerCreateRoom.ResponseArgument Room { get; }
         }
 
         internal sealed class State

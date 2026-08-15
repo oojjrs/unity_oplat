@@ -1,4 +1,5 @@
-﻿using System;
+﻿using oojjrs.oplat.anonymous.controllers;
+using System;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -46,13 +47,13 @@ namespace oojjrs.oplat.anonymous
                     var content = await response.Content.ReadAsStringAsync();
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    var roomsData = JsonUtility.FromJson<AnonymousNetRoomProtocol.RoomsData>(content);
+                    var roomsData = JsonUtility.FromJson<AnonymousServerGetRooms.ResponseArgument>(content);
                     if ((roomsData == null) || (roomsData.Rooms == null))
                         throw new FormatException("Invalid anonymous rooms response.");
 
                     rooms = new MyNetRoomInterface[roomsData.Rooms.Length];
                     for (var index = 0; index < roomsData.Rooms.Length; ++index)
-                        rooms[index] = AnonymousNetRoomProtocol.ConvertRoom(roomsData.Rooms[index]);
+                        rooms[index] = AnonymousNetRoomService.ConvertRoom(roomsData.Rooms[index]);
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested || _lifetimeCancellationToken.IsCancellationRequested)

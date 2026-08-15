@@ -8,6 +8,13 @@ namespace oojjrs.oplat.anonymous.controllers
 {
     internal static class AnonymousServerExitRoom
     {
+        [Serializable]
+        internal record RequestArgument
+        {
+            public string PlayerId;
+            public string RoomId;
+        }
+
         internal static async Task RunAsync(HttpListenerRequest request, HttpListenerResponse response, AnonymousServerRoom.State roomState, AnonymousServerSession.State sessionState)
         {
             if (request.HttpMethod != "POST")
@@ -22,12 +29,12 @@ namespace oojjrs.oplat.anonymous.controllers
                 return;
             }
 
-            AnonymousNetRoomProtocol.ExitRequestArgument args;
+            RequestArgument args;
             try
             {
                 try
                 {
-                    args = JsonUtility.FromJson<AnonymousNetRoomProtocol.ExitRequestArgument>(await AnonymousServer.ReadContentAsync(request));
+                    args = JsonUtility.FromJson<RequestArgument>(await AnonymousServer.ReadContentAsync(request));
                 }
                 catch (ArgumentException exception)
                 {
@@ -57,7 +64,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 return;
             }
 
-            var players = room.Players ?? Array.Empty<AnonymousNetRoomProtocol.PlayerData>();
+            var players = room.Players ?? Array.Empty<AnonymousServerCreateRoom.PlayerData>();
             if (string.Equals(room.HostId, args.PlayerId, StringComparison.Ordinal))
             {
                 roomState.RoomCodes.Remove(room.Code);

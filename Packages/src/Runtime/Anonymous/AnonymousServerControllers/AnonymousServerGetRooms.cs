@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Net;
 using System.Text;
@@ -8,6 +9,12 @@ namespace oojjrs.oplat.anonymous.controllers
 {
     internal static class AnonymousServerGetRooms
     {
+        [Serializable]
+        internal record ResponseArgument
+        {
+            public AnonymousServerCreateRoom.ResponseArgument[] Rooms;
+        }
+
         internal static async Task RunAsync(HttpListenerRequest request, HttpListenerResponse response, AnonymousServerRoom.State roomState, AnonymousServerSession.State sessionState)
         {
             if (request.HttpMethod != "GET")
@@ -22,7 +29,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 return;
             }
 
-            var responseContent = JsonUtility.ToJson(new AnonymousNetRoomProtocol.RoomsData()
+            var responseContent = JsonUtility.ToJson(new ResponseArgument()
             {
                 Rooms = roomState.Rooms.Where(secret => secret.Room.IsPrivate == false).Select(secret => secret.Room with
                 {
