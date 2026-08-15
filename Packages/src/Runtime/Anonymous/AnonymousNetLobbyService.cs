@@ -4,16 +4,22 @@ namespace oojjrs.oplat.anonymous
 {
     internal class AnonymousNetLobbyService : MyNetLobbyServiceInterface
     {
-        private readonly AnonymousServer _server = new();
+        private readonly AnonymousServer _server;
+
+        internal AnonymousNetLobbyService(AnonymousServer server)
+        {
+            _server = server;
+        }
 
         void MyNetLobbyServiceInterface.Refresh()
         {
             throw new System.NotImplementedException();
         }
 
-        Task MyNetLobbyServiceInterface.StartAsync(MyNetLobbyServiceInterface.ConfigInterface config, MyNetLobbyServiceInterface.ResultInterface result)
+        async Task MyNetLobbyServiceInterface.StartAsync(MyNetLobbyServiceInterface.ConfigInterface config, MyNetLobbyServiceInterface.ResultInterface result)
         {
-            throw new System.NotImplementedException();
+            config.CancellationToken.ThrowIfCancellationRequested();
+            await _server.StartAsync(config.CancellationToken);
         }
 
         void MyNetLobbyServiceInterface.Stop()

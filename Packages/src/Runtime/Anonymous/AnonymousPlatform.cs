@@ -42,6 +42,11 @@ namespace oojjrs.oplat.anonymous
         }
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
 
+        private void OnDestroy()
+        {
+            _net.Shutdown();
+        }
+
         async Task MyPlatform.PlatformInterface.RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
