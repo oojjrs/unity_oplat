@@ -29,7 +29,6 @@ namespace oojjrs.oplat.anonymous
 
         void MyNetLobbyServiceInterface.Stop()
         {
-            throw new NotImplementedException();
         }
 
         private async Task RefreshAsync(CancellationToken cancellationToken, MyNetLobbyServiceInterface.ResultInterface result)
