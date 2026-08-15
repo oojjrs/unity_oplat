@@ -1,14 +1,33 @@
 ﻿namespace oojjrs.oplat.anonymous
 {
-    internal class AnonymousPlayer : MyNetPlayerInterface
+    internal sealed class AnonymousPlayer : MyNetPlayerInterface
     {
-        string MyNetPlayerInterface.Id => throw new System.NotImplementedException();
-        bool MyNetPlayerInterface.IsHost => throw new System.NotImplementedException();
-        string MyNetPlayerInterface.Nickname => throw new System.NotImplementedException();
+        private readonly MyNetInterface.Field[] Fields;
+        private readonly string Id;
+        private readonly bool IsHost;
+        private readonly string Nickname;
+
+        internal AnonymousPlayer(MyNetInterface.Field[] fields, string id, bool isHost, string nickname)
+        {
+            Fields = fields;
+            Id = id;
+            IsHost = isHost;
+            Nickname = nickname;
+        }
+
+        string MyNetPlayerInterface.Id => Id;
+        bool MyNetPlayerInterface.IsHost => IsHost;
+        string MyNetPlayerInterface.Nickname => Nickname;
 
         string MyNetPlayerInterface.GetData(string key)
         {
-            throw new System.NotImplementedException();
+            foreach (var field in Fields)
+            {
+                if (string.Equals(field.key, key, System.StringComparison.Ordinal))
+                    return field.value;
+            }
+
+            return null;
         }
     }
 }

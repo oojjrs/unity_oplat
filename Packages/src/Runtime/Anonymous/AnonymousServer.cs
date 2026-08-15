@@ -1,25 +1,23 @@
-﻿using System;
+﻿using oojjrs.oplat.anonymous.controllers;
+using System;
+using System.IO;
 using System.Net;
-using System.Net.Http;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using UnityEngine;
 
 namespace oojjrs.oplat.anonymous
 {
     internal sealed class AnonymousServer
     {
-        internal const string Address = "http://127.0.0.1:45831/";
+        private const string Address = "http://127.0.0.1:45831/";
+        internal const string ApiCreateRoom = "create_room";
+        internal const string ApiGetRooms = "get_rooms";
+        internal const string ApiHealth = "health";
+        internal const string HealthResponse = "oojjrs.oplat.anonymous/5";
 
-        private const string HealthAddress = Address + "health";
-        private const string HealthPath = "/health";
-        private const string HealthResponse = "oojjrs.oplat.anonymous/2";
-        private const string RoomsAddress = Address + "rooms";
-        private const string RoomsPath = "/rooms";
-        private const string RoomsResponse = "[]";
-
-        private readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(1) };
         private readonly HttpListener Listener = new();
+        private readonly AnonymousServerRoom.State RoomState = new();
         private readonly SemaphoreSlim StartSemaphore = new(1, 1);
         private readonly object StateLock = new();
 
@@ -31,86 +29,9 @@ namespace oojjrs.oplat.anonymous
             Listener.Prefixes.Add(Address);
         }
 
-        private static async Task RespondAsync(HttpListenerContext context)
+        internal static string GetUri(string relativePath)
         {
-            var request = context.Request;
-            var response = context.Response;
-            try
-            {
-                if (request.HttpMethod != "GET")
-                {
-                    response.StatusCode = (int)HttpStatusCode.NotFound;
-                    return;
-                }
-
-                string responseContent;
-                var requestPath = request.Url.AbsolutePath;
-                if (requestPath == HealthPath)
-                {
-                    response.ContentType = "text/plain; charset=utf-8";
-                    responseContent = HealthResponse;
-                }
-                else if (requestPath == RoomsPath)
-                {
-                    response.ContentType = "application/json; charset=utf-8";
-                    responseContent = RoomsResponse;
-                }
-                else
-                {
-                    response.StatusCode = (int)HttpStatusCode.NotFound;
-                    return;
-                }
-
-                var responseData = Encoding.UTF8.GetBytes(responseContent);
-                response.ContentEncoding = Encoding.UTF8;
-                response.ContentLength64 = responseData.Length;
-                response.StatusCode = (int)HttpStatusCode.OK;
-
-                await response.OutputStream.WriteAsync(responseData, 0, responseData.Length).ConfigureAwait(false);
-            }
-            finally
-            {
-                response.Close();
-            }
-        }
-
-        internal async Task<MyNetRoomInterface[]> GetRoomsAsync(CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            using (var response = await Client.GetAsync(RoomsAddress, cancellationToken))
-            {
-                response.EnsureSuccessStatusCode();
-
-                var responseContent = await response.Content.ReadAsStringAsync();
-                cancellationToken.ThrowIfCancellationRequested();
-
-                if (string.Equals(responseContent, RoomsResponse, StringComparison.Ordinal) == false)
-                    throw new FormatException("Invalid anonymous rooms response.");
-
-                return Array.Empty<MyNetRoomInterface>();
-            }
-        }
-
-        private async Task<bool> IsAvailableAsync(CancellationToken cancellationToken)
-        {
-            try
-            {
-                using (var response = await Client.GetAsync(HealthAddress, cancellationToken))
-                {
-                    if (response.StatusCode != HttpStatusCode.OK)
-                        return false;
-
-                    return string.Equals(await response.Content.ReadAsStringAsync(), HealthResponse, StringComparison.Ordinal);
-                }
-            }
-            catch (HttpRequestException)
-            {
-                return false;
-            }
-            catch (TaskCanceledException) when (cancellationToken.IsCancellationRequested == false)
-            {
-                return false;
-            }
+            return Address + relativePath;
         }
 
         private async void ListenAsync()
@@ -121,14 +42,62 @@ namespace oojjrs.oplat.anonymous
                 {
                     var context = await Listener.GetContextAsync().ConfigureAwait(false);
 
-                    await RespondAsync(context).ConfigureAwait(false);
+                    try
+                    {
+                        await RespondAsync(context);
+                    }
+                    catch (HttpListenerException) when (Listener.IsListening)
+                    {
+                    }
+                    catch (IOException) when (Listener.IsListening)
+                    {
+                    }
+                    catch (ObjectDisposedException) when (Listener.IsListening)
+                    {
+                    }
+                    catch (Exception exception) when (Listener.IsListening)
+                    {
+                        Debug.LogException(exception);
+                    }
                 }
             }
             catch (HttpListenerException) when (Listener.IsListening == false)
             {
             }
+            catch (IOException) when (Listener.IsListening == false)
+            {
+            }
             catch (ObjectDisposedException) when (Listener.IsListening == false)
             {
+            }
+        }
+
+        private async Task RespondAsync(HttpListenerContext context)
+        {
+            var request = context.Request;
+            var response = context.Response;
+            response.StatusCode = (int)HttpStatusCode.InternalServerError;
+            try
+            {
+                switch (request.Url.AbsolutePath[1..])
+                {
+                    case ApiHealth:
+                        await AnonymousServerHealth.RunAsync(request, response);
+                        break;
+                    case ApiGetRooms:
+                        await AnonymousServerGetRooms.RunAsync(request, response, RoomState);
+                        break;
+                    case ApiCreateRoom:
+                        await AnonymousServerCreateRoom.RunAsync(request, response, RoomState);
+                        break;
+                    default:
+                        response.StatusCode = (int)HttpStatusCode.NotFound;
+                        break;
+                }
+            }
+            finally
+            {
+                response.Close();
             }
         }
 
@@ -139,28 +108,19 @@ namespace oojjrs.oplat.anonymous
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                try
+                lock (StateLock)
                 {
-                    lock (StateLock)
-                    {
-                        if (_isShutdown)
-                            throw new ObjectDisposedException(nameof(AnonymousServer));
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (_isShutdown)
+                        throw new ObjectDisposedException(nameof(AnonymousServer));
 
-                        if (_isOwner)
-                            return;
-
-                        Listener.Start();
-                        _isOwner = true;
-
-                        ListenAsync();
-                    }
-                }
-                catch (HttpListenerException)
-                {
-                    if (await IsAvailableAsync(cancellationToken))
+                    if (_isOwner)
                         return;
 
-                    throw;
+                    Listener.Start();
+                    _isOwner = true;
+
+                    ListenAsync();
                 }
             }
             finally
