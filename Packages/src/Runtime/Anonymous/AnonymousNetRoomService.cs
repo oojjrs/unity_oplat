@@ -3,8 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Net.Http;
-using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
 
@@ -27,7 +25,7 @@ namespace oojjrs.oplat.anonymous
                 MyNetRoomInterface room;
                 try
                 {
-                    var requestContent = JsonUtility.ToJson(new AnonymousServerCreateRoom.RequestArgument()
+                    using (var response = await _net.PostJsonAsync(AnonymousServer.ApiCreateRoom, new AnonymousServerCreateRoom.RequestArgument()
                     {
                         IsLocked = config.IsLocked,
                         IsPrivate = config.IsPrivate,
@@ -37,16 +35,12 @@ namespace oojjrs.oplat.anonymous
                         PlayerNickname = config.PlayerNickname,
                         RoomFields = ConvertFields(config.RoomFields),
                         Title = config.Title,
-                    });
-                    using (var content = new StringContent(requestContent, Encoding.UTF8, "application/json"))
+                    }, cancellationToken))
                     {
-                        using (var response = await _net.PostAsync(AnonymousServer.ApiCreateRoom, content, cancellationToken))
-                        {
-                            response.EnsureSuccessStatusCode();
+                        response.EnsureSuccessStatusCode();
 
-                            var responseContent = await response.Content.ReadAsStringAsync();
-                            room = ConvertRoom(JsonUtility.FromJson<AnonymousServerCreateRoom.ResponseArgument>(responseContent));
-                        }
+                        var responseContent = await response.Content.ReadAsStringAsync();
+                        room = ConvertRoom(JsonUtility.FromJson<AnonymousServerCreateRoom.ResponseArgument>(responseContent));
                     }
                 }
                 catch (Exception exception)
@@ -83,27 +77,23 @@ namespace oojjrs.oplat.anonymous
                 MyNetInterface.CatchInterface.FailureEnum? failure = null;
                 try
                 {
-                    var requestContent = JsonUtility.ToJson(new AnonymousServerExitRoom.RequestArgument()
+                    using (var response = await _net.PostJsonAsync(AnonymousServer.ApiExitRoom, new AnonymousServerExitRoom.RequestArgument()
                     {
                         PlayerId = playerId,
                         RoomId = roomId,
-                    });
-                    using (var content = new StringContent(requestContent, Encoding.UTF8, "application/json"))
+                    }, cancellationToken))
                     {
-                        using (var response = await _net.PostAsync(AnonymousServer.ApiExitRoom, content, cancellationToken))
+                        switch (response.StatusCode)
                         {
-                            switch (response.StatusCode)
-                            {
-                                case HttpStatusCode.NotFound:
-                                    failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
-                                    break;
-                                case HttpStatusCode.Forbidden:
-                                    failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
-                                    break;
-                                default:
-                                    response.EnsureSuccessStatusCode();
-                                    break;
-                            }
+                            case HttpStatusCode.NotFound:
+                                failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
+                                break;
+                            case HttpStatusCode.Forbidden:
+                                failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
+                                break;
+                            default:
+                                response.EnsureSuccessStatusCode();
+                                break;
                         }
                     }
                 }
@@ -142,34 +132,30 @@ namespace oojjrs.oplat.anonymous
                 MyNetRoomInterface room = null;
                 try
                 {
-                    var requestContent = JsonUtility.ToJson(new AnonymousServerJoinRoom.RequestArgument()
+                    using (var response = await _net.PostJsonAsync(AnonymousServer.ApiJoinRoom, new AnonymousServerJoinRoom.RequestArgument()
                     {
                         Code = code,
                         Password = config.Password,
                         PlayerFields = ConvertFields(config.PlayerFields),
                         PlayerNickname = config.PlayerNickname,
                         RoomId = roomId,
-                    });
-                    using (var content = new StringContent(requestContent, Encoding.UTF8, "application/json"))
+                    }, cancellationToken))
                     {
-                        using (var response = await _net.PostAsync(AnonymousServer.ApiJoinRoom, content, cancellationToken))
+                        switch (response.StatusCode)
                         {
-                            switch (response.StatusCode)
-                            {
-                                case HttpStatusCode.NotFound:
-                                    failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
-                                    break;
-                                case HttpStatusCode.Forbidden:
-                                case HttpStatusCode.Conflict:
-                                    failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
-                                    break;
-                                default:
-                                    response.EnsureSuccessStatusCode();
+                            case HttpStatusCode.NotFound:
+                                failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
+                                break;
+                            case HttpStatusCode.Forbidden:
+                            case HttpStatusCode.Conflict:
+                                failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
+                                break;
+                            default:
+                                response.EnsureSuccessStatusCode();
 
-                                    var responseContent = await response.Content.ReadAsStringAsync();
-                                    room = ConvertRoom(JsonUtility.FromJson<AnonymousServerCreateRoom.ResponseArgument>(responseContent));
-                                    break;
-                            }
+                                var responseContent = await response.Content.ReadAsStringAsync();
+                                room = ConvertRoom(JsonUtility.FromJson<AnonymousServerCreateRoom.ResponseArgument>(responseContent));
+                                break;
                         }
                     }
                 }

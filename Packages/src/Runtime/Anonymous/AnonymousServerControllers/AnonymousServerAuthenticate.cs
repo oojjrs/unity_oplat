@@ -34,16 +34,7 @@ namespace oojjrs.oplat.anonymous.controllers
             ResponseArgument responseArgument;
             try
             {
-                RequestArgument requestArgument;
-                try
-                {
-                    requestArgument = JsonUtility.FromJson<RequestArgument>(await AnonymousServer.ReadContentAsync(request));
-                }
-                catch (ArgumentException exception)
-                {
-                    throw new FormatException("Invalid anonymous authentication request.", exception);
-                }
-
+                var requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(request, "Invalid anonymous authentication request.");
                 if ((requestArgument == null) || string.IsNullOrEmpty(requestArgument.Account) || string.IsNullOrEmpty(requestArgument.Nickname))
                     throw new FormatException("Invalid anonymous authentication request.");
 

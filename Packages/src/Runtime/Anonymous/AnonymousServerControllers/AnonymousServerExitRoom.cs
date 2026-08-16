@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
-using UnityEngine;
 
 namespace oojjrs.oplat.anonymous.controllers
 {
@@ -29,19 +28,11 @@ namespace oojjrs.oplat.anonymous.controllers
                 return;
             }
 
-            RequestArgument args;
+            RequestArgument requestArgument;
             try
             {
-                try
-                {
-                    args = JsonUtility.FromJson<RequestArgument>(await AnonymousServer.ReadContentAsync(request));
-                }
-                catch (ArgumentException exception)
-                {
-                    throw new FormatException("Invalid anonymous room exit request.", exception);
-                }
-
-                if ((args == null) || string.IsNullOrWhiteSpace(args.PlayerId) || string.IsNullOrWhiteSpace(args.RoomId))
+                requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(request, "Invalid anonymous room exit request.");
+                if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.PlayerId) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
                     throw new FormatException("Invalid anonymous room exit request.");
             }
             catch (FormatException)
@@ -50,7 +41,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 return;
             }
 
-            var roomIndex = roomState.Rooms.FindIndex(secret => string.Equals(secret.Room.Id, args.RoomId, StringComparison.Ordinal));
+            var roomIndex = roomState.Rooms.FindIndex(secret => string.Equals(secret.Room.Id, requestArgument.RoomId, StringComparison.Ordinal));
             if (roomIndex < 0)
             {
                 response.StatusCode = (int)HttpStatusCode.NotFound;
@@ -58,21 +49,21 @@ namespace oojjrs.oplat.anonymous.controllers
             }
 
             var room = roomState.Rooms[roomIndex].Room;
-            if ((string.Equals(session.Account, args.PlayerId, StringComparison.Ordinal) == false) && (string.Equals(session.Account, room.HostId, StringComparison.Ordinal) == false))
+            if ((string.Equals(session.Account, requestArgument.PlayerId, StringComparison.Ordinal) == false) && (string.Equals(session.Account, room.HostId, StringComparison.Ordinal) == false))
             {
                 response.StatusCode = (int)HttpStatusCode.Forbidden;
                 return;
             }
 
             var players = room.Players ?? Array.Empty<AnonymousServerCreateRoom.PlayerData>();
-            if (string.Equals(room.HostId, args.PlayerId, StringComparison.Ordinal))
+            if (string.Equals(room.HostId, requestArgument.PlayerId, StringComparison.Ordinal))
             {
                 roomState.RoomCodes.Remove(room.Code);
                 roomState.Rooms.RemoveAt(roomIndex);
             }
             else
             {
-                room.Players = players.Where(player => string.Equals(player.Id, args.PlayerId, StringComparison.Ordinal) == false).ToArray();
+                room.Players = players.Where(player => string.Equals(player.Id, requestArgument.PlayerId, StringComparison.Ordinal) == false).ToArray();
             }
 
             response.StatusCode = (int)HttpStatusCode.NoContent;

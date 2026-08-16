@@ -38,26 +38,22 @@ namespace oojjrs.oplat.anonymous
                 {
                     await EnsureLaunchServerAsync(cancellationToken);
 
-                    var requestContent = JsonUtility.ToJson(new AnonymousServerAuthenticate.RequestArgument()
+                    using (var response = await PostJsonAsync(AnonymousServer.ApiAuthenticate, new AnonymousServerAuthenticate.RequestArgument()
                     {
                         Account = account,
                         Nickname = nickname,
-                    });
-                    using (var content = new StringContent(requestContent, Encoding.UTF8, "application/json"))
+                    }, cancellationToken))
                     {
-                        using (var response = await PostAsync(AnonymousServer.ApiAuthenticate, content, cancellationToken))
-                        {
-                            response.EnsureSuccessStatusCode();
+                        response.EnsureSuccessStatusCode();
 
-                            var responseContent = await response.Content.ReadAsStringAsync();
-                            var responseArgument = JsonUtility.FromJson<AnonymousServerAuthenticate.ResponseArgument>(responseContent);
-                            if ((responseArgument == null) || string.IsNullOrEmpty(responseArgument.Token))
-                                throw new FormatException("Invalid anonymous authentication response.");
+                        var responseContent = await response.Content.ReadAsStringAsync();
+                        var responseArgument = JsonUtility.FromJson<AnonymousServerAuthenticate.ResponseArgument>(responseContent);
+                        if ((responseArgument == null) || string.IsNullOrEmpty(responseArgument.Token))
+                            throw new FormatException("Invalid anonymous authentication response.");
 
-                            cancellationToken.ThrowIfCancellationRequested();
-                            _client.DefaultRequestHeaders.Remove(AnonymousServerAuthenticate.SessionHeader);
-                            _client.DefaultRequestHeaders.Add(AnonymousServerAuthenticate.SessionHeader, responseArgument.Token);
-                        }
+                        cancellationToken.ThrowIfCancellationRequested();
+                        _client.DefaultRequestHeaders.Remove(AnonymousServerAuthenticate.SessionHeader);
+                        _client.DefaultRequestHeaders.Add(AnonymousServerAuthenticate.SessionHeader, responseArgument.Token);
                     }
                 }
                 catch (Exception)
@@ -125,9 +121,11 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
-        internal Task<HttpResponseMessage> PostAsync(string api, HttpContent content, CancellationToken cancellationToken)
+        internal async Task<HttpResponseMessage> PostJsonAsync(string api, object argument, CancellationToken cancellationToken)
         {
-            return _client.PostAsync(AnonymousServer.GetUri(api), content, cancellationToken);
+            var content = JsonUtility.ToJson(argument);
+            using (var requestContent = new StringContent(content, Encoding.UTF8, "application/json"))
+                return await _client.PostAsync(AnonymousServer.GetUri(api), requestContent, cancellationToken);
         }
 
         internal void Shutdown()

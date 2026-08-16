@@ -38,7 +38,20 @@ namespace oojjrs.oplat.anonymous
             return Address + relativePath;
         }
 
-        internal static async Task<string> ReadContentAsync(HttpListenerRequest request)
+        internal static async Task<T> ReadJsonAsync<T>(HttpListenerRequest request, string invalidMessage)
+        {
+            var content = await ReadContentAsync(request);
+            try
+            {
+                return JsonUtility.FromJson<T>(content);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new FormatException(invalidMessage, exception);
+            }
+        }
+
+        private static async Task<string> ReadContentAsync(HttpListenerRequest request)
         {
             if (request.HasEntityBody == false)
                 throw new FormatException("Anonymous request body is empty.");

@@ -67,51 +67,17 @@ namespace oojjrs.oplat.anonymous.controllers
                 return;
             }
 
-            ResponseArgument room;
+            RequestArgument requestArgument;
             try
             {
-                RequestArgument args;
-                try
-                {
-                    args = JsonUtility.FromJson<RequestArgument>(await AnonymousServer.ReadContentAsync(request));
-                }
-                catch (ArgumentException exception)
-                {
-                    throw new FormatException("Invalid anonymous room request.", exception);
-                }
-
-                if ((args == null) || (args.MaxPlayers < 1))
+                requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(request, "Invalid anonymous room request.");
+                if ((requestArgument == null) || (requestArgument.MaxPlayers < 1))
                     throw new FormatException("Invalid anonymous room request.");
 
-                if (args.PlayerFields != null)
-                    ValidateFields(args.PlayerFields);
-                if (args.RoomFields != null)
-                    ValidateFields(args.RoomFields);
-
-                room = new ResponseArgument()
-                {
-                    Code = CreateRoomCode(roomState),
-                    Fields = args.RoomFields ?? Array.Empty<FieldData>(),
-                    HasPassword = string.IsNullOrEmpty(args.Password) == false,
-                    HostId = session.Account,
-                    Id = Guid.NewGuid().ToString("N"),
-                    IsLocked = args.IsLocked,
-                    IsPrivate = args.IsPrivate,
-                    MaxPlayers = args.MaxPlayers,
-                    Players = new[]
-                    {
-                        new PlayerData()
-                        {
-                            Fields = args.PlayerFields ?? Array.Empty<FieldData>(),
-                            Id = session.Account,
-                            IsHost = true,
-                            Nickname = args.PlayerNickname,
-                        },
-                    },
-                    Title = args.Title,
-                };
-
-                roomState.Rooms.Add(new AnonymousServerRoom.RoomSecret(args.Password, room));
+                if (requestArgument.PlayerFields != null)
+                    ValidateFields(requestArgument.PlayerFields);
+                if (requestArgument.RoomFields != null)
+                    ValidateFields(requestArgument.RoomFields);
             }
             catch (FormatException)
             {
@@ -119,7 +85,32 @@ namespace oojjrs.oplat.anonymous.controllers
                 return;
             }
 
-            var responseContent = JsonUtility.ToJson(room);
+            var responseArgument = new ResponseArgument()
+            {
+                Code = CreateRoomCode(roomState),
+                Fields = requestArgument.RoomFields ?? Array.Empty<FieldData>(),
+                HasPassword = string.IsNullOrEmpty(requestArgument.Password) == false,
+                HostId = session.Account,
+                Id = Guid.NewGuid().ToString("N"),
+                IsLocked = requestArgument.IsLocked,
+                IsPrivate = requestArgument.IsPrivate,
+                MaxPlayers = requestArgument.MaxPlayers,
+                Players = new[]
+                {
+                        new PlayerData()
+                        {
+                            Fields = requestArgument.PlayerFields ?? Array.Empty<FieldData>(),
+                            Id = session.Account,
+                            IsHost = true,
+                            Nickname = requestArgument.PlayerNickname,
+                        },
+                    },
+                Title = requestArgument.Title,
+            };
+
+            roomState.Rooms.Add(new AnonymousServerRoom.RoomSecret(requestArgument.Password, responseArgument));
+
+            var responseContent = JsonUtility.ToJson(responseArgument);
             var responseData = Encoding.UTF8.GetBytes(responseContent);
 
             response.ContentEncoding = Encoding.UTF8;

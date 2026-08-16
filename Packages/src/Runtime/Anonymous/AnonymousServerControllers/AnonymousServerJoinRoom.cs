@@ -33,23 +33,16 @@ namespace oojjrs.oplat.anonymous.controllers
                 return;
             }
 
-            RequestArgument args;
+            RequestArgument requestArgument;
             try
             {
-                try
-                {
-                    args = JsonUtility.FromJson<RequestArgument>(await AnonymousServer.ReadContentAsync(request));
-                }
-                catch (ArgumentException exception)
-                {
-                    throw new FormatException("Invalid anonymous room join request.", exception);
-                }
+                requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(request, "Invalid anonymous room join request.");
 
-                if ((args == null) || (string.IsNullOrWhiteSpace(args.RoomId) && string.IsNullOrWhiteSpace(args.Code)))
+                if ((requestArgument == null) || (string.IsNullOrWhiteSpace(requestArgument.RoomId) && string.IsNullOrWhiteSpace(requestArgument.Code)))
                     throw new FormatException("Invalid anonymous room join request.");
 
-                if (args.PlayerFields != null)
-                    AnonymousServerCreateRoom.ValidateFields(args.PlayerFields);
+                if (requestArgument.PlayerFields != null)
+                    AnonymousServerCreateRoom.ValidateFields(requestArgument.PlayerFields);
             }
             catch (FormatException)
             {
@@ -57,17 +50,13 @@ namespace oojjrs.oplat.anonymous.controllers
                 return;
             }
 
-            var roomId = args.RoomId?.Trim();
-            var code = args.Code?.Trim();
+            var roomId = requestArgument.RoomId?.Trim();
+            var code = requestArgument.Code?.Trim();
             AnonymousServerRoom.RoomSecret secret;
             if (string.IsNullOrEmpty(roomId) == false)
-            {
                 secret = roomState.Rooms.Find(value => string.Equals(value.Room.Id, roomId, StringComparison.Ordinal));
-            }
             else
-            {
                 secret = roomState.Rooms.Find(value => string.Equals(value.Room.Code, code, StringComparison.OrdinalIgnoreCase));
-            }
 
             if (secret == null)
             {
@@ -79,7 +68,7 @@ namespace oojjrs.oplat.anonymous.controllers
             var players = room.Players ?? Array.Empty<AnonymousServerCreateRoom.PlayerData>();
             if (players.Any(player => string.Equals(player.Id, session.Account, StringComparison.Ordinal)) == false)
             {
-                if (room.IsLocked || (string.IsNullOrEmpty(secret.Password) == false && string.Equals(secret.Password, args.Password, StringComparison.Ordinal) == false))
+                if (room.IsLocked || (string.IsNullOrEmpty(secret.Password) == false && string.Equals(secret.Password, requestArgument.Password, StringComparison.Ordinal) == false))
                 {
                     response.StatusCode = (int)HttpStatusCode.Forbidden;
                     return;
@@ -93,10 +82,10 @@ namespace oojjrs.oplat.anonymous.controllers
 
                 room.Players = players.Append(new AnonymousServerCreateRoom.PlayerData()
                 {
-                    Fields = args.PlayerFields ?? Array.Empty<AnonymousServerCreateRoom.FieldData>(),
+                    Fields = requestArgument.PlayerFields ?? Array.Empty<AnonymousServerCreateRoom.FieldData>(),
                     Id = session.Account,
                     IsHost = false,
-                    Nickname = args.PlayerNickname,
+                    Nickname = requestArgument.PlayerNickname,
                 }).ToArray();
             }
 
