@@ -1,13 +1,13 @@
 ﻿namespace oojjrs.oplat.anonymous
 {
-    internal sealed class AnonymousPlayer : MyNetPlayerInterface
+    internal sealed class AnonymousNetPlayer : MyNetPlayerInterface
     {
         private readonly MyNetInterface.Field[] Fields;
         private readonly string Id;
         private readonly bool IsHost;
         private readonly string Nickname;
 
-        internal AnonymousPlayer(MyNetInterface.Field[] fields, string id, bool isHost, string nickname)
+        internal AnonymousNetPlayer(MyNetInterface.Field[] fields, string id, bool isHost, string nickname)
         {
             Fields = fields;
             Id = id;

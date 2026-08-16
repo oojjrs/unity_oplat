@@ -1,6 +1,6 @@
 ﻿namespace oojjrs.oplat.steam
 {
-    internal class SteamPlayer : MyNetPlayerInterface
+    internal class SteamNetPlayer : MyNetPlayerInterface
     {
         string MyNetPlayerInterface.Id => throw new System.NotImplementedException();
         bool MyNetPlayerInterface.IsHost => throw new System.NotImplementedException();

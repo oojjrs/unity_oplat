@@ -2,7 +2,7 @@
 
 namespace oojjrs.oplat.steam
 {
-    internal class SteamRoom : MyNetRoomInterface
+    internal class SteamNetRoom : MyNetRoomInterface
     {
         string MyNetRoomInterface.Code => throw new System.NotImplementedException();
         bool MyNetRoomInterface.HasPassword => throw new System.NotImplementedException();

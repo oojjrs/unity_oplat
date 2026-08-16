@@ -275,7 +275,7 @@ namespace oojjrs.oplat.anonymous
             if ((player == null) || string.IsNullOrEmpty(player.Id))
                 throw new FormatException("Invalid anonymous player response.");
 
-            return new AnonymousPlayer(ConvertFields(player.Fields), player.Id, player.IsHost, player.Nickname);
+            return new AnonymousNetPlayer(ConvertFields(player.Fields), player.Id, player.IsHost, player.Nickname);
         }
 
         internal static MyNetRoomInterface ConvertRoom(AnonymousServerCreateRoom.ResponseArgument room)
@@ -286,7 +286,7 @@ namespace oojjrs.oplat.anonymous
             var playerData = room.Players ?? Array.Empty<AnonymousServerCreateRoom.PlayerData>();
             var players = playerData.Select(player => ConvertPlayer(player)).ToArray();
 
-            return new AnonymousRoom(room.Code, ConvertFields(room.Fields), room.HasPassword, room.HostId, room.Id, room.IsLocked, room.IsPrivate, room.MaxPlayers, players, room.Title);
+            return new AnonymousNetRoom(room.Code, ConvertFields(room.Fields), room.HasPassword, room.HostId, room.Id, room.IsLocked, room.IsPrivate, room.MaxPlayers, players, room.Title);
         }
     }
 }

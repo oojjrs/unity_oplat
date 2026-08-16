@@ -2,7 +2,7 @@
 
 namespace oojjrs.oplat.anonymous
 {
-    internal sealed class AnonymousRoom : MyNetRoomInterface
+    internal sealed class AnonymousNetRoom : MyNetRoomInterface
     {
         private readonly string _code;
         private readonly MyNetInterface.Field[] _fields;
@@ -16,7 +16,7 @@ namespace oojjrs.oplat.anonymous
         private readonly MyNetPlayerInterface[] _players;
         private readonly string _title;
 
-        internal AnonymousRoom(string code, MyNetInterface.Field[] fields, bool hasPassword, string hostId, string id, bool isLocked, bool isPrivate, int playerCountMax, MyNetPlayerInterface[] players, string title)
+        internal AnonymousNetRoom(string code, MyNetInterface.Field[] fields, bool hasPassword, string hostId, string id, bool isLocked, bool isPrivate, int playerCountMax, MyNetPlayerInterface[] players, string title)
         {
             _code = code;
             _fields = fields;
