@@ -15,6 +15,8 @@ namespace oojjrs.oplat.anonymous
             {
                 Operation = 1,
                 OperationResult = 2,
+                MemberRequest = 3,
+                HostResponse = 4,
             }
 
             internal byte[] Content { get; }
@@ -30,6 +32,16 @@ namespace oojjrs.oplat.anonymous
                 Type = type;
             }
 
+            internal static Message CreateHostResponse(byte[] content)
+            {
+                return new Message(TypeEnum.HostResponse, default, default, content);
+            }
+
+            internal static Message CreateMemberRequest(byte[] content)
+            {
+                return new Message(TypeEnum.MemberRequest, default, default, content);
+            }
+
             internal static Message CreateOperation(AnonymousNet.OperationEnum operation, byte[] content)
             {
                 return new Message(TypeEnum.Operation, operation, default, content);
@@ -42,25 +54,35 @@ namespace oojjrs.oplat.anonymous
 
             internal static Message Deserialize(byte[] data)
             {
-                if ((data == null) || (data.Length < 2))
+                if ((data == null) || (data.Length < 1))
                     throw new FormatException("Invalid anonymous message.");
 
                 var type = (TypeEnum)data[0];
-                var operation = (AnonymousNet.OperationEnum)data[1];
                 return type switch
                 {
-                    TypeEnum.Operation => new Message(type, operation, default, data[2..]),
-                    TypeEnum.OperationResult when data.Length >= 3 => new Message(type, operation, (AnonymousServerResponse.ResultCodeEnum)data[2], data[3..]),
+                    TypeEnum.HostResponse => new Message(type, default, default, data[1..]),
+                    TypeEnum.MemberRequest => new Message(type, default, default, data[1..]),
+                    TypeEnum.Operation when data.Length >= 2 => new Message(type, (AnonymousNet.OperationEnum)data[1], default, data[2..]),
+                    TypeEnum.OperationResult when data.Length >= 3 => new Message(type, (AnonymousNet.OperationEnum)data[1], (AnonymousServerResponse.ResultCodeEnum)data[2], data[3..]),
                     _ => throw new FormatException("Invalid anonymous message."),
                 };
             }
 
             internal byte[] Serialize()
             {
-                var headerLength = Type == TypeEnum.OperationResult ? 3 : 2;
+                var headerLength = Type switch
+                {
+                    TypeEnum.HostResponse => 1,
+                    TypeEnum.MemberRequest => 1,
+                    TypeEnum.Operation => 2,
+                    TypeEnum.OperationResult => 3,
+                    _ => throw new InvalidOperationException("Invalid anonymous message."),
+                };
                 var data = new byte[headerLength + Content.Length];
                 data[0] = (byte)Type;
-                data[1] = (byte)Operation;
+                if ((Type == TypeEnum.Operation) || (Type == TypeEnum.OperationResult))
+                    data[1] = (byte)Operation;
+
                 if (Type == TypeEnum.OperationResult)
                     data[2] = (byte)ResultCode;
 

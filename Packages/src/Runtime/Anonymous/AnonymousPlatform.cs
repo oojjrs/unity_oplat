@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -22,8 +21,6 @@ namespace oojjrs.oplat.anonymous
         string MyPlatformServiceInterface.Nickname => _nickname ?? GetNickname();
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
 
-        private IEnumerable<MyNetPlayerInterface> PlayersWithoutHost => throw new NotImplementedException();
-
         private void OnDestroy()
         {
             Net.Shutdown();
@@ -34,7 +31,7 @@ namespace oojjrs.oplat.anonymous
             var cancellationToken = destroyCancellationToken;
             try
             {
-                await RunServiceLoopAsync(cancellationToken);
+                await Net.RunServiceLoopAsync(cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -95,62 +92,9 @@ namespace oojjrs.oplat.anonymous
             await Net.AuthenticateAsync(_account, _nickname, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
-            Net.HostResult = callback.HostResult;
-            Net.MemberResult = callback.MemberResult;
+            Net.Initialize(_account, callback.HostResult, callback.MemberResult);
 
             _isInitialized = true;
-        }
-
-        private async Task RunServiceLoopAsync(CancellationToken cancellationToken)
-        {
-            while (cancellationToken.IsCancellationRequested == false)
-            {
-                if (Net.HostService.HasResponses())
-                {
-                    // 서버 -> 클라 응답 전송
-                    while (Net.HostService.TryDequeue(out var response))
-                    {
-                        // 나에게는 즉시 수행
-                        Net.MemberService.Receive(response);
-
-                        var bytes = MyNetSerializer.Serialize(response);
-                        foreach (var player in PlayersWithoutHost)
-                        {
-                            // 어케 보내지?
-                        }
-                    }
-
-                    Net.MemberService.HandleResponses();
-                }
-
-                // 의도적으로 요청은 응답보다 늦게 처리하는 것이다.
-                if (Net.MemberService.HasRequest())
-                {
-                    var room = await Net.GetCurrentRoomAsync(cancellationToken);
-                    if ((this == null) || (room == null))
-                        return;
-
-                    // 클라 -> 서버 요청 적재
-                    if (room.HostId == _account)
-                    {
-                        // 나에게는 즉시 수행
-                        while (Net.MemberService.TryDequeue(out var request))
-                            Net.HostService.Receive(request);
-                    }
-                    else
-                    {
-                        // TODO: 어케 보내지?
-                        while (Net.MemberService.TryDequeue(out var request))
-                        {
-                            var bytes = MyNetSerializer.Serialize(request);
-                        }
-                    }
-
-                    Net.HostService.HandleRequests();
-                }
-
-                await Task.Delay(1, cancellationToken);
-            }
         }
     }
 }

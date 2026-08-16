@@ -34,6 +34,7 @@ namespace oojjrs.oplat.anonymous.controllers
             }
             else
             {
+                roomState.Rooms[roomIndex].Responses.Remove(requestArgument.PlayerId);
                 room.Players = players.Where(player => player.Id != requestArgument.PlayerId).ToArray();
             }
 

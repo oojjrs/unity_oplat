@@ -130,14 +130,16 @@ namespace oojjrs.oplat.anonymous
 
         internal sealed class RoomSecret
         {
+            internal string Password { get; }
+            internal Queue<MyNetRequest> Requests { get; } = new();
+            internal Dictionary<string, Queue<MyNetResponse>> Responses { get; } = new();
+            internal RoomData Room { get; }
+
             internal RoomSecret(string password, RoomData room)
             {
                 Password = password;
                 Room = room;
             }
-
-            internal string Password { get; }
-            internal RoomData Room { get; }
         }
 
         internal sealed class State

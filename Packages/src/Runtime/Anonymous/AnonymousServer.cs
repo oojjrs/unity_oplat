@@ -50,6 +50,8 @@ namespace oojjrs.oplat.anonymous
                 AnonymousNet.OperationEnum.CreateRoom => await AnonymousServerCreateRoom.RunAsync(content, RoomState, session),
                 AnonymousNet.OperationEnum.ExitRoom => await AnonymousServerExitRoom.RunAsync(content, RoomState, session),
                 AnonymousNet.OperationEnum.GetCurrentRoom => await AnonymousServerGetCurrentRoom.RunAsync(RoomState, session),
+                AnonymousNet.OperationEnum.GetRequests => await AnonymousServerGetRequests.RunAsync(RoomState, session),
+                AnonymousNet.OperationEnum.GetResponses => await AnonymousServerGetResponses.RunAsync(RoomState, session),
                 AnonymousNet.OperationEnum.GetRooms => await AnonymousServerGetRooms.RunAsync(RoomState),
                 AnonymousNet.OperationEnum.JoinRoom => await AnonymousServerJoinRoom.RunAsync(content, RoomState, session),
                 AnonymousNet.OperationEnum.UpdatePlayer => await AnonymousServerUpdatePlayer.RunAsync(content, RoomState, session),
@@ -72,13 +74,24 @@ namespace oojjrs.oplat.anonymous
                     {
                         while (cancellationToken.IsCancellationRequested == false)
                         {
-                            var request = await messages.ReceiveAsync(value => value.Type == AnonymousTransport.Message.TypeEnum.Operation, cancellationToken);
-                            if (request == null)
+                            var message = await messages.ReceiveAsync(value => (value.Type == AnonymousTransport.Message.TypeEnum.Operation) || (value.Type == AnonymousTransport.Message.TypeEnum.MemberRequest) || (value.Type == AnonymousTransport.Message.TypeEnum.HostResponse), cancellationToken);
+                            if (message == null)
                                 return;
 
-                            var response = await CreateResponseAsync(request.Operation, request.Content, session);
-                            session = response.Session;
-                            messages.Send(AnonymousTransport.Message.CreateOperationResult(request.Operation, response.Response));
+                            if (message.Type == AnonymousTransport.Message.TypeEnum.HostResponse)
+                            {
+                                await AnonymousServerAddResponse.RunAsync(message.Content, RoomState, session);
+                            }
+                            else if (message.Type == AnonymousTransport.Message.TypeEnum.MemberRequest)
+                            {
+                                await AnonymousServerAddRequest.RunAsync(message.Content, RoomState, session);
+                            }
+                            else
+                            {
+                                var response = await CreateResponseAsync(message.Operation, message.Content, session);
+                                session = response.Session;
+                                messages.Send(AnonymousTransport.Message.CreateOperationResult(message.Operation, response.Response));
+                            }
                         }
                     }
                     finally

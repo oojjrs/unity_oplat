@@ -47,10 +47,25 @@ namespace oojjrs.oplat.anonymous
 
         internal void Send(AnonymousNet.OperationEnum operation, byte[] content)
         {
+            SendMessage(AnonymousTransport.Message.CreateOperation(operation, content));
+        }
+
+        internal void SendHostResponse(byte[] content)
+        {
+            SendMessage(AnonymousTransport.Message.CreateHostResponse(content));
+        }
+
+        internal void SendMemberRequest(byte[] content)
+        {
+            SendMessage(AnonymousTransport.Message.CreateMemberRequest(content));
+        }
+
+        private void SendMessage(AnonymousTransport.Message message)
+        {
             if (_messages == null)
                 throw new InvalidOperationException("Anonymous client is not connected.");
 
-            _messages.Send(AnonymousTransport.Message.CreateOperation(operation, content));
+            _messages.Send(message);
         }
 
         internal void Shutdown()
