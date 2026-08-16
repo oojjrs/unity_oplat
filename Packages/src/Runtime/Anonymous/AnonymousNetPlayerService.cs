@@ -33,6 +33,7 @@ namespace oojjrs.oplat.anonymous
                 }
 
                 MyNetInterface.CatchInterface.FailureEnum? failure = null;
+                MyNetRoomInterface room = null;
                 try
                 {
                     var response = await Net.SendAsync(AnonymousTransport.OperationEnum.UpdatePlayer, new AnonymousServerUpdatePlayer.RequestArgument()
@@ -51,6 +52,7 @@ namespace oojjrs.oplat.anonymous
                             break;
                         default:
                             response.EnsureSuccess();
+                            room = (await response.FromJsonAsync<AnonymousServerRoom.RoomData>(cancellationToken)).ToNetRoom();
                             break;
                     }
                 }
@@ -68,7 +70,7 @@ namespace oojjrs.oplat.anonymous
                     return;
                 }
 
-                result.OnOk();
+                result.OnOk(room);
             }
         }
     }

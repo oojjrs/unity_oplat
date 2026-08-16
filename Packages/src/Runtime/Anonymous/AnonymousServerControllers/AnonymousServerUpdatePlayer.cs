@@ -37,7 +37,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Forbidden);
 
             player.Fields = AnonymousServerRoom.FieldData.Merge(player.Fields, requestArgument.PlayerFields);
-            return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Success);
+            return await AnonymousServerResponse.CreateAsync(AnonymousTransport.ResultCodeEnum.Success, secret.Room.GetMemberResponseArgument(session.Account), cancellationToken);
         }
     }
 }
