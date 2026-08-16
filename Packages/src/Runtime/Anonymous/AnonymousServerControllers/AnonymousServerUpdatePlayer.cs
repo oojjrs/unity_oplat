@@ -1,22 +1,19 @@
 using System;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous.controllers
 {
     internal static class AnonymousServerUpdatePlayer
     {
-        [Serializable]
-        internal record RequestArgument
+        public record RequestArgument
         {
-            public AnonymousServerRoom.FieldData[] PlayerFields;
-            public string PlayerId;
-            public string RoomId;
+            public AnonymousServerRoom.FieldData[] PlayerFields { get; set; }
+            public string PlayerId { get; set; }
+            public string RoomId { get; set; }
         }
 
-        internal static async Task<AnonymousServerResponse> RunAsync(string content, AnonymousServerRoom.State roomState, AnonymousServerSession session, CancellationToken cancellationToken)
+        internal static AnonymousServerResponse Run(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
         {
-            var requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(content, "Invalid anonymous player update request.", cancellationToken);
+            var requestArgument = AnonymousTransport.Deserialize<RequestArgument>(content);
             if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.PlayerId) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
                 throw new FormatException("Invalid anonymous player update request.");
 
@@ -37,7 +34,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Forbidden);
 
             player.Fields = AnonymousServerRoom.FieldData.Merge(player.Fields, requestArgument.PlayerFields);
-            return await AnonymousServerResponse.CreateAsync(AnonymousTransport.ResultCodeEnum.Success, secret.Room.GetMemberResponseArgument(session.Account), cancellationToken);
+            return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Success, secret.Room.GetMemberResponseArgument(session.Account));
         }
     }
 }

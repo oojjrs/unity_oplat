@@ -52,7 +52,7 @@ namespace oojjrs.oplat.anonymous
                             break;
                         default:
                             response.EnsureSuccess();
-                            room = (await response.FromJsonAsync<AnonymousServerRoom.RoomData>(cancellationToken)).ToNetRoom();
+                            room = response.GetContent<AnonymousServerRoom.RoomData>().ToNetRoom();
                             break;
                     }
                 }

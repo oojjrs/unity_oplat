@@ -1,22 +1,19 @@
 using System;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous.controllers
 {
     internal static class AnonymousServerExitRoom
     {
-        [Serializable]
-        internal record RequestArgument
+        public record RequestArgument
         {
-            public string PlayerId;
-            public string RoomId;
+            public string PlayerId { get; set; }
+            public string RoomId { get; set; }
         }
 
-        internal static async Task<AnonymousServerResponse> RunAsync(string content, AnonymousServerRoom.State roomState, AnonymousServerSession session, CancellationToken cancellationToken)
+        internal static AnonymousServerResponse Run(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
         {
-            var requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(content, "Invalid anonymous room exit request.", cancellationToken);
+            var requestArgument = AnonymousTransport.Deserialize<RequestArgument>(content);
             if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.PlayerId) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
                 throw new FormatException("Invalid anonymous room exit request.");
 

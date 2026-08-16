@@ -1,21 +1,18 @@
 using System;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous.controllers
 {
     internal static class AnonymousServerAuthenticate
     {
-        [Serializable]
-        internal record RequestArgument
+        public record RequestArgument
         {
-            public string Account;
-            public string Nickname;
+            public string Account { get; set; }
+            public string Nickname { get; set; }
         }
 
-        internal static async Task<AnonymousServerSession> RunAsync(string content, CancellationToken cancellationToken)
+        internal static AnonymousServerSession Run(byte[] content)
         {
-            var requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(content, "Invalid anonymous authentication request.", cancellationToken);
+            var requestArgument = AnonymousTransport.Deserialize<RequestArgument>(content);
             if ((requestArgument == null) || string.IsNullOrEmpty(requestArgument.Account) || string.IsNullOrEmpty(requestArgument.Nickname))
                 throw new FormatException("Invalid anonymous authentication request.");
 

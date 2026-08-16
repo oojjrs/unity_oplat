@@ -1,33 +1,31 @@
 using System;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous
 {
     internal sealed class AnonymousServerResponse
     {
-        internal AnonymousServerResponse(AnonymousTransport.ResultCodeEnum resultCode, string content)
+        internal AnonymousServerResponse(AnonymousTransport.ResultCodeEnum resultCode, byte[] content)
         {
-            Content = content ?? string.Empty;
+            Content = content ?? Array.Empty<byte>();
             ResultCode = resultCode;
         }
 
-        internal string Content { get; }
+        internal byte[] Content { get; }
         internal AnonymousTransport.ResultCodeEnum ResultCode { get; }
 
         internal static AnonymousServerResponse Create(AnonymousTransport.ResultCodeEnum resultCode)
         {
-            return new AnonymousServerResponse(resultCode, string.Empty);
+            return new AnonymousServerResponse(resultCode, Array.Empty<byte>());
         }
 
-        internal static async Task<AnonymousServerResponse> CreateAsync(AnonymousTransport.ResultCodeEnum resultCode, object content, CancellationToken cancellationToken)
+        internal static AnonymousServerResponse Create(AnonymousTransport.ResultCodeEnum resultCode, object content)
         {
-            return new AnonymousServerResponse(resultCode, await AnonymousTransport.ToJsonAsync(content, cancellationToken));
+            return new AnonymousServerResponse(resultCode, AnonymousTransport.Serialize(content));
         }
 
-        internal async Task<T> FromJsonAsync<T>(CancellationToken cancellationToken)
+        internal T GetContent<T>()
         {
-            return await AnonymousTransport.FromJsonAsync<T>(Content, cancellationToken);
+            return AnonymousTransport.Deserialize<T>(Content);
         }
 
         internal void EnsureSuccess()

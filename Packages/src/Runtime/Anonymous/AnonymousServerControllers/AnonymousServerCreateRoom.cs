@@ -1,27 +1,24 @@
 using System;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous.controllers
 {
     internal static class AnonymousServerCreateRoom
     {
-        [Serializable]
-        internal record RequestArgument
+        public record RequestArgument
         {
-            public bool IsLocked;
-            public bool IsPrivate;
-            public int MaxPlayers;
-            public string Password;
-            public AnonymousServerRoom.FieldData[] PlayerFields;
-            public string PlayerNickname;
-            public AnonymousServerRoom.FieldData[] RoomFields;
-            public string Title;
+            public bool IsLocked { get; set; }
+            public bool IsPrivate { get; set; }
+            public int MaxPlayers { get; set; }
+            public string Password { get; set; }
+            public AnonymousServerRoom.FieldData[] PlayerFields { get; set; }
+            public string PlayerNickname { get; set; }
+            public AnonymousServerRoom.FieldData[] RoomFields { get; set; }
+            public string Title { get; set; }
         }
 
-        internal static async Task<AnonymousServerResponse> RunAsync(string content, AnonymousServerRoom.State roomState, AnonymousServerSession session, CancellationToken cancellationToken)
+        internal static AnonymousServerResponse Run(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
         {
-            var requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(content, "Invalid anonymous room request.", cancellationToken);
+            var requestArgument = AnonymousTransport.Deserialize<RequestArgument>(content);
             if ((requestArgument == null) || (requestArgument.MaxPlayers < 1))
                 throw new FormatException("Invalid anonymous room request.");
 
@@ -54,7 +51,7 @@ namespace oojjrs.oplat.anonymous.controllers
             };
 
             roomState.Rooms.Add(new AnonymousServerRoom.RoomSecret(requestArgument.Password, responseArgument));
-            return await AnonymousServerResponse.CreateAsync(AnonymousTransport.ResultCodeEnum.Success, responseArgument, cancellationToken);
+            return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Success, responseArgument);
 
             static string CreateRoomCode(AnonymousServerRoom.State state)
             {

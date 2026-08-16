@@ -1,22 +1,19 @@
 using System;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous.controllers
 {
     internal static class AnonymousServerUpdateRoom
     {
-        [Serializable]
-        internal record RequestArgument
+        public record RequestArgument
         {
-            public bool IsPrivate;
-            public AnonymousServerRoom.FieldData[] RoomFields;
-            public string RoomId;
+            public bool IsPrivate { get; set; }
+            public AnonymousServerRoom.FieldData[] RoomFields { get; set; }
+            public string RoomId { get; set; }
         }
 
-        internal static async Task<AnonymousServerResponse> RunAsync(string content, AnonymousServerRoom.State roomState, AnonymousServerSession session, CancellationToken cancellationToken)
+        internal static AnonymousServerResponse Run(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
         {
-            var requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(content, "Invalid anonymous room update request.", cancellationToken);
+            var requestArgument = AnonymousTransport.Deserialize<RequestArgument>(content);
             if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
                 throw new FormatException("Invalid anonymous room update request.");
 
@@ -35,7 +32,7 @@ namespace oojjrs.oplat.anonymous.controllers
             room.Fields = AnonymousServerRoom.FieldData.Merge(room.Fields, requestArgument.RoomFields);
             room.IsPrivate = requestArgument.IsPrivate;
 
-            return await AnonymousServerResponse.CreateAsync(AnonymousTransport.ResultCodeEnum.Success, room.GetMemberResponseArgument(session.Account), cancellationToken);
+            return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Success, room.GetMemberResponseArgument(session.Account));
         }
     }
 }

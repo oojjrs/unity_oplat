@@ -1,27 +1,15 @@
 using System;
 using System.Buffers.Binary;
 using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using UnityEngine;
 
 namespace oojjrs.oplat.anonymous
 {
     internal static class AnonymousTransport
     {
-        internal enum FrameTypeEnum : byte
+        internal enum OperationEnum : byte
         {
-            ControlRequest = 1,
-            ControlResponse = 2,
-            ControlNotification = 3,
-            ClientToHostPacket = 4,
-            HostBroadcast = 5,
-        }
-
-        internal enum OperationEnum : ushort
-        {
-            None = 0,
             Authenticate = 1,
             CreateRoom = 2,
             ExitRoom = 3,
@@ -33,130 +21,63 @@ namespace oojjrs.oplat.anonymous
 
         internal enum ResultCodeEnum : byte
         {
-            None = 0,
             Success = 1,
-            InvalidRequest = 2,
-            Unauthenticated = 3,
-            NotFound = 4,
-            Forbidden = 5,
-            Conflict = 6,
-            InternalError = 7,
-            UnsupportedOperation = 8,
-        }
-
-        internal sealed class Frame
-        {
-            internal Frame(FrameTypeEnum type, long requestId, OperationEnum operation, ResultCodeEnum resultCode, string content)
-            {
-                Content = content ?? string.Empty;
-                Operation = operation;
-                RequestId = requestId;
-                ResultCode = resultCode;
-                Type = type;
-            }
-
-            internal string Content { get; }
-            internal OperationEnum Operation { get; }
-            internal long RequestId { get; }
-            internal ResultCodeEnum ResultCode { get; }
-            internal FrameTypeEnum Type { get; }
+            Unauthenticated = 2,
+            NotFound = 3,
+            Forbidden = 4,
+            Conflict = 5,
+            UnsupportedOperation = 6,
         }
 
         internal const int Port = 45831;
 
-        private const int FrameHeaderLength = sizeof(uint) + sizeof(ushort) + sizeof(byte) + sizeof(long) + sizeof(ushort) + sizeof(byte);
-        private const int FrameLengthPrefix = sizeof(int);
-        private const int MaximumContentLength = 1024 * 1024;
-        private const uint ProtocolMagic = 0x4F504C54;
-        private const ushort ProtocolVersion = 1;
+        private const int LengthSize = sizeof(int);
 
-        private static readonly UTF8Encoding Utf8 = new(false, true);
-
-        internal static async Task<T> FromJsonAsync<T>(string content, CancellationToken cancellationToken)
+        internal static T Deserialize<T>(byte[] content)
         {
-            return await Task.Run(() => JsonUtility.FromJson<T>(content), cancellationToken);
+            using (var stream = new MemoryStream(content))
+                return (T)MyNetDeserializer.Deserialize(stream);
         }
 
-        internal static async Task<string> ToJsonAsync(object content, CancellationToken cancellationToken)
+        internal static async Task<(OperationEnum Operation, byte[] Content)?> ReadRequestAsync(Stream stream, CancellationToken cancellationToken)
         {
-            return await Task.Run(() => JsonUtility.ToJson(content), cancellationToken);
-        }
-
-        internal static async Task<Frame> ReadAsync(Stream stream, CancellationToken cancellationToken)
-        {
-            var lengthData = new byte[FrameLengthPrefix];
-            if (await ReadExactlyAsync(stream, lengthData, true, cancellationToken) == false)
+            var data = await ReadAsync(stream, true, cancellationToken);
+            if (data == null)
                 return null;
 
-            var frameLength = BinaryPrimitives.ReadInt32BigEndian(lengthData);
-            if ((frameLength < FrameHeaderLength) || (frameLength > FrameHeaderLength + MaximumContentLength))
-                throw new FormatException($"Invalid anonymous frame length: {frameLength}.");
-
-            var frameData = new byte[frameLength];
-            await ReadExactlyAsync(stream, frameData, false, cancellationToken);
-
-            var offset = 0;
-            var magic = BinaryPrimitives.ReadUInt32BigEndian(frameData.AsSpan(offset, sizeof(uint)));
-            offset += sizeof(uint);
-            if (magic != ProtocolMagic)
-                throw new FormatException("Invalid anonymous protocol magic.");
-
-            var version = BinaryPrimitives.ReadUInt16BigEndian(frameData.AsSpan(offset, sizeof(ushort)));
-            offset += sizeof(ushort);
-            if (version != ProtocolVersion)
-                throw new FormatException($"Unsupported anonymous protocol version: {version}.");
-
-            var type = (FrameTypeEnum)frameData[offset];
-            ++offset;
-            if (Enum.IsDefined(typeof(FrameTypeEnum), type) == false)
-                throw new FormatException($"Invalid anonymous frame type: {type}.");
-
-            var requestId = BinaryPrimitives.ReadInt64BigEndian(frameData.AsSpan(offset, sizeof(long)));
-            offset += sizeof(long);
-            var operation = (OperationEnum)BinaryPrimitives.ReadUInt16BigEndian(frameData.AsSpan(offset, sizeof(ushort)));
-            offset += sizeof(ushort);
-            var resultCode = (ResultCodeEnum)frameData[offset];
-            ++offset;
-
-            string content;
-            try
-            {
-                content = offset == frameData.Length ? string.Empty : Utf8.GetString(frameData, offset, frameData.Length - offset);
-            }
-            catch (DecoderFallbackException exception)
-            {
-                throw new FormatException("Invalid anonymous frame encoding.", exception);
-            }
-
-            return new Frame(type, requestId, operation, resultCode, content);
+            return ((OperationEnum)data[0], data[1..]);
         }
 
-        internal static async Task WriteAsync(Stream stream, Frame frame, CancellationToken cancellationToken)
+        internal static async Task<AnonymousServerResponse> ReadResponseAsync(Stream stream, CancellationToken cancellationToken)
         {
-            var contentData = Utf8.GetBytes(frame.Content);
-            if (contentData.Length > MaximumContentLength)
-                throw new FormatException($"Anonymous frame content is too large: {contentData.Length}.");
+            var data = await ReadAsync(stream, false, cancellationToken);
+            return new AnonymousServerResponse((ResultCodeEnum)data[0], data[1..]);
+        }
 
-            var frameLength = FrameHeaderLength + contentData.Length;
-            var data = new byte[FrameLengthPrefix + frameLength];
-            var offset = 0;
-            BinaryPrimitives.WriteInt32BigEndian(data.AsSpan(offset, sizeof(int)), frameLength);
-            offset += sizeof(int);
-            BinaryPrimitives.WriteUInt32BigEndian(data.AsSpan(offset, sizeof(uint)), ProtocolMagic);
-            offset += sizeof(uint);
-            BinaryPrimitives.WriteUInt16BigEndian(data.AsSpan(offset, sizeof(ushort)), ProtocolVersion);
-            offset += sizeof(ushort);
-            data[offset] = (byte)frame.Type;
-            ++offset;
-            BinaryPrimitives.WriteInt64BigEndian(data.AsSpan(offset, sizeof(long)), frame.RequestId);
-            offset += sizeof(long);
-            BinaryPrimitives.WriteUInt16BigEndian(data.AsSpan(offset, sizeof(ushort)), (ushort)frame.Operation);
-            offset += sizeof(ushort);
-            data[offset] = (byte)frame.ResultCode;
-            ++offset;
-            contentData.CopyTo(data, offset);
+        internal static byte[] Serialize(object content)
+        {
+            return content == null ? Array.Empty<byte>() : MyNetSerializer.Serialize(content);
+        }
 
-            await stream.WriteAsync(data, 0, data.Length, cancellationToken);
+        internal static Task WriteRequestAsync(Stream stream, OperationEnum operation, byte[] content, CancellationToken cancellationToken)
+        {
+            return WriteAsync(stream, (byte)operation, content, cancellationToken);
+        }
+
+        internal static Task WriteResponseAsync(Stream stream, AnonymousServerResponse response, CancellationToken cancellationToken)
+        {
+            return WriteAsync(stream, (byte)response.ResultCode, response.Content, cancellationToken);
+        }
+
+        private static async Task<byte[]> ReadAsync(Stream stream, bool allowEmpty, CancellationToken cancellationToken)
+        {
+            var lengthData = new byte[LengthSize];
+            if (await ReadExactlyAsync(stream, lengthData, allowEmpty, cancellationToken) == false)
+                return null;
+
+            var data = new byte[BinaryPrimitives.ReadInt32BigEndian(lengthData)];
+            await ReadExactlyAsync(stream, data, false, cancellationToken);
+            return data;
         }
 
         private static async Task<bool> ReadExactlyAsync(Stream stream, byte[] data, bool allowEmpty, CancellationToken cancellationToken)
@@ -170,13 +91,22 @@ namespace oojjrs.oplat.anonymous
                     if (allowEmpty && offset == 0)
                         return false;
 
-                    throw new EndOfStreamException("Anonymous connection closed during a frame.");
+                    throw new EndOfStreamException();
                 }
 
                 offset += readLength;
             }
 
             return true;
+        }
+
+        private static Task WriteAsync(Stream stream, byte header, byte[] content, CancellationToken cancellationToken)
+        {
+            var data = new byte[LengthSize + 1 + content.Length];
+            BinaryPrimitives.WriteInt32BigEndian(data, data.Length - LengthSize);
+            data[LengthSize] = header;
+            content.CopyTo(data, LengthSize + 1);
+            return stream.WriteAsync(data, 0, data.Length, cancellationToken);
         }
     }
 }

@@ -6,12 +6,11 @@ namespace oojjrs.oplat.anonymous
 {
     internal static class AnonymousServerRoom
     {
-        [Serializable]
-        internal record FieldData
+        public record FieldData
         {
-            public string Key;
-            public string Value;
-            public MyNetInterface.Field.VisibilityEnum Visibility;
+            public string Key { get; set; }
+            public string Value { get; set; }
+            public MyNetInterface.Field.VisibilityEnum Visibility { get; set; }
 
             internal static FieldData[] FromNetFields(IEnumerable<MyNetInterface.Field> fields)
             {
@@ -68,13 +67,12 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
-        [Serializable]
-        internal record PlayerData
+        public record PlayerData
         {
-            public FieldData[] Fields;
-            public string Id;
-            public bool IsHost;
-            public string Nickname;
+            public FieldData[] Fields { get; set; }
+            public string Id { get; set; }
+            public bool IsHost { get; set; }
+            public string Nickname { get; set; }
 
             internal MyNetPlayerInterface ToNetPlayer()
             {
@@ -85,19 +83,18 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
-        [Serializable]
-        internal record RoomData
+        public record RoomData
         {
-            public string Code;
-            public FieldData[] Fields;
-            public bool HasPassword;
-            public string HostId;
-            public string Id;
-            public bool IsLocked;
-            public bool IsPrivate;
-            public int MaxPlayers;
-            public PlayerData[] Players;
-            public string Title;
+            public string Code { get; set; }
+            public FieldData[] Fields { get; set; }
+            public bool HasPassword { get; set; }
+            public string HostId { get; set; }
+            public string Id { get; set; }
+            public bool IsLocked { get; set; }
+            public bool IsPrivate { get; set; }
+            public int MaxPlayers { get; set; }
+            public PlayerData[] Players { get; set; }
+            public string Title { get; set; }
 
             internal RoomData GetMemberResponseArgument(string account)
             {

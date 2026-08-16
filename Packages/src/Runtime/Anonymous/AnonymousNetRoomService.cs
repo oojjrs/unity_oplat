@@ -33,7 +33,7 @@ namespace oojjrs.oplat.anonymous
                         Title = config.Title,
                     }, cancellationToken);
                     response.EnsureSuccess();
-                    room = (await response.FromJsonAsync<AnonymousServerRoom.RoomData>(cancellationToken)).ToNetRoom();
+                    room = response.GetContent<AnonymousServerRoom.RoomData>().ToNetRoom();
                 }
                 catch (Exception exception)
                 {
@@ -141,7 +141,7 @@ namespace oojjrs.oplat.anonymous
                             break;
                         default:
                             response.EnsureSuccess();
-                            room = (await response.FromJsonAsync<AnonymousServerRoom.RoomData>(cancellationToken)).ToNetRoom();
+                            room = response.GetContent<AnonymousServerRoom.RoomData>().ToNetRoom();
                             break;
                     }
                 }
@@ -195,7 +195,7 @@ namespace oojjrs.oplat.anonymous
                             break;
                         default:
                             response.EnsureSuccess();
-                            room = (await response.FromJsonAsync<AnonymousServerRoom.RoomData>(cancellationToken)).ToNetRoom();
+                            room = response.GetContent<AnonymousServerRoom.RoomData>().ToNetRoom();
                             break;
                     }
                 }
