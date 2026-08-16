@@ -48,7 +48,7 @@ namespace oojjrs.oplat.anonymous.controllers
             }
 
             var roomId = requestArgument.RoomId.Trim();
-            var secret = roomState.Rooms.Find(value => string.Equals(value.Room.Id, roomId, StringComparison.Ordinal));
+            var secret = roomState.Rooms.Find(value => value.Room.Id == roomId);
             if (secret == null)
             {
                 response.StatusCode = (int)HttpStatusCode.NotFound;
@@ -56,7 +56,7 @@ namespace oojjrs.oplat.anonymous.controllers
             }
 
             var room = secret.Room;
-            if (string.Equals(session.Account, room.HostId, StringComparison.Ordinal) == false)
+            if (session.Account != room.HostId)
             {
                 response.StatusCode = (int)HttpStatusCode.Forbidden;
                 return;
@@ -65,7 +65,7 @@ namespace oojjrs.oplat.anonymous.controllers
             var updatedFields = requestArgument.RoomFields ?? Array.Empty<AnonymousServerCreateRoom.FieldData>();
             var roomFields = room.Fields ?? Array.Empty<AnonymousServerCreateRoom.FieldData>();
             if (updatedFields.Length > 0)
-                roomFields = roomFields.Where(field => updatedFields.Any(updatedField => string.Equals(updatedField.Key, field.Key, StringComparison.Ordinal)) == false).Concat(updatedFields).ToArray();
+                roomFields = roomFields.Where(field => updatedFields.Any(updatedField => updatedField.Key == field.Key) == false).Concat(updatedFields).ToArray();
 
             room.IsPrivate = requestArgument.IsPrivate;
             room.Fields = roomFields;

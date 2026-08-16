@@ -107,7 +107,7 @@ namespace oojjrs.oplat.anonymous
                     var content = await response.Content.ReadAsStringAsync();
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    return string.Equals(content, AnonymousServer.HealthResponse, StringComparison.Ordinal);
+                    return content == AnonymousServer.HealthResponse;
                 }
             }
             catch (HttpRequestException)

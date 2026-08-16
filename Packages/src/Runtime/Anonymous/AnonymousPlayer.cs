@@ -23,7 +23,7 @@
         {
             foreach (var field in Fields)
             {
-                if (string.Equals(field.key, key, System.StringComparison.Ordinal))
+                if (field.key == key)
                     return field.value;
             }
 

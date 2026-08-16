@@ -31,7 +31,7 @@ namespace oojjrs.oplat.anonymous
 
             foreach (var player in _players)
             {
-                if (string.Equals(player.Id, _hostId, System.StringComparison.Ordinal))
+                if (player.Id == _hostId)
                 {
                     _host = player;
                     break;
@@ -59,7 +59,7 @@ namespace oojjrs.oplat.anonymous
         {
             foreach (var field in _fields)
             {
-                if (string.Equals(field.key, key, System.StringComparison.Ordinal))
+                if (field.key == key)
                     return field.value;
             }
 

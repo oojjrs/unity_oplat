@@ -54,7 +54,7 @@ namespace oojjrs.oplat.anonymous.controllers
             var code = requestArgument.Code?.Trim();
             AnonymousServerRoom.RoomSecret secret;
             if (string.IsNullOrEmpty(roomId) == false)
-                secret = roomState.Rooms.Find(value => string.Equals(value.Room.Id, roomId, StringComparison.Ordinal));
+                secret = roomState.Rooms.Find(value => value.Room.Id == roomId);
             else
                 secret = roomState.Rooms.Find(value => string.Equals(value.Room.Code, code, StringComparison.OrdinalIgnoreCase));
 
@@ -66,9 +66,9 @@ namespace oojjrs.oplat.anonymous.controllers
 
             var room = secret.Room;
             var players = room.Players ?? Array.Empty<AnonymousServerCreateRoom.PlayerData>();
-            if (players.Any(player => string.Equals(player.Id, session.Account, StringComparison.Ordinal)) == false)
+            if (players.Any(player => player.Id == session.Account) == false)
             {
-                if (room.IsLocked || (string.IsNullOrEmpty(secret.Password) == false && string.Equals(secret.Password, requestArgument.Password, StringComparison.Ordinal) == false))
+                if (room.IsLocked || (string.IsNullOrEmpty(secret.Password) == false && secret.Password != requestArgument.Password))
                 {
                     response.StatusCode = (int)HttpStatusCode.Forbidden;
                     return;

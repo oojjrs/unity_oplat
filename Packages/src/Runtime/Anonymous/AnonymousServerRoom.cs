@@ -27,13 +27,13 @@ namespace oojjrs.oplat.anonymous
 
         internal static AnonymousServerCreateRoom.ResponseArgument GetMemberResponseArgument(AnonymousServerCreateRoom.ResponseArgument room, string account)
         {
-            var isHost = string.Equals(room.HostId, account, StringComparison.Ordinal);
+            var isHost = room.HostId == account;
             return room with
             {
                 Fields = (room.Fields ?? Array.Empty<AnonymousServerCreateRoom.FieldData>()).Where(field => (field.Visibility != MyNetInterface.Field.VisibilityEnum.Private) || isHost).ToArray(),
                 Players = (room.Players ?? Array.Empty<AnonymousServerCreateRoom.PlayerData>()).Select(player => player with
                 {
-                    Fields = (player.Fields ?? Array.Empty<AnonymousServerCreateRoom.FieldData>()).Where(field => (field.Visibility != MyNetInterface.Field.VisibilityEnum.Private) || string.Equals(player.Id, account, StringComparison.Ordinal)).ToArray(),
+                    Fields = (player.Fields ?? Array.Empty<AnonymousServerCreateRoom.FieldData>()).Where(field => (field.Visibility != MyNetInterface.Field.VisibilityEnum.Private) || player.Id == account).ToArray(),
                 }).ToArray(),
             };
         }
