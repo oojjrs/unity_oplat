@@ -6,7 +6,7 @@ namespace oojjrs.oplat.anonymous
 {
     internal class AnonymousPlatform : MonoBehaviour, MyPlatform.PlatformInterface
     {
-        private readonly AnonymousNet _net = new();
+        private readonly AnonymousNet Net = new();
 
         private string _account;
         private bool _isInitialized;
@@ -16,13 +16,13 @@ namespace oojjrs.oplat.anonymous
         string MyPlatformServiceInterface.Account => _account ?? GetAccount(GetNickname());
         bool MyPlatformServiceInterface.IsAlive => (this != null) && _isInitialized;
         bool MyPlatformServiceInterface.IsRestartRequired => false;
-        MyNetInterface MyPlatformServiceInterface.Net => _net;
+        MyNetInterface MyPlatformServiceInterface.Net => Net;
         string MyPlatformServiceInterface.Nickname => _nickname ?? GetNickname();
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
 
         private void OnDestroy()
         {
-            _net.Shutdown();
+            Net.Shutdown();
         }
 
         async Task MyPlatform.PlatformInterface.RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken)
@@ -49,7 +49,7 @@ namespace oojjrs.oplat.anonymous
 
             _profileSprite = profileSpriteRequest.asset as Sprite;
 
-            await _net.AuthenticateAsync(_account, _nickname, cancellationToken);
+            await Net.AuthenticateAsync(_account, _nickname, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
             _isInitialized = true;
