@@ -32,7 +32,9 @@
             public VisibilityEnum visibility;
         }
 
+        MyNetHostServiceInterface Host { get; }
         MyNetLobbyServiceInterface Lobby { get; }
+        MyNetMemberServiceInterface Member { get; }
         MyNetPlayerServiceInterface Player { get; }
         MyNetRoomServiceInterface Room { get; }
     }

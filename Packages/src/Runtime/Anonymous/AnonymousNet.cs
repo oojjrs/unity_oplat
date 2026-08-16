@@ -10,9 +10,11 @@ namespace oojjrs.oplat.anonymous
         private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(1);
 
         private readonly AnonymousClient Client;
+        internal readonly AnonymousNetHostService HostService;
         private readonly CancellationTokenSource LifetimeCancellationSource = new();
         private readonly CancellationToken LifetimeCancellationToken;
         private readonly AnonymousNetLobbyService LobbyService;
+        internal readonly AnonymousNetMemberService MemberService;
         private readonly AnonymousNetPlayerService PlayerService;
         private readonly AnonymousNetRoomService RoomService;
         private readonly AnonymousServer Server = new();
@@ -20,18 +22,26 @@ namespace oojjrs.oplat.anonymous
 
         private bool _isShutdown;
 
+        MyNetHostServiceInterface MyNetInterface.Host => HostService;
+        MyNetLobbyServiceInterface MyNetInterface.Lobby => LobbyService;
+        MyNetMemberServiceInterface MyNetInterface.Member => MemberService;
+        MyNetPlayerServiceInterface MyNetInterface.Player => PlayerService;
+        MyNetRoomServiceInterface MyNetInterface.Room => RoomService;
+
+        internal MyNetHostResultInterface HostResult { get; set; }
+        internal MyNetMemberResultInterface MemberResult { get; set; }
+
         internal AnonymousNet()
         {
+            HostService = new(this);
+            // 순서 존나 맘에 안 드네
             LifetimeCancellationToken = LifetimeCancellationSource.Token;
             Client = new AnonymousClient(LifetimeCancellationToken);
             LobbyService = new AnonymousNetLobbyService(this);
+            MemberService = new(this);
             PlayerService = new AnonymousNetPlayerService(this);
             RoomService = new AnonymousNetRoomService(this);
         }
-
-        MyNetLobbyServiceInterface MyNetInterface.Lobby => LobbyService;
-        MyNetPlayerServiceInterface MyNetInterface.Player => PlayerService;
-        MyNetRoomServiceInterface MyNetInterface.Room => RoomService;
 
         internal async Task AuthenticateAsync(string account, string nickname, CancellationToken callerCancellationToken)
         {
