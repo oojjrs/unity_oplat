@@ -23,11 +23,6 @@ namespace oojjrs.oplat.anonymous
             return new AnonymousServerResponse(resultCode, AnonymousTransport.Serialize(content));
         }
 
-        internal T GetContent<T>()
-        {
-            return AnonymousTransport.Deserialize<T>(Content);
-        }
-
         internal void EnsureSuccess()
         {
             if (ResultCode != AnonymousTransport.ResultCodeEnum.Success)
