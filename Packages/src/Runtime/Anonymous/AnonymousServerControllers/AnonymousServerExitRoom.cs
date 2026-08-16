@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous.controllers
 {
@@ -11,9 +12,9 @@ namespace oojjrs.oplat.anonymous.controllers
             public string RoomId { get; set; }
         }
 
-        internal static AnonymousServerResponse Run(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
+        internal static async Task<AnonymousServerResponse> RunAsync(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
         {
-            var requestArgument = AnonymousTransport.Deserialize<RequestArgument>(content);
+            var requestArgument = await AnonymousTransport.DeserializeAsync<RequestArgument>(content);
             if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.PlayerId) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
                 throw new FormatException("Invalid anonymous room exit request.");
 

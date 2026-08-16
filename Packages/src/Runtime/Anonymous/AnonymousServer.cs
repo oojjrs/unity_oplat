@@ -22,30 +22,30 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
-        private AnonymousServerResponse CreateResponse(AnonymousTransport.OperationEnum operation, byte[] content, ref AnonymousServerSession session)
+        private async Task<(AnonymousServerResponse Response, AnonymousServerSession Session)> CreateResponseAsync(AnonymousTransport.OperationEnum operation, byte[] content, AnonymousServerSession session)
         {
             if (operation == AnonymousTransport.OperationEnum.Authenticate)
             {
                 if (session != null)
-                    return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Conflict);
+                    return (AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Conflict), session);
 
-                session = AnonymousServerAuthenticate.Run(content);
-                return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Success);
+                return (AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Success), await AnonymousServerAuthenticate.RunAsync(content));
             }
 
             if (session == null)
-                return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Unauthenticated);
+                return (AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Unauthenticated), session);
 
-            return operation switch
+            var response = operation switch
             {
-                AnonymousTransport.OperationEnum.CreateRoom => AnonymousServerCreateRoom.Run(content, RoomState, session),
-                AnonymousTransport.OperationEnum.ExitRoom => AnonymousServerExitRoom.Run(content, RoomState, session),
-                AnonymousTransport.OperationEnum.GetRooms => AnonymousServerGetRooms.Run(RoomState),
-                AnonymousTransport.OperationEnum.JoinRoom => AnonymousServerJoinRoom.Run(content, RoomState, session),
-                AnonymousTransport.OperationEnum.UpdatePlayer => AnonymousServerUpdatePlayer.Run(content, RoomState, session),
-                AnonymousTransport.OperationEnum.UpdateRoom => AnonymousServerUpdateRoom.Run(content, RoomState, session),
+                AnonymousTransport.OperationEnum.CreateRoom => await AnonymousServerCreateRoom.RunAsync(content, RoomState, session),
+                AnonymousTransport.OperationEnum.ExitRoom => await AnonymousServerExitRoom.RunAsync(content, RoomState, session),
+                AnonymousTransport.OperationEnum.GetRooms => await AnonymousServerGetRooms.RunAsync(RoomState),
+                AnonymousTransport.OperationEnum.JoinRoom => await AnonymousServerJoinRoom.RunAsync(content, RoomState, session),
+                AnonymousTransport.OperationEnum.UpdatePlayer => await AnonymousServerUpdatePlayer.RunAsync(content, RoomState, session),
+                AnonymousTransport.OperationEnum.UpdateRoom => await AnonymousServerUpdateRoom.RunAsync(content, RoomState, session),
                 _ => AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.UnsupportedOperation),
             };
+            return (response, session);
         }
 
         private async Task RunConnectionAsync(TcpClient client)
@@ -60,8 +60,9 @@ namespace oojjrs.oplat.anonymous
                     if (request == null)
                         return;
 
-                    var response = CreateResponse(request.Value.Operation, request.Value.Content, ref session);
-                    await AnonymousTransport.WriteResponseAsync(stream, response, LifetimeCancellationSource.Token);
+                    var response = await CreateResponseAsync(request.Value.Operation, request.Value.Content, session);
+                    session = response.Session;
+                    await AnonymousTransport.WriteResponseAsync(stream, response.Response, LifetimeCancellationSource.Token);
                 }
             }
         }

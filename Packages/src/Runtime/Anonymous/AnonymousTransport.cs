@@ -33,10 +33,13 @@ namespace oojjrs.oplat.anonymous
 
         private const int LengthSize = sizeof(int);
 
-        internal static T Deserialize<T>(byte[] content)
+        internal static Task<T> DeserializeAsync<T>(byte[] content)
         {
-            using (var stream = new MemoryStream(content))
-                return (T)MyNetDeserializer.Deserialize(stream);
+            return Task.Run(() =>
+            {
+                using (var stream = new MemoryStream(content))
+                    return (T)MyNetDeserializer.Deserialize(stream);
+            });
         }
 
         internal static async Task<(OperationEnum Operation, byte[] Content)?> ReadRequestAsync(Stream stream, CancellationToken cancellationToken)
@@ -54,9 +57,9 @@ namespace oojjrs.oplat.anonymous
             return new AnonymousServerResponse((ResultCodeEnum)data[0], data[1..]);
         }
 
-        internal static byte[] Serialize(object content)
+        internal static Task<byte[]> SerializeAsync(object content)
         {
-            return content == null ? Array.Empty<byte>() : MyNetSerializer.Serialize(content);
+            return Task.Run(() => content == null ? Array.Empty<byte>() : MyNetSerializer.Serialize(content));
         }
 
         internal static Task WriteRequestAsync(Stream stream, OperationEnum operation, byte[] content, CancellationToken cancellationToken)

@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous.controllers
 {
@@ -9,9 +10,9 @@ namespace oojjrs.oplat.anonymous.controllers
             public AnonymousServerRoom.RoomData[] Rooms { get; set; }
         }
 
-        internal static AnonymousServerResponse Run(AnonymousServerRoom.State roomState)
+        internal static async Task<AnonymousServerResponse> RunAsync(AnonymousServerRoom.State roomState)
         {
-            return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Success, new ResponseArgument()
+            return await AnonymousServerResponse.CreateAsync(AnonymousTransport.ResultCodeEnum.Success, new ResponseArgument()
             {
                 Rooms = roomState.Rooms.Where(secret => secret.Room.IsPrivate == false).Select(secret => secret.Room with
                 {

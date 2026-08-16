@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous.controllers
 {
@@ -16,14 +17,15 @@ namespace oojjrs.oplat.anonymous.controllers
             public string Title { get; set; }
         }
 
-        internal static AnonymousServerResponse Run(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
+        internal static async Task<AnonymousServerResponse> RunAsync(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
         {
-            var requestArgument = AnonymousTransport.Deserialize<RequestArgument>(content);
+            var requestArgument = await AnonymousTransport.DeserializeAsync<RequestArgument>(content);
             if ((requestArgument == null) || (requestArgument.MaxPlayers < 1))
                 throw new FormatException("Invalid anonymous room request.");
 
             if (requestArgument.PlayerFields != null)
                 AnonymousServerRoom.FieldData.Validate(requestArgument.PlayerFields);
+
             if (requestArgument.RoomFields != null)
                 AnonymousServerRoom.FieldData.Validate(requestArgument.RoomFields);
 
@@ -39,19 +41,19 @@ namespace oojjrs.oplat.anonymous.controllers
                 MaxPlayers = requestArgument.MaxPlayers,
                 Players = new[]
                 {
-                        new AnonymousServerRoom.PlayerData()
-                        {
-                            Fields = requestArgument.PlayerFields ?? Array.Empty<AnonymousServerRoom.FieldData>(),
-                            Id = session.Account,
-                            IsHost = true,
-                            Nickname = requestArgument.PlayerNickname,
-                        },
+                    new AnonymousServerRoom.PlayerData()
+                    {
+                        Fields = requestArgument.PlayerFields ?? Array.Empty<AnonymousServerRoom.FieldData>(),
+                        Id = session.Account,
+                        IsHost = true,
+                        Nickname = requestArgument.PlayerNickname,
                     },
+                },
                 Title = requestArgument.Title,
             };
 
             roomState.Rooms.Add(new AnonymousServerRoom.RoomSecret(requestArgument.Password, responseArgument));
-            return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Success, responseArgument);
+            return await AnonymousServerResponse.CreateAsync(AnonymousTransport.ResultCodeEnum.Success, responseArgument);
 
             static string CreateRoomCode(AnonymousServerRoom.State state)
             {

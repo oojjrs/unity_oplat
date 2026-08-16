@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous.controllers
 {
@@ -11,9 +12,9 @@ namespace oojjrs.oplat.anonymous.controllers
             public string RoomId { get; set; }
         }
 
-        internal static AnonymousServerResponse Run(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
+        internal static async Task<AnonymousServerResponse> RunAsync(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
         {
-            var requestArgument = AnonymousTransport.Deserialize<RequestArgument>(content);
+            var requestArgument = await AnonymousTransport.DeserializeAsync<RequestArgument>(content);
             if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
                 throw new FormatException("Invalid anonymous room update request.");
 
@@ -32,7 +33,7 @@ namespace oojjrs.oplat.anonymous.controllers
             room.Fields = AnonymousServerRoom.FieldData.Merge(room.Fields, requestArgument.RoomFields);
             room.IsPrivate = requestArgument.IsPrivate;
 
-            return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Success, room.GetMemberResponseArgument(session.Account));
+            return await AnonymousServerResponse.CreateAsync(AnonymousTransport.ResultCodeEnum.Success, room.GetMemberResponseArgument(session.Account));
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous.controllers
 {
@@ -10,9 +11,9 @@ namespace oojjrs.oplat.anonymous.controllers
             public string Nickname { get; set; }
         }
 
-        internal static AnonymousServerSession Run(byte[] content)
+        internal static async Task<AnonymousServerSession> RunAsync(byte[] content)
         {
-            var requestArgument = AnonymousTransport.Deserialize<RequestArgument>(content);
+            var requestArgument = await AnonymousTransport.DeserializeAsync<RequestArgument>(content);
             if ((requestArgument == null) || string.IsNullOrEmpty(requestArgument.Account) || string.IsNullOrEmpty(requestArgument.Nickname))
                 throw new FormatException("Invalid anonymous authentication request.");
 

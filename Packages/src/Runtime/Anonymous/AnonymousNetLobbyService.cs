@@ -39,7 +39,7 @@ namespace oojjrs.oplat.anonymous
                     var response = await Net.SendAsync(AnonymousTransport.OperationEnum.GetRooms, null, cancellationToken);
                     response.EnsureSuccess();
 
-                    var roomsData = AnonymousTransport.Deserialize<AnonymousServerGetRooms.ResponseArgument>(response.Content);
+                    var roomsData = await AnonymousTransport.DeserializeAsync<AnonymousServerGetRooms.ResponseArgument>(response.Content);
                     if ((roomsData == null) || (roomsData.Rooms == null))
                         throw new FormatException("Invalid anonymous rooms response.");
 

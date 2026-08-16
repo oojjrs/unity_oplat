@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous
 {
@@ -18,9 +19,9 @@ namespace oojjrs.oplat.anonymous
             return new AnonymousServerResponse(resultCode, Array.Empty<byte>());
         }
 
-        internal static AnonymousServerResponse Create(AnonymousTransport.ResultCodeEnum resultCode, object content)
+        internal static async Task<AnonymousServerResponse> CreateAsync(AnonymousTransport.ResultCodeEnum resultCode, object content)
         {
-            return new AnonymousServerResponse(resultCode, AnonymousTransport.Serialize(content));
+            return new AnonymousServerResponse(resultCode, await AnonymousTransport.SerializeAsync(content));
         }
 
         internal void EnsureSuccess()

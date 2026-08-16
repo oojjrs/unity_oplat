@@ -61,9 +61,9 @@ namespace oojjrs.oplat.anonymous
             return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, LifetimeCancellationToken);
         }
 
-        internal Task<AnonymousServerResponse> SendAsync(AnonymousTransport.OperationEnum operation, object argument, CancellationToken cancellationToken)
+        internal async Task<AnonymousServerResponse> SendAsync(AnonymousTransport.OperationEnum operation, object argument, CancellationToken cancellationToken)
         {
-            return Client.SendAsync(operation, AnonymousTransport.Serialize(argument), cancellationToken);
+            return await Client.SendAsync(operation, await AnonymousTransport.SerializeAsync(argument), cancellationToken);
         }
 
         internal void Shutdown()
