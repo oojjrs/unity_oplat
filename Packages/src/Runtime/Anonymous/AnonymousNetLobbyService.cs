@@ -2,17 +2,16 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using UnityEngine;
 
 namespace oojjrs.oplat.anonymous
 {
     internal class AnonymousNetLobbyService : MyNetLobbyServiceInterface
     {
-        private readonly AnonymousNet _net;
+        private readonly AnonymousNet Net;
 
         internal AnonymousNetLobbyService(AnonymousNet net)
         {
-            _net = net;
+            Net = net;
         }
 
         Task MyNetLobbyServiceInterface.RefreshAsync(MyNetLobbyServiceInterface.ResultInterface result)
@@ -31,25 +30,22 @@ namespace oojjrs.oplat.anonymous
 
         private async Task RefreshAsync(CancellationToken callerCancellationToken, MyNetLobbyServiceInterface.ResultInterface result)
         {
-            using (var cancellationSource = _net.CreateCancellationSource(callerCancellationToken))
+            using (var cancellationSource = Net.CreateCancellationSource(callerCancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
                 MyNetRoomInterface[] rooms;
                 try
                 {
-                    using (var response = await _net.GetAsync(AnonymousServer.ApiGetRooms, cancellationToken))
-                    {
-                        response.EnsureSuccessStatusCode();
+                    var response = await Net.SendAsync(AnonymousTransport.OperationEnum.GetRooms, null, cancellationToken);
+                    response.EnsureSuccess();
 
-                        var content = await response.Content.ReadAsStringAsync();
-                        var roomsData = JsonUtility.FromJson<AnonymousServerGetRooms.ResponseArgument>(content);
-                        if ((roomsData == null) || (roomsData.Rooms == null))
-                            throw new FormatException("Invalid anonymous rooms response.");
+                    var roomsData = await response.FromJsonAsync<AnonymousServerGetRooms.ResponseArgument>(cancellationToken);
+                    if ((roomsData == null) || (roomsData.Rooms == null))
+                        throw new FormatException("Invalid anonymous rooms response.");
 
-                        rooms = new MyNetRoomInterface[roomsData.Rooms.Length];
-                        for (var index = 0; index < roomsData.Rooms.Length; ++index)
-                            rooms[index] = AnonymousNetRoomService.ConvertRoom(roomsData.Rooms[index]);
-                    }
+                    rooms = new MyNetRoomInterface[roomsData.Rooms.Length];
+                    for (var index = 0; index < roomsData.Rooms.Length; ++index)
+                        rooms[index] = roomsData.Rooms[index].ToNetRoom();
                 }
                 catch (Exception exception)
                 {

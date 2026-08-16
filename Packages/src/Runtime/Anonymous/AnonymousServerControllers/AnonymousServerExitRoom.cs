@@ -1,6 +1,6 @@
 using System;
 using System.Linq;
-using System.Net;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous.controllers
@@ -14,48 +14,21 @@ namespace oojjrs.oplat.anonymous.controllers
             public string RoomId;
         }
 
-        internal static async Task RunAsync(HttpListenerRequest request, HttpListenerResponse response, AnonymousServerRoom.State roomState, AnonymousServerSession.State sessionState)
+        internal static async Task<AnonymousServerResponse> RunAsync(string content, AnonymousServerRoom.State roomState, AnonymousServerSession session, CancellationToken cancellationToken)
         {
-            if (request.HttpMethod != "POST")
-            {
-                response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
-                return;
-            }
-
-            if (sessionState.TryGetSession(request, out var session) == false)
-            {
-                response.StatusCode = (int)HttpStatusCode.Unauthorized;
-                return;
-            }
-
-            RequestArgument requestArgument;
-            try
-            {
-                requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(request, "Invalid anonymous room exit request.");
-                if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.PlayerId) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
-                    throw new FormatException("Invalid anonymous room exit request.");
-            }
-            catch (FormatException)
-            {
-                response.StatusCode = (int)HttpStatusCode.BadRequest;
-                return;
-            }
+            var requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(content, "Invalid anonymous room exit request.", cancellationToken);
+            if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.PlayerId) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
+                throw new FormatException("Invalid anonymous room exit request.");
 
             var roomIndex = roomState.Rooms.FindIndex(secret => secret.Room.Id == requestArgument.RoomId);
             if (roomIndex < 0)
-            {
-                response.StatusCode = (int)HttpStatusCode.NotFound;
-                return;
-            }
+                return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.NotFound);
 
             var room = roomState.Rooms[roomIndex].Room;
             if ((session.Account != requestArgument.PlayerId) && (session.Account != room.HostId))
-            {
-                response.StatusCode = (int)HttpStatusCode.Forbidden;
-                return;
-            }
+                return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Forbidden);
 
-            var players = room.Players ?? Array.Empty<AnonymousServerCreateRoom.PlayerData>();
+            var players = room.Players ?? Array.Empty<AnonymousServerRoom.PlayerData>();
             if (room.HostId == requestArgument.PlayerId)
             {
                 roomState.RoomCodes.Remove(room.Code);
@@ -66,7 +39,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 room.Players = players.Where(player => player.Id != requestArgument.PlayerId).ToArray();
             }
 
-            response.StatusCode = (int)HttpStatusCode.NoContent;
+            return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Success);
         }
     }
 }

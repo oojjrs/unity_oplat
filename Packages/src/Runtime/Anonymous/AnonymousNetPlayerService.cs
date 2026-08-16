@@ -1,22 +1,21 @@
 ﻿using oojjrs.oplat.anonymous.controllers;
 using System;
-using System.Net;
 using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous
 {
     internal class AnonymousNetPlayerService : MyNetPlayerServiceInterface
     {
-        private readonly AnonymousNet _net;
+        private readonly AnonymousNet Net;
 
         internal AnonymousNetPlayerService(AnonymousNet net)
         {
-            _net = net;
+            Net = net;
         }
 
         async Task MyNetPlayerServiceInterface.UpdateAsync(MyNetPlayerServiceInterface.UpdateConfigInterface config, MyNetPlayerServiceInterface.UpdateResultInterface result)
         {
-            using (var cancellationSource = _net.CreateCancellationSource(config.CancellationToken))
+            using (var cancellationSource = Net.CreateCancellationSource(config.CancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
                 var playerId = config.PlayerId;
@@ -36,25 +35,23 @@ namespace oojjrs.oplat.anonymous
                 MyNetInterface.CatchInterface.FailureEnum? failure = null;
                 try
                 {
-                    using (var response = await _net.PostJsonAsync(AnonymousServer.ApiUpdatePlayer, new AnonymousServerUpdatePlayer.RequestArgument()
+                    var response = await Net.SendAsync(AnonymousTransport.OperationEnum.UpdatePlayer, new AnonymousServerUpdatePlayer.RequestArgument()
                     {
-                        PlayerFields = AnonymousNetRoomService.ConvertFields(config.PlayerFields),
+                        PlayerFields = AnonymousServerRoom.FieldData.FromNetFields(config.PlayerFields),
                         PlayerId = playerId,
                         RoomId = roomId,
-                    }, cancellationToken))
+                    }, cancellationToken);
+                    switch (response.ResultCode)
                     {
-                        switch (response.StatusCode)
-                        {
-                            case HttpStatusCode.NotFound:
-                                failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
-                                break;
-                            case HttpStatusCode.Forbidden:
-                                failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
-                                break;
-                            default:
-                                response.EnsureSuccessStatusCode();
-                                break;
-                        }
+                        case AnonymousTransport.ResultCodeEnum.NotFound:
+                            failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
+                            break;
+                        case AnonymousTransport.ResultCodeEnum.Forbidden:
+                            failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
+                            break;
+                        default:
+                            response.EnsureSuccess();
+                            break;
                     }
                 }
                 catch (Exception exception)

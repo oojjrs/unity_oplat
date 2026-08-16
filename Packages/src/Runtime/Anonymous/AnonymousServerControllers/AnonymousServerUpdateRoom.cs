@@ -1,8 +1,6 @@
 using System;
-using System.Net;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
-using UnityEngine;
 
 namespace oojjrs.oplat.anonymous.controllers
 {
@@ -12,67 +10,32 @@ namespace oojjrs.oplat.anonymous.controllers
         internal record RequestArgument
         {
             public bool IsPrivate;
-            public AnonymousServerCreateRoom.FieldData[] RoomFields;
+            public AnonymousServerRoom.FieldData[] RoomFields;
             public string RoomId;
         }
 
-        internal static async Task RunAsync(HttpListenerRequest request, HttpListenerResponse response, AnonymousServerRoom.State roomState, AnonymousServerSession.State sessionState)
+        internal static async Task<AnonymousServerResponse> RunAsync(string content, AnonymousServerRoom.State roomState, AnonymousServerSession session, CancellationToken cancellationToken)
         {
-            if (request.HttpMethod != "POST")
-            {
-                response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
-                return;
-            }
+            var requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(content, "Invalid anonymous room update request.", cancellationToken);
+            if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
+                throw new FormatException("Invalid anonymous room update request.");
 
-            if (sessionState.TryGetSession(request, out var session) == false)
-            {
-                response.StatusCode = (int)HttpStatusCode.Unauthorized;
-                return;
-            }
-
-            RequestArgument requestArgument;
-            try
-            {
-                requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(request, "Invalid anonymous room update request.");
-                if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
-                    throw new FormatException("Invalid anonymous room update request.");
-
-                if (requestArgument.RoomFields != null)
-                    AnonymousServerCreateRoom.ValidateFields(requestArgument.RoomFields);
-            }
-            catch (FormatException)
-            {
-                response.StatusCode = (int)HttpStatusCode.BadRequest;
-                return;
-            }
+            if (requestArgument.RoomFields != null)
+                AnonymousServerRoom.FieldData.Validate(requestArgument.RoomFields);
 
             var roomId = requestArgument.RoomId.Trim();
             var secret = roomState.Rooms.Find(value => value.Room.Id == roomId);
             if (secret == null)
-            {
-                response.StatusCode = (int)HttpStatusCode.NotFound;
-                return;
-            }
+                return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.NotFound);
 
             var room = secret.Room;
             if (session.Account != room.HostId)
-            {
-                response.StatusCode = (int)HttpStatusCode.Forbidden;
-                return;
-            }
+                return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Forbidden);
 
-            room.Fields = AnonymousServerRoom.MergeFields(room.Fields, requestArgument.RoomFields);
+            room.Fields = AnonymousServerRoom.FieldData.Merge(room.Fields, requestArgument.RoomFields);
             room.IsPrivate = requestArgument.IsPrivate;
 
-            var responseContent = JsonUtility.ToJson(AnonymousServerRoom.GetMemberResponseArgument(room, session.Account));
-            var responseData = Encoding.UTF8.GetBytes(responseContent);
-
-            response.ContentEncoding = Encoding.UTF8;
-            response.ContentLength64 = responseData.Length;
-            response.ContentType = "application/json; charset=utf-8";
-            response.StatusCode = (int)HttpStatusCode.OK;
-
-            await response.OutputStream.WriteAsync(responseData, 0, responseData.Length);
+            return await AnonymousServerResponse.CreateAsync(AnonymousTransport.ResultCodeEnum.Success, room.GetMemberResponseArgument(session.Account), cancellationToken);
         }
     }
 }

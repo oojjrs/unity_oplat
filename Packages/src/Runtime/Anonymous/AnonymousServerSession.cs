@@ -1,46 +1,14 @@
-using System;
-using System.Collections.Generic;
-using System.Net;
-using oojjrs.oplat.anonymous.controllers;
-
 namespace oojjrs.oplat.anonymous
 {
-    internal static class AnonymousServerSession
+    internal sealed class AnonymousServerSession
     {
-        internal sealed class Session
+        internal AnonymousServerSession(string account, string nickname)
         {
-            internal Session(string account, string nickname)
-            {
-                Account = account;
-                Nickname = nickname;
-            }
-
-            internal string Account { get; }
-            internal string Nickname { get; }
+            Account = account;
+            Nickname = nickname;
         }
 
-        internal sealed class State
-        {
-            private readonly Dictionary<string, Session> _sessions = new();
-
-            internal string Create(string account, string nickname)
-            {
-                var token = Guid.NewGuid().ToString("N");
-                _sessions.Add(token, new Session(account, nickname));
-                return token;
-            }
-
-            internal bool TryGetSession(HttpListenerRequest request, out Session session)
-            {
-                var token = request.Headers[AnonymousServerAuthenticate.SessionHeader];
-                if (string.IsNullOrEmpty(token))
-                {
-                    session = null;
-                    return false;
-                }
-
-                return _sessions.TryGetValue(token, out session);
-            }
-        }
+        internal string Account { get; }
+        internal string Nickname { get; }
     }
 }

@@ -1,7 +1,9 @@
 ﻿using oojjrs.oplat.anonymous.controllers;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -10,42 +12,33 @@ namespace oojjrs.oplat.anonymous
 {
     internal sealed class AnonymousServer
     {
-        private const string Address = "http://127.0.0.1:45831/";
-        internal const string ApiAuthenticate = "authenticate";
-        internal const string ApiCreateRoom = "create_room";
-        internal const string ApiExitRoom = "exit_room";
-        internal const string ApiGetRooms = "get_rooms";
-        internal const string ApiHealth = "health";
-        internal const string ApiJoinRoom = "join_room";
-        internal const string ApiUpdatePlayer = "update_player";
-        internal const string ApiUpdateRoom = "update_room";
-        internal const string HealthResponse = "oojjrs.oplat.anonymous/10";
-
-        private readonly HttpListener Listener = new();
+        private readonly HashSet<AnonymousServerConnection> Connections = new();
+        private readonly object ConnectionsLock = new();
+        private readonly CancellationTokenSource LifetimeCancellationSource = new();
+        private readonly CancellationToken LifetimeCancellationToken;
+        private readonly TcpListener Listener = new(IPAddress.Loopback, AnonymousTransport.Port);
+        private readonly SemaphoreSlim RequestSemaphore = new(1, 1);
         private readonly AnonymousServerRoom.State RoomState = new();
-        private readonly AnonymousServerSession.State SessionState = new();
         private readonly SemaphoreSlim StartSemaphore = new(1, 1);
         private readonly object StateLock = new();
 
         private bool _isOwner;
         private bool _isShutdown;
+        private bool _isStarted;
 
         internal AnonymousServer()
         {
-            Listener.Prefixes.Add(Address);
+            LifetimeCancellationToken = LifetimeCancellationSource.Token;
         }
 
-        internal static string GetUri(string relativePath)
+        internal static async Task<T> ReadJsonAsync<T>(string content, string invalidMessage, CancellationToken cancellationToken)
         {
-            return Address + relativePath;
-        }
+            if (string.IsNullOrEmpty(content))
+                throw new FormatException(invalidMessage);
 
-        internal static async Task<T> ReadJsonAsync<T>(HttpListenerRequest request, string invalidMessage)
-        {
-            var content = await ReadContentAsync(request);
             try
             {
-                return JsonUtility.FromJson<T>(content);
+                return await AnonymousTransport.FromJsonAsync<T>(content, cancellationToken);
             }
             catch (ArgumentException exception)
             {
@@ -53,102 +46,176 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
-        private static async Task<string> ReadContentAsync(HttpListenerRequest request)
-        {
-            if (request.HasEntityBody == false)
-                throw new FormatException("Anonymous request body is empty.");
-
-            try
-            {
-                using (var reader = new StreamReader(request.InputStream, request.ContentEncoding))
-                    return await reader.ReadToEndAsync();
-            }
-            catch (ArgumentException exception)
-            {
-                throw new FormatException("Invalid anonymous request encoding.", exception);
-            }
-        }
-
-        private async void ListenAsync()
+        private async Task AcceptAsync()
         {
             try
             {
-                while (Listener.IsListening)
+                while (LifetimeCancellationToken.IsCancellationRequested == false)
                 {
-                    var context = await Listener.GetContextAsync().ConfigureAwait(false);
-
+                    var client = await Listener.AcceptTcpClientAsync();
                     try
                     {
-                        await RespondAsync(context);
+                        client.NoDelay = true;
+                        var connection = new AnonymousServerConnection(client);
+                        lock (ConnectionsLock)
+                            Connections.Add(connection);
+
+                        _ = RunConnectionAsync(connection);
                     }
-                    catch (HttpListenerException) when (Listener.IsListening)
+                    catch (ObjectDisposedException)
                     {
+                        client.Close();
                     }
-                    catch (IOException) when (Listener.IsListening)
+                    catch (SocketException)
                     {
+                        client.Close();
                     }
-                    catch (ObjectDisposedException) when (Listener.IsListening)
+                    catch
                     {
-                    }
-                    catch (Exception exception) when (Listener.IsListening)
-                    {
-                        Debug.LogException(exception);
+                        client.Close();
+                        throw;
                     }
                 }
             }
-            catch (HttpListenerException) when (Listener.IsListening == false)
+            catch (ObjectDisposedException) when (LifetimeCancellationToken.IsCancellationRequested)
             {
             }
-            catch (IOException) when (Listener.IsListening == false)
+            catch (SocketException) when (LifetimeCancellationToken.IsCancellationRequested)
             {
             }
-            catch (ObjectDisposedException) when (Listener.IsListening == false)
+            catch (Exception exception)
             {
+                Debug.LogException(exception);
+                Shutdown();
             }
         }
 
-        private async Task RespondAsync(HttpListenerContext context)
+        private async Task<AnonymousServerResponse> CreateResponseAsync(AnonymousServerConnection connection, AnonymousTransport.Frame frame)
         {
-            var request = context.Request;
-            var response = context.Response;
-            response.StatusCode = (int)HttpStatusCode.InternalServerError;
+            if (frame.Operation == AnonymousTransport.OperationEnum.Authenticate)
+            {
+                if (connection.Session != null)
+                    return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Conflict);
+
+                connection.Session = await AnonymousServerAuthenticate.RunAsync(frame.Content, LifetimeCancellationToken);
+                return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Success);
+            }
+
+            var authenticatedSession = connection.Session;
+            if (authenticatedSession == null)
+                return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Unauthenticated);
+
+            return frame.Operation switch
+            {
+                AnonymousTransport.OperationEnum.CreateRoom => await AnonymousServerCreateRoom.RunAsync(frame.Content, RoomState, authenticatedSession, LifetimeCancellationToken),
+                AnonymousTransport.OperationEnum.ExitRoom => await AnonymousServerExitRoom.RunAsync(frame.Content, RoomState, authenticatedSession, LifetimeCancellationToken),
+                AnonymousTransport.OperationEnum.GetRooms => await AnonymousServerGetRooms.RunAsync(RoomState, LifetimeCancellationToken),
+                AnonymousTransport.OperationEnum.JoinRoom => await AnonymousServerJoinRoom.RunAsync(frame.Content, RoomState, authenticatedSession, LifetimeCancellationToken),
+                AnonymousTransport.OperationEnum.UpdatePlayer => await AnonymousServerUpdatePlayer.RunAsync(frame.Content, RoomState, authenticatedSession, LifetimeCancellationToken),
+                AnonymousTransport.OperationEnum.UpdateRoom => await AnonymousServerUpdateRoom.RunAsync(frame.Content, RoomState, authenticatedSession, LifetimeCancellationToken),
+                _ => AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.UnsupportedOperation),
+            };
+        }
+
+        private async Task RespondAsync(AnonymousServerConnection connection, AnonymousTransport.Frame frame)
+        {
+            AnonymousServerResponse response;
+            await RequestSemaphore.WaitAsync(LifetimeCancellationToken);
             try
             {
-                switch (request.Url.AbsolutePath[1..])
+                try
                 {
-                    case ApiAuthenticate:
-                        await AnonymousServerAuthenticate.RunAsync(request, response, SessionState);
-                        break;
-                    case ApiHealth:
-                        await AnonymousServerHealth.RunAsync(request, response);
-                        break;
-                    case ApiGetRooms:
-                        await AnonymousServerGetRooms.RunAsync(request, response, RoomState, SessionState);
-                        break;
-                    case ApiCreateRoom:
-                        await AnonymousServerCreateRoom.RunAsync(request, response, RoomState, SessionState);
-                        break;
-                    case ApiExitRoom:
-                        await AnonymousServerExitRoom.RunAsync(request, response, RoomState, SessionState);
-                        break;
-                    case ApiJoinRoom:
-                        await AnonymousServerJoinRoom.RunAsync(request, response, RoomState, SessionState);
-                        break;
-                    case ApiUpdatePlayer:
-                        await AnonymousServerUpdatePlayer.RunAsync(request, response, RoomState, SessionState);
-                        break;
-                    case ApiUpdateRoom:
-                        await AnonymousServerUpdateRoom.RunAsync(request, response, RoomState, SessionState);
-                        break;
-                    default:
-                        response.StatusCode = (int)HttpStatusCode.NotFound;
-                        break;
+                    response = await CreateResponseAsync(connection, frame);
+                }
+                catch (FormatException)
+                {
+                    response = AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.InvalidRequest);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(exception);
+                    response = AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.InternalError);
                 }
             }
             finally
             {
-                response.Close();
+                RequestSemaphore.Release();
             }
+
+            var responseFrame = new AnonymousTransport.Frame(AnonymousTransport.FrameTypeEnum.ControlResponse, frame.RequestId, frame.Operation, response.ResultCode, response.Content);
+            await connection.SendAsync(responseFrame, LifetimeCancellationToken);
+        }
+
+        private async Task RunConnectionAsync(AnonymousServerConnection connection)
+        {
+            try
+            {
+                while (LifetimeCancellationToken.IsCancellationRequested == false)
+                {
+                    var frame = await connection.ReadAsync(LifetimeCancellationToken);
+                    if (frame == null)
+                        return;
+
+                    if ((frame.Type != AnonymousTransport.FrameTypeEnum.ControlRequest) || (frame.RequestId < 1) || (frame.ResultCode != AnonymousTransport.ResultCodeEnum.None))
+                        throw new FormatException("Invalid anonymous control request.");
+
+                    await RespondAsync(connection, frame);
+                }
+            }
+            catch (EndOfStreamException)
+            {
+            }
+            catch (IOException)
+            {
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (SocketException)
+            {
+            }
+            catch (OperationCanceledException) when (LifetimeCancellationToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
+            finally
+            {
+                lock (ConnectionsLock)
+                    Connections.Remove(connection);
+
+                connection.Shutdown();
+            }
+        }
+
+        internal void Shutdown()
+        {
+            lock (StateLock)
+            {
+                if (_isShutdown)
+                    return;
+
+                _isShutdown = true;
+                LifetimeCancellationSource.Cancel();
+                if (_isOwner)
+                {
+                    Listener.Stop();
+                    _isOwner = false;
+                }
+            }
+
+            AnonymousServerConnection[] connections;
+            lock (ConnectionsLock)
+            {
+                connections = new AnonymousServerConnection[Connections.Count];
+                Connections.CopyTo(connections);
+                Connections.Clear();
+            }
+
+            foreach (var connection in connections)
+                connection.Shutdown();
         }
 
         internal async Task StartAsync(CancellationToken cancellationToken)
@@ -162,40 +229,27 @@ namespace oojjrs.oplat.anonymous
                     if (_isShutdown)
                         throw new ObjectDisposedException(nameof(AnonymousServer));
 
-                    if (_isOwner)
+                    if (_isStarted)
                         return;
 
-                    Listener.Start();
-                    _isOwner = true;
+                    try
+                    {
+                        Listener.Start();
+                    }
+                    catch (SocketException exception) when (exception.SocketErrorCode == SocketError.AddressAlreadyInUse)
+                    {
+                        _isStarted = true;
+                        return;
+                    }
 
-                    ListenAsync();
+                    _isOwner = true;
+                    _isStarted = true;
+                    _ = Task.Run(AcceptAsync);
                 }
             }
             finally
             {
                 StartSemaphore.Release();
-            }
-        }
-
-        internal void Shutdown()
-        {
-            lock (StateLock)
-            {
-                if (_isShutdown == false)
-                {
-                    _isShutdown = true;
-                    if (_isOwner)
-                    {
-                        try
-                        {
-                            Listener.Stop();
-                        }
-                        finally
-                        {
-                            _isOwner = false;
-                        }
-                    }
-                }
             }
         }
     }
