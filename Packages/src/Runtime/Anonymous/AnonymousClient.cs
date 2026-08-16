@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -7,12 +9,19 @@ namespace oojjrs.oplat.anonymous
 {
     internal sealed class AnonymousClient
     {
+        private readonly CancellationToken LifetimeCancellationToken;
+
         private TcpClient _client;
-        private NetworkStream _stream;
+        private AnonymousTransport.MessageQueue _messages;
+
+        internal AnonymousClient(CancellationToken lifetimeCancellationToken)
+        {
+            LifetimeCancellationToken = lifetimeCancellationToken;
+        }
 
         internal async Task ConnectAsync(CancellationToken cancellationToken)
         {
-            if (_stream != null)
+            if (_messages != null)
                 return;
 
             _client = new TcpClient(AddressFamily.InterNetwork);
@@ -21,25 +30,34 @@ namespace oojjrs.oplat.anonymous
 
             cancellationToken.ThrowIfCancellationRequested();
             _client.NoDelay = true;
-            _stream = _client.GetStream();
+            _messages = new AnonymousTransport.MessageQueue(_client.GetStream(), LifetimeCancellationToken);
         }
 
-        internal async Task<AnonymousServerResponse> SendAndReceiveAsync(AnonymousNet.OperationEnum operation, byte[] content, CancellationToken cancellationToken)
+        internal async Task<AnonymousServerResponse> ReceiveAsync(AnonymousNet.OperationEnum operation, CancellationToken cancellationToken)
         {
-            var request = new byte[1 + content.Length];
-            request[0] = (byte)operation;
-            content.CopyTo(request, 1);
-            await AnonymousTransport.WriteAsync(_stream, request, cancellationToken);
+            if (_messages == null)
+                throw new InvalidOperationException("Anonymous client is not connected.");
 
-            var response = await AnonymousTransport.ReadAsync(_stream, cancellationToken);
-            return new AnonymousServerResponse((AnonymousServerResponse.ResultCodeEnum)response[0], response[1..]);
+            var message = await _messages.ReceiveAsync(value => (value.Type == AnonymousTransport.Message.TypeEnum.OperationResult) && (value.Operation == operation), cancellationToken);
+            if (message == null)
+                throw new EndOfStreamException("Anonymous server disconnected.");
+
+            return new AnonymousServerResponse(message.ResultCode, message.Content);
+        }
+
+        internal void Send(AnonymousNet.OperationEnum operation, byte[] content)
+        {
+            if (_messages == null)
+                throw new InvalidOperationException("Anonymous client is not connected.");
+
+            _messages.Send(AnonymousTransport.Message.CreateOperation(operation, content));
         }
 
         internal void Shutdown()
         {
             _client?.Close();
             _client = null;
-            _stream = null;
+            _messages = null;
         }
     }
 }

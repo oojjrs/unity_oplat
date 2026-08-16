@@ -45,7 +45,7 @@ namespace oojjrs.oplat.anonymous
             HostService = new(this);
             // 순서 존나 맘에 안 드네
             LifetimeCancellationToken = LifetimeCancellationSource.Token;
-            Client = new AnonymousClient();
+            Client = new AnonymousClient(LifetimeCancellationToken);
             LobbyService = new AnonymousNetLobbyService(this);
             MemberService = new(this);
             PlayerService = new AnonymousNetPlayerService(this);
@@ -60,11 +60,12 @@ namespace oojjrs.oplat.anonymous
                 Server.Start(cancellationToken);
                 await Client.ConnectAsync(cancellationToken);
 
-                var response = await SendAndReceiveAsync(OperationEnum.Authenticate, new AnonymousServerAuthenticate.RequestArgument()
+                await SendAsync(OperationEnum.Authenticate, new AnonymousServerAuthenticate.RequestArgument()
                 {
                     Account = account,
                     Nickname = nickname,
                 }, cancellationToken);
+                var response = await ReceiveAsync(OperationEnum.Authenticate, cancellationToken);
                 response.EnsureSuccess();
             }
         }
@@ -81,7 +82,8 @@ namespace oojjrs.oplat.anonymous
             using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
-                var response = await SendAndReceiveAsync(OperationEnum.GetCurrentRoom, null, cancellationToken);
+                await SendAsync(OperationEnum.GetCurrentRoom, null, cancellationToken);
+                var response = await ReceiveAsync(OperationEnum.GetCurrentRoom, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (response.ResultCode == AnonymousServerResponse.ResultCodeEnum.NotFound)
                     return null;
@@ -96,10 +98,17 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
-        internal async Task<AnonymousServerResponse> SendAndReceiveAsync(OperationEnum operation, object argument, CancellationToken cancellationToken)
+        internal Task<AnonymousServerResponse> ReceiveAsync(OperationEnum operation, CancellationToken cancellationToken)
         {
+            return Client.ReceiveAsync(operation, cancellationToken);
+        }
+
+        internal async Task SendAsync(OperationEnum operation, object argument, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             var content = argument == null ? Array.Empty<byte>() : await Task.Run(() => MyNetSerializer.Serialize(argument));
-            return await Client.SendAndReceiveAsync(operation, content, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            Client.Send(operation, content);
         }
 
         internal void Shutdown()

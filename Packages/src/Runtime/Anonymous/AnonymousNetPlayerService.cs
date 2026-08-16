@@ -36,12 +36,13 @@ namespace oojjrs.oplat.anonymous
                 MyNetRoomInterface room = null;
                 try
                 {
-                    var response = await Net.SendAndReceiveAsync(AnonymousNet.OperationEnum.UpdatePlayer, new AnonymousServerUpdatePlayer.RequestArgument()
+                    await Net.SendAsync(AnonymousNet.OperationEnum.UpdatePlayer, new AnonymousServerUpdatePlayer.RequestArgument()
                     {
                         PlayerFields = AnonymousServerRoom.FieldData.FromNetFields(config.PlayerFields),
                         PlayerId = playerId,
                         RoomId = roomId,
                     }, cancellationToken);
+                    var response = await Net.ReceiveAsync(AnonymousNet.OperationEnum.UpdatePlayer, cancellationToken);
                     switch (response.ResultCode)
                     {
                         case AnonymousServerResponse.ResultCodeEnum.NotFound:

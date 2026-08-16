@@ -36,7 +36,8 @@ namespace oojjrs.oplat.anonymous
                 MyNetRoomInterface[] rooms;
                 try
                 {
-                    var response = await Net.SendAndReceiveAsync(AnonymousNet.OperationEnum.GetRooms, null, cancellationToken);
+                    await Net.SendAsync(AnonymousNet.OperationEnum.GetRooms, null, cancellationToken);
+                    var response = await Net.ReceiveAsync(AnonymousNet.OperationEnum.GetRooms, cancellationToken);
                     response.EnsureSuccess();
 
                     var roomsData = await response.GetContentAsync<AnonymousServerGetRooms.ResponseArgument>();

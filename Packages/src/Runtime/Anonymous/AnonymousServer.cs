@@ -61,24 +61,30 @@ namespace oojjrs.oplat.anonymous
 
         private async Task RunConnectionAsync(TcpClient client)
         {
-            using (client)
+            using (var cancellationSource = CancellationTokenSource.CreateLinkedTokenSource(LifetimeCancellationSource.Token))
             {
-                var session = default(AnonymousServerSession);
-                var stream = client.GetStream();
-                while (LifetimeCancellationSource.IsCancellationRequested == false)
+                using (client)
                 {
-                    var request = await AnonymousTransport.ReadAsync(stream, LifetimeCancellationSource.Token);
-                    if (request == null)
-                        return;
+                    var cancellationToken = cancellationSource.Token;
+                    var messages = new AnonymousTransport.MessageQueue(client.GetStream(), cancellationToken);
+                    var session = default(AnonymousServerSession);
+                    try
+                    {
+                        while (cancellationToken.IsCancellationRequested == false)
+                        {
+                            var request = await messages.ReceiveAsync(value => value.Type == AnonymousTransport.Message.TypeEnum.Operation, cancellationToken);
+                            if (request == null)
+                                return;
 
-                    var response = await CreateResponseAsync((AnonymousNet.OperationEnum)request[0], request[1..], session);
-                    session = response.Session;
-
-                    var content = new byte[1 + response.Response.Content.Length];
-                    content[0] = (byte)response.Response.ResultCode;
-                    response.Response.Content.CopyTo(content, 1);
-
-                    await AnonymousTransport.WriteAsync(stream, content, LifetimeCancellationSource.Token);
+                            var response = await CreateResponseAsync(request.Operation, request.Content, session);
+                            session = response.Session;
+                            messages.Send(AnonymousTransport.Message.CreateOperationResult(request.Operation, response.Response));
+                        }
+                    }
+                    finally
+                    {
+                        cancellationSource.Cancel();
+                    }
                 }
             }
         }
