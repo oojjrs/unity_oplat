@@ -13,7 +13,7 @@ namespace oojjrs.oplat.anonymous.controllers
 
         internal static async Task<AnonymousServerSession> RunAsync(byte[] content)
         {
-            var requestArgument = await AnonymousTransport.DeserializeAsync<RequestArgument>(content);
+            var requestArgument = await AnonymousServer.DeserializeAsync<RequestArgument>(content);
             if ((requestArgument == null) || string.IsNullOrEmpty(requestArgument.Account) || string.IsNullOrEmpty(requestArgument.Nickname))
                 throw new FormatException("Invalid anonymous authentication request.");
 

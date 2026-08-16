@@ -1,4 +1,5 @@
 ﻿using oojjrs.oplat.anonymous.controllers;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -6,6 +7,19 @@ namespace oojjrs.oplat.anonymous
 {
     internal class AnonymousNet : MyNetInterface
     {
+        internal enum OperationEnum : byte
+        {
+            Authenticate = 1,
+            CreateRoom = 2,
+            ExitRoom = 3,
+            GetRooms = 4,
+            JoinRoom = 5,
+            UpdatePlayer = 6,
+            UpdateRoom = 7,
+        }
+
+        internal const int Port = 45831;
+
         private readonly AnonymousClient Client;
         internal readonly AnonymousNetHostService HostService;
         private readonly CancellationTokenSource LifetimeCancellationSource = new();
@@ -45,7 +59,7 @@ namespace oojjrs.oplat.anonymous
                 Server.Start(cancellationToken);
                 await Client.ConnectAsync(cancellationToken);
 
-                var response = await SendAsync(AnonymousTransport.OperationEnum.Authenticate, new AnonymousServerAuthenticate.RequestArgument()
+                var response = await SendAndReceiveAsync(OperationEnum.Authenticate, new AnonymousServerAuthenticate.RequestArgument()
                 {
                     Account = account,
                     Nickname = nickname,
@@ -61,9 +75,10 @@ namespace oojjrs.oplat.anonymous
             return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, LifetimeCancellationToken);
         }
 
-        internal async Task<AnonymousServerResponse> SendAsync(AnonymousTransport.OperationEnum operation, object argument, CancellationToken cancellationToken)
+        internal async Task<AnonymousServerResponse> SendAndReceiveAsync(OperationEnum operation, object argument, CancellationToken cancellationToken)
         {
-            return await Client.SendAsync(operation, await AnonymousTransport.SerializeAsync(argument), cancellationToken);
+            var content = argument == null ? Array.Empty<byte>() : await Task.Run(() => MyNetSerializer.Serialize(argument));
+            return await Client.SendAndReceiveAsync(operation, content, cancellationToken);
         }
 
         internal void Shutdown()

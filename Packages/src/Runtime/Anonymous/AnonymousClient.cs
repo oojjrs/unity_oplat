@@ -17,17 +17,22 @@ namespace oojjrs.oplat.anonymous
 
             _client = new TcpClient(AddressFamily.InterNetwork);
             using (cancellationToken.Register(_client.Close))
-                await _client.ConnectAsync(IPAddress.Loopback, AnonymousTransport.Port);
+                await _client.ConnectAsync(IPAddress.Loopback, AnonymousNet.Port);
 
             cancellationToken.ThrowIfCancellationRequested();
             _client.NoDelay = true;
             _stream = _client.GetStream();
         }
 
-        internal async Task<AnonymousServerResponse> SendAsync(AnonymousTransport.OperationEnum operation, byte[] content, CancellationToken cancellationToken)
+        internal async Task<AnonymousServerResponse> SendAndReceiveAsync(AnonymousNet.OperationEnum operation, byte[] content, CancellationToken cancellationToken)
         {
-            await AnonymousTransport.WriteRequestAsync(_stream, operation, content, cancellationToken);
-            return await AnonymousTransport.ReadResponseAsync(_stream, cancellationToken);
+            var request = new byte[1 + content.Length];
+            request[0] = (byte)operation;
+            content.CopyTo(request, 1);
+            await AnonymousTransport.WriteAsync(_stream, request, cancellationToken);
+
+            var response = await AnonymousTransport.ReadAsync(_stream, cancellationToken);
+            return new AnonymousServerResponse((AnonymousServerResponse.ResultCodeEnum)response[0], response[1..]);
         }
 
         internal void Shutdown()

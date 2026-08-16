@@ -19,7 +19,7 @@ namespace oojjrs.oplat.anonymous.controllers
 
         internal static async Task<AnonymousServerResponse> RunAsync(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
         {
-            var requestArgument = await AnonymousTransport.DeserializeAsync<RequestArgument>(content);
+            var requestArgument = await AnonymousServer.DeserializeAsync<RequestArgument>(content);
             if ((requestArgument == null) || (requestArgument.MaxPlayers < 1))
                 throw new FormatException("Invalid anonymous room request.");
 
@@ -53,7 +53,7 @@ namespace oojjrs.oplat.anonymous.controllers
             };
 
             roomState.Rooms.Add(new AnonymousServerRoom.RoomSecret(requestArgument.Password, responseArgument));
-            return await AnonymousServerResponse.CreateAsync(AnonymousTransport.ResultCodeEnum.Success, responseArgument);
+            return await AnonymousServerResponse.CreateAsync(AnonymousServerResponse.ResultCodeEnum.Success, responseArgument);
 
             static string CreateRoomCode(AnonymousServerRoom.State state)
             {

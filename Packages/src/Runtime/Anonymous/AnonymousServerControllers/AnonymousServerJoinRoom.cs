@@ -17,7 +17,7 @@ namespace oojjrs.oplat.anonymous.controllers
 
         internal static async Task<AnonymousServerResponse> RunAsync(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
         {
-            var requestArgument = await AnonymousTransport.DeserializeAsync<RequestArgument>(content);
+            var requestArgument = await AnonymousServer.DeserializeAsync<RequestArgument>(content);
             if ((requestArgument == null) || (string.IsNullOrWhiteSpace(requestArgument.RoomId) && string.IsNullOrWhiteSpace(requestArgument.Code)))
                 throw new FormatException("Invalid anonymous room join request.");
 
@@ -33,17 +33,17 @@ namespace oojjrs.oplat.anonymous.controllers
                 secret = roomState.Rooms.Find(value => string.Equals(value.Room.Code, code, StringComparison.OrdinalIgnoreCase));
 
             if (secret == null)
-                return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.NotFound);
+                return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.NotFound);
 
             var room = secret.Room;
             var players = room.Players ?? Array.Empty<AnonymousServerRoom.PlayerData>();
             if (players.Any(player => player.Id == session.Account) == false)
             {
                 if (room.IsLocked || (string.IsNullOrEmpty(secret.Password) == false && secret.Password != requestArgument.Password))
-                    return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Forbidden);
+                    return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
 
                 if (players.Length >= room.MaxPlayers)
-                    return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Conflict);
+                    return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Conflict);
 
                 room.Players = players.Append(new AnonymousServerRoom.PlayerData()
                 {
@@ -54,7 +54,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 }).ToArray();
             }
 
-            return await AnonymousServerResponse.CreateAsync(AnonymousTransport.ResultCodeEnum.Success, room.GetMemberResponseArgument(session.Account));
+            return await AnonymousServerResponse.CreateAsync(AnonymousServerResponse.ResultCodeEnum.Success, room.GetMemberResponseArgument(session.Account));
         }
     }
 }

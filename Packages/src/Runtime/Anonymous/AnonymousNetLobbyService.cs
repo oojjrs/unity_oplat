@@ -36,10 +36,10 @@ namespace oojjrs.oplat.anonymous
                 MyNetRoomInterface[] rooms;
                 try
                 {
-                    var response = await Net.SendAsync(AnonymousTransport.OperationEnum.GetRooms, null, cancellationToken);
+                    var response = await Net.SendAndReceiveAsync(AnonymousNet.OperationEnum.GetRooms, null, cancellationToken);
                     response.EnsureSuccess();
 
-                    var roomsData = await AnonymousTransport.DeserializeAsync<AnonymousServerGetRooms.ResponseArgument>(response.Content);
+                    var roomsData = await response.GetContentAsync<AnonymousServerGetRooms.ResponseArgument>();
                     if ((roomsData == null) || (roomsData.Rooms == null))
                         throw new FormatException("Invalid anonymous rooms response.");
 

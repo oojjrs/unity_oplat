@@ -1,4 +1,5 @@
 ﻿using oojjrs.oplat.anonymous.controllers;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -9,8 +10,17 @@ namespace oojjrs.oplat.anonymous
     internal sealed class AnonymousServer
     {
         private readonly CancellationTokenSource LifetimeCancellationSource = new();
-        private readonly TcpListener Listener = new(IPAddress.Loopback, AnonymousTransport.Port);
+        private readonly TcpListener Listener = new(IPAddress.Loopback, AnonymousNet.Port);
         private readonly AnonymousServerRoom.State RoomState = new();
+
+        internal static Task<T> DeserializeAsync<T>(byte[] content)
+        {
+            return Task.Run(() =>
+            {
+                using (var stream = new MemoryStream(content))
+                    return (T)MyNetDeserializer.Deserialize(stream);
+            });
+        }
 
         private async Task AcceptAsync()
         {
@@ -22,28 +32,28 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
-        private async Task<(AnonymousServerResponse Response, AnonymousServerSession Session)> CreateResponseAsync(AnonymousTransport.OperationEnum operation, byte[] content, AnonymousServerSession session)
+        private async Task<(AnonymousServerResponse Response, AnonymousServerSession Session)> CreateResponseAsync(AnonymousNet.OperationEnum operation, byte[] content, AnonymousServerSession session)
         {
-            if (operation == AnonymousTransport.OperationEnum.Authenticate)
+            if (operation == AnonymousNet.OperationEnum.Authenticate)
             {
                 if (session != null)
-                    return (AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Conflict), session);
+                    return (AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Conflict), session);
 
-                return (AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Success), await AnonymousServerAuthenticate.RunAsync(content));
+                return (AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Success), await AnonymousServerAuthenticate.RunAsync(content));
             }
 
             if (session == null)
-                return (AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Unauthenticated), session);
+                return (AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Unauthenticated), session);
 
             var response = operation switch
             {
-                AnonymousTransport.OperationEnum.CreateRoom => await AnonymousServerCreateRoom.RunAsync(content, RoomState, session),
-                AnonymousTransport.OperationEnum.ExitRoom => await AnonymousServerExitRoom.RunAsync(content, RoomState, session),
-                AnonymousTransport.OperationEnum.GetRooms => await AnonymousServerGetRooms.RunAsync(RoomState),
-                AnonymousTransport.OperationEnum.JoinRoom => await AnonymousServerJoinRoom.RunAsync(content, RoomState, session),
-                AnonymousTransport.OperationEnum.UpdatePlayer => await AnonymousServerUpdatePlayer.RunAsync(content, RoomState, session),
-                AnonymousTransport.OperationEnum.UpdateRoom => await AnonymousServerUpdateRoom.RunAsync(content, RoomState, session),
-                _ => AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.UnsupportedOperation),
+                AnonymousNet.OperationEnum.CreateRoom => await AnonymousServerCreateRoom.RunAsync(content, RoomState, session),
+                AnonymousNet.OperationEnum.ExitRoom => await AnonymousServerExitRoom.RunAsync(content, RoomState, session),
+                AnonymousNet.OperationEnum.GetRooms => await AnonymousServerGetRooms.RunAsync(RoomState),
+                AnonymousNet.OperationEnum.JoinRoom => await AnonymousServerJoinRoom.RunAsync(content, RoomState, session),
+                AnonymousNet.OperationEnum.UpdatePlayer => await AnonymousServerUpdatePlayer.RunAsync(content, RoomState, session),
+                AnonymousNet.OperationEnum.UpdateRoom => await AnonymousServerUpdateRoom.RunAsync(content, RoomState, session),
+                _ => AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.UnsupportedOperation),
             };
             return (response, session);
         }
@@ -56,13 +66,16 @@ namespace oojjrs.oplat.anonymous
                 var stream = client.GetStream();
                 while (LifetimeCancellationSource.IsCancellationRequested == false)
                 {
-                    var request = await AnonymousTransport.ReadRequestAsync(stream, LifetimeCancellationSource.Token);
+                    var request = await AnonymousTransport.ReadAsync(stream, LifetimeCancellationSource.Token);
                     if (request == null)
                         return;
 
-                    var response = await CreateResponseAsync(request.Value.Operation, request.Value.Content, session);
+                    var response = await CreateResponseAsync((AnonymousNet.OperationEnum)request[0], request[1..], session);
                     session = response.Session;
-                    await AnonymousTransport.WriteResponseAsync(stream, response.Response, LifetimeCancellationSource.Token);
+                    var content = new byte[1 + response.Response.Content.Length];
+                    content[0] = (byte)response.Response.ResultCode;
+                    response.Response.Content.CopyTo(content, 1);
+                    await AnonymousTransport.WriteAsync(stream, content, LifetimeCancellationSource.Token);
                 }
             }
         }

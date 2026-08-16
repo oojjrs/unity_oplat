@@ -12,7 +12,7 @@ namespace oojjrs.oplat.anonymous.controllers
 
         internal static async Task<AnonymousServerResponse> RunAsync(AnonymousServerRoom.State roomState)
         {
-            return await AnonymousServerResponse.CreateAsync(AnonymousTransport.ResultCodeEnum.Success, new ResponseArgument()
+            return await AnonymousServerResponse.CreateAsync(AnonymousServerResponse.ResultCodeEnum.Success, new ResponseArgument()
             {
                 Rooms = roomState.Rooms.Where(secret => secret.Room.IsPrivate == false).Select(secret => secret.Room with
                 {

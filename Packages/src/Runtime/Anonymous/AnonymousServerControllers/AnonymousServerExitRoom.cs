@@ -14,17 +14,17 @@ namespace oojjrs.oplat.anonymous.controllers
 
         internal static async Task<AnonymousServerResponse> RunAsync(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
         {
-            var requestArgument = await AnonymousTransport.DeserializeAsync<RequestArgument>(content);
+            var requestArgument = await AnonymousServer.DeserializeAsync<RequestArgument>(content);
             if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.PlayerId) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
                 throw new FormatException("Invalid anonymous room exit request.");
 
             var roomIndex = roomState.Rooms.FindIndex(secret => secret.Room.Id == requestArgument.RoomId);
             if (roomIndex < 0)
-                return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.NotFound);
+                return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.NotFound);
 
             var room = roomState.Rooms[roomIndex].Room;
             if ((session.Account != requestArgument.PlayerId) && (session.Account != room.HostId))
-                return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Forbidden);
+                return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
 
             var players = room.Players ?? Array.Empty<AnonymousServerRoom.PlayerData>();
             if (room.HostId == requestArgument.PlayerId)
@@ -37,7 +37,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 room.Players = players.Where(player => player.Id != requestArgument.PlayerId).ToArray();
             }
 
-            return AnonymousServerResponse.Create(AnonymousTransport.ResultCodeEnum.Success);
+            return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Success);
         }
     }
 }

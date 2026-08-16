@@ -21,7 +21,7 @@ namespace oojjrs.oplat.anonymous
                 MyNetRoomInterface room;
                 try
                 {
-                    var response = await Net.SendAsync(AnonymousTransport.OperationEnum.CreateRoom, new AnonymousServerCreateRoom.RequestArgument()
+                    var response = await Net.SendAndReceiveAsync(AnonymousNet.OperationEnum.CreateRoom, new AnonymousServerCreateRoom.RequestArgument()
                     {
                         IsLocked = config.IsLocked,
                         IsPrivate = config.IsPrivate,
@@ -33,7 +33,7 @@ namespace oojjrs.oplat.anonymous
                         Title = config.Title,
                     }, cancellationToken);
                     response.EnsureSuccess();
-                    room = (await AnonymousTransport.DeserializeAsync<AnonymousServerRoom.RoomData>(response.Content)).ToNetRoom();
+                    room = (await response.GetContentAsync<AnonymousServerRoom.RoomData>()).ToNetRoom();
                 }
                 catch (Exception exception)
                 {
@@ -69,17 +69,17 @@ namespace oojjrs.oplat.anonymous
                 MyNetInterface.CatchInterface.FailureEnum? failure = null;
                 try
                 {
-                    var response = await Net.SendAsync(AnonymousTransport.OperationEnum.ExitRoom, new AnonymousServerExitRoom.RequestArgument()
+                    var response = await Net.SendAndReceiveAsync(AnonymousNet.OperationEnum.ExitRoom, new AnonymousServerExitRoom.RequestArgument()
                     {
                         PlayerId = playerId,
                         RoomId = roomId,
                     }, cancellationToken);
                     switch (response.ResultCode)
                     {
-                        case AnonymousTransport.ResultCodeEnum.NotFound:
+                        case AnonymousServerResponse.ResultCodeEnum.NotFound:
                             failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
                             break;
-                        case AnonymousTransport.ResultCodeEnum.Forbidden:
+                        case AnonymousServerResponse.ResultCodeEnum.Forbidden:
                             failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
                             break;
                         default:
@@ -122,7 +122,7 @@ namespace oojjrs.oplat.anonymous
                 MyNetRoomInterface room = null;
                 try
                 {
-                    var response = await Net.SendAsync(AnonymousTransport.OperationEnum.JoinRoom, new AnonymousServerJoinRoom.RequestArgument()
+                    var response = await Net.SendAndReceiveAsync(AnonymousNet.OperationEnum.JoinRoom, new AnonymousServerJoinRoom.RequestArgument()
                     {
                         Code = code,
                         Password = config.Password,
@@ -132,16 +132,16 @@ namespace oojjrs.oplat.anonymous
                     }, cancellationToken);
                     switch (response.ResultCode)
                     {
-                        case AnonymousTransport.ResultCodeEnum.NotFound:
+                        case AnonymousServerResponse.ResultCodeEnum.NotFound:
                             failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
                             break;
-                        case AnonymousTransport.ResultCodeEnum.Forbidden:
-                        case AnonymousTransport.ResultCodeEnum.Conflict:
+                        case AnonymousServerResponse.ResultCodeEnum.Forbidden:
+                        case AnonymousServerResponse.ResultCodeEnum.Conflict:
                             failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
                             break;
                         default:
                             response.EnsureSuccess();
-                            room = (await AnonymousTransport.DeserializeAsync<AnonymousServerRoom.RoomData>(response.Content)).ToNetRoom();
+                            room = (await response.GetContentAsync<AnonymousServerRoom.RoomData>()).ToNetRoom();
                             break;
                     }
                 }
@@ -179,7 +179,7 @@ namespace oojjrs.oplat.anonymous
                 MyNetRoomInterface room = null;
                 try
                 {
-                    var response = await Net.SendAsync(AnonymousTransport.OperationEnum.UpdateRoom, new AnonymousServerUpdateRoom.RequestArgument()
+                    var response = await Net.SendAndReceiveAsync(AnonymousNet.OperationEnum.UpdateRoom, new AnonymousServerUpdateRoom.RequestArgument()
                     {
                         IsPrivate = config.IsPrivate,
                         RoomFields = AnonymousServerRoom.FieldData.FromNetFields(config.RoomFields),
@@ -187,15 +187,15 @@ namespace oojjrs.oplat.anonymous
                     }, cancellationToken);
                     switch (response.ResultCode)
                     {
-                        case AnonymousTransport.ResultCodeEnum.NotFound:
+                        case AnonymousServerResponse.ResultCodeEnum.NotFound:
                             failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
                             break;
-                        case AnonymousTransport.ResultCodeEnum.Forbidden:
+                        case AnonymousServerResponse.ResultCodeEnum.Forbidden:
                             failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
                             break;
                         default:
                             response.EnsureSuccess();
-                            room = (await AnonymousTransport.DeserializeAsync<AnonymousServerRoom.RoomData>(response.Content)).ToNetRoom();
+                            room = (await response.GetContentAsync<AnonymousServerRoom.RoomData>()).ToNetRoom();
                             break;
                     }
                 }
