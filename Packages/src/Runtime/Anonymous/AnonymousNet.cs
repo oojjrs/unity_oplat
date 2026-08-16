@@ -25,7 +25,7 @@ namespace oojjrs.oplat.anonymous
         internal readonly AnonymousNetHostService HostService;
         private readonly CancellationTokenSource LifetimeCancellationSource = new();
         private readonly CancellationToken LifetimeCancellationToken;
-        private readonly AnonymousNetLobbyService LobbyService;
+        internal readonly AnonymousNetLobbyService LobbyService;
         internal readonly AnonymousNetMemberService MemberService;
         private readonly AnonymousNetPlayerService PlayerService;
         private readonly AnonymousNetRoomService RoomService;

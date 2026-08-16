@@ -41,6 +41,11 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
+        private void Update()
+        {
+            Net.LobbyService.Update();
+        }
+
         private static string GetAccount(string nickname)
         {
             var account = SystemInfo.deviceUniqueIdentifier;
