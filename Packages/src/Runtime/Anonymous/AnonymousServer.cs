@@ -49,6 +49,7 @@ namespace oojjrs.oplat.anonymous
             {
                 AnonymousNet.OperationEnum.CreateRoom => await AnonymousServerCreateRoom.RunAsync(content, RoomState, session),
                 AnonymousNet.OperationEnum.ExitRoom => await AnonymousServerExitRoom.RunAsync(content, RoomState, session),
+                AnonymousNet.OperationEnum.GetCurrentRoom => await AnonymousServerGetCurrentRoom.RunAsync(RoomState, session),
                 AnonymousNet.OperationEnum.GetRooms => await AnonymousServerGetRooms.RunAsync(RoomState),
                 AnonymousNet.OperationEnum.JoinRoom => await AnonymousServerJoinRoom.RunAsync(content, RoomState, session),
                 AnonymousNet.OperationEnum.UpdatePlayer => await AnonymousServerUpdatePlayer.RunAsync(content, RoomState, session),
@@ -72,9 +73,11 @@ namespace oojjrs.oplat.anonymous
 
                     var response = await CreateResponseAsync((AnonymousNet.OperationEnum)request[0], request[1..], session);
                     session = response.Session;
+
                     var content = new byte[1 + response.Response.Content.Length];
                     content[0] = (byte)response.Response.ResultCode;
                     response.Response.Content.CopyTo(content, 1);
+
                     await AnonymousTransport.WriteAsync(stream, content, LifetimeCancellationSource.Token);
                 }
             }

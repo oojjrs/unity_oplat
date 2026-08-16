@@ -16,6 +16,7 @@ namespace oojjrs.oplat.anonymous
             JoinRoom = 5,
             UpdatePlayer = 6,
             UpdateRoom = 7,
+            GetCurrentRoom = 8,
         }
 
         internal const int Port = 45831;
@@ -73,6 +74,26 @@ namespace oojjrs.oplat.anonymous
             cancellationToken.ThrowIfCancellationRequested();
             LifetimeCancellationToken.ThrowIfCancellationRequested();
             return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, LifetimeCancellationToken);
+        }
+
+        internal async Task<MyNetRoomInterface> GetCurrentRoomAsync(CancellationToken callerCancellationToken)
+        {
+            using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                var response = await SendAndReceiveAsync(OperationEnum.GetCurrentRoom, null, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (response.ResultCode == AnonymousServerResponse.ResultCodeEnum.NotFound)
+                    return null;
+
+                response.EnsureSuccess();
+                var roomData = await response.GetContentAsync<AnonymousServerRoom.RoomData>();
+                cancellationToken.ThrowIfCancellationRequested();
+                if (roomData == null)
+                    throw new FormatException("Invalid anonymous current room response.");
+
+                return roomData.ToNetRoom();
+            }
         }
 
         internal async Task<AnonymousServerResponse> SendAndReceiveAsync(OperationEnum operation, object argument, CancellationToken cancellationToken)

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,54 +22,45 @@ namespace oojjrs.oplat.anonymous
         string MyPlatformServiceInterface.Nickname => _nickname ?? GetNickname();
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
 
-        private bool IsHost => throw new System.NotImplementedException();
-        private IEnumerable<MyNetPlayerInterface> PlayersWithoutHost => throw new System.NotImplementedException();
+        private IEnumerable<MyNetPlayerInterface> PlayersWithoutHost => throw new NotImplementedException();
 
         private void OnDestroy()
         {
             Net.Shutdown();
         }
 
-        private void Update()
+        private async void Start()
         {
-            if (Net.HostService.HasResponses())
+            var cancellationToken = destroyCancellationToken;
+            try
             {
-                // 서버 -> 클라 응답 전송
-                while (Net.HostService.TryDequeue(out var response))
-                {
-                    // 나에게는 즉시 수행
-                    Net.MemberService.Receive(response);
-
-                    var bytes = MyNetSerializer.Serialize(response);
-                    foreach (var player in PlayersWithoutHost)
-                    {
-                        // 어케 보내지?
-                    }
-                }
-
-                Net.MemberService.HandleResponses();
+                await RunServiceLoopAsync(cancellationToken);
             }
-
-            // 의도적으로 요청은 응답보다 늦게 처리하는 것이다.
-            if (Net.MemberService.HasRequest())
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                // 클라 -> 서버 요청 적재
-                while (Net.MemberService.TryDequeue(out var request))
-                {
-                    if (IsHost)
-                    {
-                        // 나에게는 즉시 수행
-                        Net.HostService.Receive(request);
-                    }
-                    else
-                    {
-                        // TODO: 어케 보내지?
-                        var bytes = MyNetSerializer.Serialize(request);
-                    }
-                }
-
-                Net.HostService.HandleRequests();
             }
+        }
+
+        private static string GetAccount(string nickname)
+        {
+            var account = SystemInfo.deviceUniqueIdentifier;
+            if (string.IsNullOrEmpty(account) == false && account != SystemInfo.unsupportedIdentifier)
+                return account;
+
+            return nickname;
+        }
+
+        private static string GetNickname()
+        {
+            var deviceName = SystemInfo.deviceName;
+            if (string.IsNullOrEmpty(deviceName) == false && deviceName != SystemInfo.unsupportedIdentifier)
+                return deviceName;
+
+            var productName = Application.productName;
+            if (string.IsNullOrEmpty(productName) == false)
+                return productName;
+
+            return nameof(AnonymousPlatform);
         }
 
         async Task MyPlatform.PlatformInterface.RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken)
@@ -104,26 +96,56 @@ namespace oojjrs.oplat.anonymous
             _isInitialized = true;
         }
 
-        private static string GetAccount(string nickname)
+        private async Task RunServiceLoopAsync(CancellationToken cancellationToken)
         {
-            var account = SystemInfo.deviceUniqueIdentifier;
-            if (string.IsNullOrEmpty(account) == false && account != SystemInfo.unsupportedIdentifier)
-                return account;
+            while (cancellationToken.IsCancellationRequested == false)
+            {
+                if (Net.HostService.HasResponses())
+                {
+                    // 서버 -> 클라 응답 전송
+                    while (Net.HostService.TryDequeue(out var response))
+                    {
+                        // 나에게는 즉시 수행
+                        Net.MemberService.Receive(response);
 
-            return nickname;
-        }
+                        var bytes = MyNetSerializer.Serialize(response);
+                        foreach (var player in PlayersWithoutHost)
+                        {
+                            // 어케 보내지?
+                        }
+                    }
 
-        private static string GetNickname()
-        {
-            var deviceName = SystemInfo.deviceName;
-            if (string.IsNullOrEmpty(deviceName) == false && deviceName != SystemInfo.unsupportedIdentifier)
-                return deviceName;
+                    Net.MemberService.HandleResponses();
+                }
 
-            var productName = Application.productName;
-            if (string.IsNullOrEmpty(productName) == false)
-                return productName;
+                // 의도적으로 요청은 응답보다 늦게 처리하는 것이다.
+                if (Net.MemberService.HasRequest())
+                {
+                    var room = await Net.GetCurrentRoomAsync(cancellationToken);
+                    if ((this == null) || (room == null))
+                        return;
 
-            return nameof(AnonymousPlatform);
+                    // 클라 -> 서버 요청 적재
+                    if (room.HostId == _account)
+                    {
+                        // 나에게는 즉시 수행
+                        while (Net.MemberService.TryDequeue(out var request))
+                            Net.HostService.Receive(request);
+                    }
+                    else
+                    {
+                        // TODO: 어케 보내지?
+                        while (Net.MemberService.TryDequeue(out var request))
+                        {
+                            var bytes = MyNetSerializer.Serialize(request);
+                        }
+                    }
+
+                    Net.HostService.HandleRequests();
+                }
+
+                await Task.Delay(1, cancellationToken);
+            }
         }
     }
 }
