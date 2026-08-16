@@ -142,7 +142,7 @@ namespace oojjrs.oplat.anonymous.controllers
             }
         }
 
-        private static void ValidateFields(FieldData[] fields)
+        internal static void ValidateFields(FieldData[] fields)
         {
             foreach (var field in fields)
             {

@@ -16,7 +16,8 @@ namespace oojjrs.oplat.anonymous
         internal const string ApiExitRoom = "exit_room";
         internal const string ApiGetRooms = "get_rooms";
         internal const string ApiHealth = "health";
-        internal const string HealthResponse = "oojjrs.oplat.anonymous/7";
+        internal const string ApiJoinRoom = "join_room";
+        internal const string HealthResponse = "oojjrs.oplat.anonymous/8";
 
         private readonly HttpListener Listener = new();
         private readonly AnonymousServerRoom.State RoomState = new();
@@ -114,6 +115,9 @@ namespace oojjrs.oplat.anonymous
                         break;
                     case ApiExitRoom:
                         await AnonymousServerExitRoom.RunAsync(request, response, RoomState, SessionState);
+                        break;
+                    case ApiJoinRoom:
+                        await AnonymousServerJoinRoom.RunAsync(request, response, RoomState, SessionState);
                         break;
                     default:
                         response.StatusCode = (int)HttpStatusCode.NotFound;

@@ -38,7 +38,6 @@ namespace oojjrs.oplat
 
         public interface JoinConfigInterface
         {
-            string Account { get; }
             CancellationToken CancellationToken { get; }
             string Code { get; }
             string Password { get; }
