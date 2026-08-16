@@ -15,6 +15,7 @@ namespace oojjrs.oplat.anonymous
         private readonly CancellationTokenSource _lifetimeCancellationSource = new();
         private readonly CancellationToken _lifetimeCancellationToken;
         private readonly AnonymousNetLobbyService _lobby;
+        private readonly AnonymousNetPlayerService _player;
         private readonly AnonymousNetRoomService _room;
         private readonly AnonymousServer _server = new();
 
@@ -22,11 +23,12 @@ namespace oojjrs.oplat.anonymous
         {
             _lifetimeCancellationToken = _lifetimeCancellationSource.Token;
             _lobby = new(this);
+            _player = new(this);
             _room = new(this);
         }
 
         MyNetLobbyServiceInterface MyNetInterface.Lobby => _lobby;
-        MyNetPlayerServiceInterface MyNetInterface.Player { get; } = new AnonymousNetPlayerService();
+        MyNetPlayerServiceInterface MyNetInterface.Player => _player;
         MyNetRoomServiceInterface MyNetInterface.Room => _room;
 
         internal async Task AuthenticateAsync(string account, string nickname, CancellationToken callerCancellationToken)

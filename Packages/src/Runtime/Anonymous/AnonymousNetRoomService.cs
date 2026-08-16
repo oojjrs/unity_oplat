@@ -235,7 +235,7 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
-        private static AnonymousServerCreateRoom.FieldData[] ConvertFields(IEnumerable<MyNetInterface.Field> fields)
+        internal static AnonymousServerCreateRoom.FieldData[] ConvertFields(IEnumerable<MyNetInterface.Field> fields)
         {
             if (fields == null)
                 return Array.Empty<AnonymousServerCreateRoom.FieldData>();

@@ -37,5 +37,15 @@ namespace oojjrs.oplat.anonymous
                 }).ToArray(),
             };
         }
+
+        internal static AnonymousServerCreateRoom.FieldData[] MergeFields(AnonymousServerCreateRoom.FieldData[] fields, AnonymousServerCreateRoom.FieldData[] updatedFields)
+        {
+            fields ??= Array.Empty<AnonymousServerCreateRoom.FieldData>();
+            updatedFields ??= Array.Empty<AnonymousServerCreateRoom.FieldData>();
+            if (updatedFields.Length == 0)
+                return fields;
+
+            return fields.Where(field => updatedFields.Any(updatedField => updatedField.Key == field.Key) == false).Concat(updatedFields).ToArray();
+        }
     }
 }

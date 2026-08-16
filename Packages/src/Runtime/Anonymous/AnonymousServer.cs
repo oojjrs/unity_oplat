@@ -17,8 +17,9 @@ namespace oojjrs.oplat.anonymous
         internal const string ApiGetRooms = "get_rooms";
         internal const string ApiHealth = "health";
         internal const string ApiJoinRoom = "join_room";
+        internal const string ApiUpdatePlayer = "update_player";
         internal const string ApiUpdateRoom = "update_room";
-        internal const string HealthResponse = "oojjrs.oplat.anonymous/9";
+        internal const string HealthResponse = "oojjrs.oplat.anonymous/10";
 
         private readonly HttpListener Listener = new();
         private readonly AnonymousServerRoom.State RoomState = new();
@@ -132,6 +133,9 @@ namespace oojjrs.oplat.anonymous
                         break;
                     case ApiJoinRoom:
                         await AnonymousServerJoinRoom.RunAsync(request, response, RoomState, SessionState);
+                        break;
+                    case ApiUpdatePlayer:
+                        await AnonymousServerUpdatePlayer.RunAsync(request, response, RoomState, SessionState);
                         break;
                     case ApiUpdateRoom:
                         await AnonymousServerUpdateRoom.RunAsync(request, response, RoomState, SessionState);

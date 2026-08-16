@@ -1,18 +1,16 @@
 using System;
 using System.Net;
-using System.Text;
 using System.Threading.Tasks;
-using UnityEngine;
 
 namespace oojjrs.oplat.anonymous.controllers
 {
-    internal static class AnonymousServerUpdateRoom
+    internal static class AnonymousServerUpdatePlayer
     {
         [Serializable]
         internal record RequestArgument
         {
-            public bool IsPrivate;
-            public AnonymousServerCreateRoom.FieldData[] RoomFields;
+            public AnonymousServerCreateRoom.FieldData[] PlayerFields;
+            public string PlayerId;
             public string RoomId;
         }
 
@@ -33,12 +31,12 @@ namespace oojjrs.oplat.anonymous.controllers
             RequestArgument requestArgument;
             try
             {
-                requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(request, "Invalid anonymous room update request.");
-                if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
-                    throw new FormatException("Invalid anonymous room update request.");
+                requestArgument = await AnonymousServer.ReadJsonAsync<RequestArgument>(request, "Invalid anonymous player update request.");
+                if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.PlayerId) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
+                    throw new FormatException("Invalid anonymous player update request.");
 
-                if (requestArgument.RoomFields != null)
-                    AnonymousServerCreateRoom.ValidateFields(requestArgument.RoomFields);
+                if (requestArgument.PlayerFields != null)
+                    AnonymousServerCreateRoom.ValidateFields(requestArgument.PlayerFields);
             }
             catch (FormatException)
             {
@@ -46,6 +44,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 return;
             }
 
+            var playerId = requestArgument.PlayerId.Trim();
             var roomId = requestArgument.RoomId.Trim();
             var secret = roomState.Rooms.Find(value => value.Room.Id == roomId);
             if (secret == null)
@@ -54,25 +53,21 @@ namespace oojjrs.oplat.anonymous.controllers
                 return;
             }
 
-            var room = secret.Room;
-            if (session.Account != room.HostId)
+            if (session.Account != playerId)
             {
                 response.StatusCode = (int)HttpStatusCode.Forbidden;
                 return;
             }
 
-            room.Fields = AnonymousServerRoom.MergeFields(room.Fields, requestArgument.RoomFields);
-            room.IsPrivate = requestArgument.IsPrivate;
+            var player = Array.Find(secret.Room.Players ?? Array.Empty<AnonymousServerCreateRoom.PlayerData>(), value => value.Id == playerId);
+            if (player == null)
+            {
+                response.StatusCode = (int)HttpStatusCode.Forbidden;
+                return;
+            }
 
-            var responseContent = JsonUtility.ToJson(AnonymousServerRoom.GetMemberResponseArgument(room, session.Account));
-            var responseData = Encoding.UTF8.GetBytes(responseContent);
-
-            response.ContentEncoding = Encoding.UTF8;
-            response.ContentLength64 = responseData.Length;
-            response.ContentType = "application/json; charset=utf-8";
-            response.StatusCode = (int)HttpStatusCode.OK;
-
-            await response.OutputStream.WriteAsync(responseData, 0, responseData.Length);
+            player.Fields = AnonymousServerRoom.MergeFields(player.Fields, requestArgument.PlayerFields);
+            response.StatusCode = (int)HttpStatusCode.NoContent;
         }
     }
 }
