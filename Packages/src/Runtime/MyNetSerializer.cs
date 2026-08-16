@@ -51,7 +51,7 @@ namespace oojjrs.oplat
             {
                 using (var writer = new BinaryWriter(ms))
                 {
-                    writer.Write(packet.GetType().FullName);
+                    writer.Write(packet.GetType().AssemblyQualifiedName);
                     WriteClass(writer, packet, GetProperties(packet.GetType()));
                 }
 
