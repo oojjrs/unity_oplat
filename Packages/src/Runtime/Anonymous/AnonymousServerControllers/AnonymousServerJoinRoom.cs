@@ -89,16 +89,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 }).ToArray();
             }
 
-            var isHost = string.Equals(room.HostId, session.Account, StringComparison.Ordinal);
-            var memberRoom = room with
-            {
-                Fields = (room.Fields ?? Array.Empty<AnonymousServerCreateRoom.FieldData>()).Where(field => (field.Visibility != MyNetInterface.Field.VisibilityEnum.Private) || isHost).ToArray(),
-                Players = (room.Players ?? Array.Empty<AnonymousServerCreateRoom.PlayerData>()).Select(player => player with
-                {
-                    Fields = (player.Fields ?? Array.Empty<AnonymousServerCreateRoom.FieldData>()).Where(field => (field.Visibility != MyNetInterface.Field.VisibilityEnum.Private) || string.Equals(player.Id, session.Account, StringComparison.Ordinal)).ToArray(),
-                }).ToArray(),
-            };
-            var responseContent = JsonUtility.ToJson(memberRoom);
+            var responseContent = JsonUtility.ToJson(AnonymousServerRoom.GetMemberResponseArgument(room, session.Account));
             var responseData = Encoding.UTF8.GetBytes(responseContent);
 
             response.ContentEncoding = Encoding.UTF8;

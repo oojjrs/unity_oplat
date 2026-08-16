@@ -177,9 +177,62 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
-        Task MyNetRoomServiceInterface.UpdateAsync(MyNetRoomServiceInterface.UpdateConfigInterface config, MyNetRoomServiceInterface.UpdateResultInterface result)
+        async Task MyNetRoomServiceInterface.UpdateAsync(MyNetRoomServiceInterface.UpdateConfigInterface config, MyNetRoomServiceInterface.UpdateResultInterface result)
         {
-            throw new NotImplementedException();
+            using (var cancellationSource = _net.CreateCancellationSource(config.CancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                var roomId = config.RoomId;
+                if (string.IsNullOrWhiteSpace(roomId))
+                {
+                    result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyRoomId);
+                    return;
+                }
+
+                MyNetInterface.CatchInterface.FailureEnum? failure = null;
+                MyNetRoomInterface room = null;
+                try
+                {
+                    using (var response = await _net.PostJsonAsync(AnonymousServer.ApiUpdateRoom, new AnonymousServerUpdateRoom.RequestArgument()
+                    {
+                        IsPrivate = config.IsPrivate,
+                        RoomFields = ConvertFields(config.RoomFields),
+                        RoomId = roomId,
+                    }, cancellationToken))
+                    {
+                        switch (response.StatusCode)
+                        {
+                            case HttpStatusCode.NotFound:
+                                failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
+                                break;
+                            case HttpStatusCode.Forbidden:
+                                failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
+                                break;
+                            default:
+                                response.EnsureSuccessStatusCode();
+
+                                var responseContent = await response.Content.ReadAsStringAsync();
+                                room = ConvertRoom(JsonUtility.FromJson<AnonymousServerCreateRoom.ResponseArgument>(responseContent));
+                                break;
+                        }
+                    }
+                }
+                catch (Exception exception)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    result.OnException(new MyNetSessionException("Failed to update anonymous room.", exception));
+                    return;
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (failure.HasValue)
+                {
+                    result.OnFailed(failure.Value);
+                    return;
+                }
+
+                result.OnOk(room);
+            }
         }
 
         private static AnonymousServerCreateRoom.FieldData[] ConvertFields(IEnumerable<MyNetInterface.Field> fields)
