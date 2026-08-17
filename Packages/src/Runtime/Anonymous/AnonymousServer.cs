@@ -1,5 +1,8 @@
 ﻿using oojjrs.oplat.anonymous.controllers;
+using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -12,6 +15,7 @@ namespace oojjrs.oplat.anonymous
         private readonly CancellationTokenSource LifetimeCancellationSource = new();
         private readonly TcpListener Listener = new(IPAddress.Loopback, AnonymousNet.Port);
         private readonly AnonymousServerRoom.State RoomState = new();
+        private readonly Dictionary<string, AnonymousServerSession> Sessions = new();
 
         internal static Task<T> DeserializeAsync<T>(byte[] content)
         {
@@ -32,14 +36,20 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
-        private async Task<(AnonymousServerResponse Response, AnonymousServerSession Session)> CreateResponseAsync(AnonymousNet.OperationEnum operation, byte[] content, AnonymousServerSession session)
+        private async Task<(AnonymousServerResponse Response, AnonymousServerSession Session)> CreateResponseAsync(AnonymousNet.OperationEnum operation, byte[] content, AnonymousServerSession session, AnonymousTransport.MessageQueue messages)
         {
             if (operation == AnonymousNet.OperationEnum.Authenticate)
             {
                 if (session != null)
                     return (AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Conflict), session);
 
-                return (AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Success), await AnonymousServerAuthenticate.RunAsync(content));
+                var authenticatedSession = await AnonymousServerAuthenticate.RunAsync(content, messages);
+                if (Sessions.ContainsKey(authenticatedSession.Account))
+                    return (AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Conflict), null);
+
+                Sessions.Add(authenticatedSession.Account, authenticatedSession);
+
+                return (AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Success), authenticatedSession);
             }
 
             if (session == null)
@@ -59,6 +69,30 @@ namespace oojjrs.oplat.anonymous
                 _ => AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.UnsupportedOperation),
             };
             return (response, session);
+        }
+
+        private void RemoveSession(AnonymousServerSession session)
+        {
+            if (session == null)
+                return;
+
+            if (Sessions.TryGetValue(session.Account, out var currentSession) && ReferenceEquals(currentSession, session))
+                Sessions.Remove(session.Account);
+
+            var roomIndex = RoomState.Rooms.FindIndex(secret => (secret.Room.Players ?? Array.Empty<AnonymousServerRoom.PlayerData>()).Any(player => player.Id == session.Account));
+            if (roomIndex < 0)
+                return;
+
+            var room = RoomState.Rooms[roomIndex];
+            if (room.Room.HostId == session.Account)
+            {
+                RoomState.RoomCodes.Remove(room.Room.Code);
+                RoomState.Rooms.RemoveAt(roomIndex);
+                return;
+            }
+
+            room.Room.Players = room.Room.Players.Where(player => player.Id != session.Account).ToArray();
+            room.Responses.Remove(session.Account);
         }
 
         private async Task RunConnectionAsync(TcpClient client)
@@ -88,7 +122,7 @@ namespace oojjrs.oplat.anonymous
                             }
                             else
                             {
-                                var response = await CreateResponseAsync(message.Operation, message.Content, session);
+                                var response = await CreateResponseAsync(message.Operation, message.Content, session, messages);
                                 session = response.Session;
                                 messages.Send(AnonymousTransport.Message.CreateOperationResult(message.Operation, response.Response));
                             }
@@ -96,6 +130,7 @@ namespace oojjrs.oplat.anonymous
                     }
                     finally
                     {
+                        RemoveSession(session);
                         cancellationSource.Cancel();
                     }
                 }
