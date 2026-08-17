@@ -16,7 +16,7 @@ namespace oojjrs.oplat
 
         public interface UpdateResultInterface : MyNetInterface.CatchInterface
         {
-            void OnOk(MyNetRoomInterface room);
+            void OnOk(MyNetPlayerInterface player);
         }
 
         Task UpdateAsync(UpdateConfigInterface config, UpdateResultInterface result);

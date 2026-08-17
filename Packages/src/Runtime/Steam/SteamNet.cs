@@ -28,6 +28,7 @@ namespace oojjrs.oplat.steam
             PlayerKicked = 9,
             PlayerDataAccepted = 10,
             PlayerDataRejected = 11,
+            PlayerUpdated = 12,
         }
 
         private enum StateEnum
@@ -493,11 +494,13 @@ namespace oojjrs.oplat.steam
         private int _maxPlayers;
         private MyNetInterface.Field[] _memberRoomFields = Array.Empty<MyNetInterface.Field>();
         private MyNetMemberResultInterface _memberResult;
+        private MyNetPlayerServiceInterface.UpdateResultInterface _playerResult;
         private MyNetRoomServiceInterface.UpdateResultInterface _roomResult;
         private float _nextLobbyPollTimeSeconds;
         private ulong _originalHostId;
         private string _password;
         private byte[] _pendingRosterPayload;
+        private MessageKind _pendingRosterKind;
         private ulong _pendingPlayerUpdateId;
         private TaskCompletionSource<PlayerUpdateOutcomeEnum> _playerUpdateSource;
         private ulong _nextPlayerUpdateId;
@@ -526,13 +529,14 @@ namespace oojjrs.oplat.steam
         MyNetPlayerServiceInterface MyNetInterface.Player => Player;
         MyNetRoomServiceInterface MyNetInterface.Room => Room;
 
-        internal void Initialize(MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
+        internal void Initialize(MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
         {
             if (_isInitialized)
                 return;
 
             _hostResult = hostResult ?? throw new ArgumentNullException(nameof(hostResult));
             _memberResult = memberResult ?? throw new ArgumentNullException(nameof(memberResult));
+            _playerResult = playerResult ?? throw new ArgumentNullException(nameof(playerResult));
             _roomResult = roomResult ?? throw new ArgumentNullException(nameof(roomResult));
             _mainThreadId = Environment.CurrentManagedThreadId;
             var localSteamId = SteamUser.GetSteamID();
@@ -961,7 +965,7 @@ namespace oojjrs.oplat.steam
                     return;
                 }
 
-                MyNetRoomInterface room = null;
+                MyNetPlayerInterface player = null;
                 MyNetInterface.CatchInterface.FailureEnum? failure = null;
                 Exception caughtException = null;
                 try
@@ -984,7 +988,7 @@ namespace oojjrs.oplat.steam
                         {
                             PublishLocalPlayerData();
                             PublishRoster();
-                            BroadcastRoster();
+                            BroadcastRoster(MessageKind.PlayerUpdated, _localSteamId);
                         }
                         else
                         {
@@ -1013,7 +1017,7 @@ namespace oojjrs.oplat.steam
                             PublishLocalPlayerData();
                         }
 
-                        room = BuildCurrentRoom();
+                        player = BuildCurrentRoom().Players.First(value => value.Id == config.PlayerId);
                     }
                     catch
                     {
@@ -1053,7 +1057,7 @@ namespace oojjrs.oplat.steam
                     OperationGate.Release();
                 }
 
-                if (room == null)
+                if (player == null)
                     cancellationToken.ThrowIfCancellationRequested();
 
                 if (failure.HasValue)
@@ -1061,7 +1065,7 @@ namespace oojjrs.oplat.steam
                 else if (caughtException != null)
                     result.OnException(new MyNetSessionException("Failed to update Steam player.", caughtException));
                 else
-                    result.OnOk(room);
+                    result.OnOk(player);
             }
         }
 
@@ -1617,14 +1621,18 @@ namespace oojjrs.oplat.steam
             return new SteamNetRoom(EncodeCode(lobby.m_SteamID), DecodeFields(SteamMatchmaking.GetLobbyData(lobby, MetadataRoomFields)), ReadBooleanLobbyData(lobby, MetadataHasPassword), hostId.ToString(), lobby.m_SteamID.ToString(), ReadBooleanLobbyData(lobby, MetadataIsLocked), ReadBooleanLobbyData(lobby, MetadataIsPrivate), maxPlayers, players, SteamMatchmaking.GetLobbyData(lobby, MetadataTitle) ?? string.Empty);
         }
 
-        private void BroadcastRoster()
+        private void BroadcastRoster(MessageKind kind = MessageKind.RosterChanged, ulong updatedPlayerId = 0, ulong excludedPlayerId = 0)
         {
             var payload = EncodeMemberSnapshot();
+            if (kind == MessageKind.PlayerUpdated)
+                payload = EncodePlayerUpdated(updatedPlayerId, payload);
+
             PendingRosterPlayerIds.Clear();
+            _pendingRosterKind = kind;
             _pendingRosterPayload = payload;
             foreach (var playerId in AcceptedPlayerIds)
             {
-                if ((playerId != _localSteamId) && (SendMessage(playerId, MessageKind.RosterChanged, payload) == false))
+                if ((playerId != _localSteamId) && (playerId != excludedPlayerId) && (SendMessage(playerId, kind, payload) == false))
                     PendingRosterPlayerIds.Add(playerId);
             }
 
@@ -1639,7 +1647,7 @@ namespace oojjrs.oplat.steam
 
             foreach (var playerId in new List<ulong>(PendingRosterPlayerIds))
             {
-                if ((AcceptedPlayerIds.Contains(playerId) == false) || SendMessage(playerId, MessageKind.RosterChanged, _pendingRosterPayload))
+                if ((AcceptedPlayerIds.Contains(playerId) == false) || SendMessage(playerId, _pendingRosterKind, _pendingRosterPayload))
                     PendingRosterPlayerIds.Remove(playerId);
             }
 
@@ -2052,7 +2060,7 @@ namespace oojjrs.oplat.steam
                             LogicalPlayers[senderId] = DecodePlayerUpdate(senderId, payload, out updateId);
                             EncodeMemberSnapshot();
                             PublishRoster();
-                            BroadcastRoster();
+                            BroadcastRoster(MessageKind.PlayerUpdated, senderId, senderId);
                             if (SendMessage(senderId, MessageKind.PlayerDataAccepted, EncodeUInt64(updateId)) == false)
                                 throw new InvalidOperationException("Steam rejected the player update acknowledgement.");
                         }
@@ -2078,6 +2086,17 @@ namespace oojjrs.oplat.steam
 
                             Debug.LogWarning($"Rejected Steam player data update: {exception.Message}");
                         }
+                    }
+                    break;
+                case MessageKind.PlayerUpdated:
+                    if ((_state == StateEnum.Member) && (senderId == _originalHostId))
+                    {
+                        var playerId = DecodePlayerUpdated(payload, out var snapshot);
+                        ApplyMemberSnapshot(snapshot);
+                        if (AcceptedPlayerIds.Contains(_localSteamId) == false)
+                            ResetSession(true, StateEnum.Ready);
+                        else
+                            _playerResult.OnOk(BuildCurrentRoom().Players.First(value => value.Id == playerId.ToString()));
                     }
                     break;
                 case MessageKind.PlayerDataAccepted:
@@ -2528,6 +2547,24 @@ namespace oojjrs.oplat.steam
             }
         }
 
+        private static byte[] EncodePlayerUpdated(ulong playerId, byte[] snapshot)
+        {
+            if (playerId == 0)
+                throw new FormatException("Steam updated player ID is invalid.");
+
+            using (var stream = new MemoryStream())
+            {
+                using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
+                {
+                    writer.Write(playerId);
+                    writer.Write(snapshot.Length);
+                    writer.Write(snapshot);
+                }
+
+                return stream.ToArray();
+            }
+        }
+
         private static byte[] EncodePlayerData(string nickname, MyNetInterface.Field[] fields, string password)
         {
             nickname ??= string.Empty;
@@ -2574,6 +2611,27 @@ namespace oojjrs.oplat.steam
                     throw new EndOfStreamException("Steam player update payload is truncated.");
 
                 return DecodePlayerData(playerId, playerData);
+            }
+        }
+
+        private static ulong DecodePlayerUpdated(byte[] payload, out byte[] snapshot)
+        {
+            using (var stream = new MemoryStream(payload, false))
+            using (var reader = new BinaryReader(stream, Encoding.UTF8))
+            {
+                var playerId = reader.ReadUInt64();
+                if (playerId == 0)
+                    throw new FormatException("Steam updated player ID is invalid.");
+
+                var length = reader.ReadInt32();
+                if ((length < 0) || (length > MessageByteCountMax) || (length != stream.Length - stream.Position))
+                    throw new FormatException("Steam player snapshot payload length is invalid.");
+
+                snapshot = reader.ReadBytes(length);
+                if (snapshot.Length != length)
+                    throw new EndOfStreamException("Steam player snapshot payload is truncated.");
+
+                return playerId;
             }
         }
 

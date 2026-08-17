@@ -92,7 +92,7 @@ namespace oojjrs.oplat.anonymous
             await Net.AuthenticateAsync(_account, _nickname, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
-            Net.Initialize(_account, callback.HostResult, callback.MemberResult, callback.RoomResult);
+            Net.Initialize(_account, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomResult);
 
             _isInitialized = true;
         }

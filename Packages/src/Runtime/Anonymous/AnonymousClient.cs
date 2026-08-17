@@ -85,6 +85,18 @@ namespace oojjrs.oplat.anonymous
             return false;
         }
 
+        internal bool TryReceivePlayerUpdated(out byte[] content)
+        {
+            if ((_messages != null) && _messages.TryReceive(message => message.Type == AnonymousTransport.Message.TypeEnum.PlayerUpdated, out var message))
+            {
+                content = message.Content;
+                return true;
+            }
+
+            content = null;
+            return false;
+        }
+
         internal bool TryReceiveRoomUpdated(out byte[] content)
         {
             if ((_messages != null) && _messages.TryReceive(message => message.Type == AnonymousTransport.Message.TypeEnum.RoomUpdated, out var message))

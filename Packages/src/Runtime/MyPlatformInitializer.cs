@@ -13,6 +13,7 @@ namespace oojjrs.oplat
             MyNetHostResultInterface HostResult { get; }
             MyPlatformTypeEnum InitialType { get; }
             MyNetMemberResultInterface MemberResult { get; }
+            MyNetPlayerServiceInterface.UpdateResultInterface PlayerResult { get; }
             MyNetRoomServiceInterface.UpdateResultInterface RoomResult { get; }
 
             void OnResult(MyPlatformServiceInterface service);

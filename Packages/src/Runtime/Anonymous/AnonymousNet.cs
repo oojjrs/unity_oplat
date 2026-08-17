@@ -43,6 +43,7 @@ namespace oojjrs.oplat.anonymous
 
         internal MyNetHostResultInterface HostResult { get; private set; }
         internal MyNetMemberResultInterface MemberResult { get; private set; }
+        internal MyNetPlayerServiceInterface.UpdateResultInterface PlayerResult { get; private set; }
         internal MyNetRoomServiceInterface.UpdateResultInterface RoomResult { get; private set; }
 
         internal AnonymousNet()
@@ -108,11 +109,12 @@ namespace oojjrs.oplat.anonymous
             return Client.ReceiveAsync(operation, cancellationToken);
         }
 
-        internal void Initialize(string account, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
+        internal void Initialize(string account, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
         {
             _account = account;
             HostResult = hostResult;
             MemberResult = memberResult;
+            PlayerResult = playerResult;
             RoomResult = roomResult;
             _isInitialized = true;
         }
@@ -128,6 +130,15 @@ namespace oojjrs.oplat.anonymous
 
                     if (room != null)
                     {
+                        while (Client.TryReceivePlayerUpdated(out var content))
+                        {
+                            var playerData = await AnonymousServer.DeserializeAsync<AnonymousServerRoom.PlayerData>(content);
+                            if (playerData == null)
+                                throw new FormatException("Invalid anonymous player update notification.");
+
+                            PlayerResult.OnOk(playerData.ToNetPlayer());
+                        }
+
                         while (Client.TryReceiveRoomUpdated(out var content))
                         {
                             var roomData = await AnonymousServer.DeserializeAsync<AnonymousServerRoom.RoomData>(content);

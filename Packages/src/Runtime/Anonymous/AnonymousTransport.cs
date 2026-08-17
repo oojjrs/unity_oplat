@@ -18,6 +18,7 @@ namespace oojjrs.oplat.anonymous
                 MemberRequest = 3,
                 HostResponse = 4,
                 RoomUpdated = 5,
+                PlayerUpdated = 6,
             }
 
             internal byte[] Content { get; }
@@ -58,6 +59,11 @@ namespace oojjrs.oplat.anonymous
                 return new Message(TypeEnum.OperationResult, operation, response.ResultCode, response.Content);
             }
 
+            internal static Message CreatePlayerUpdated(byte[] content)
+            {
+                return new Message(TypeEnum.PlayerUpdated, default, default, content);
+            }
+
             internal static Message Deserialize(byte[] data)
             {
                 if ((data == null) || (data.Length < 1))
@@ -69,6 +75,7 @@ namespace oojjrs.oplat.anonymous
                     TypeEnum.HostResponse => new Message(type, default, default, data[1..]),
                     TypeEnum.MemberRequest => new Message(type, default, default, data[1..]),
                     TypeEnum.RoomUpdated => new Message(type, default, default, data[1..]),
+                    TypeEnum.PlayerUpdated => new Message(type, default, default, data[1..]),
                     TypeEnum.Operation when data.Length >= 2 => new Message(type, (AnonymousNet.OperationEnum)data[1], default, data[2..]),
                     TypeEnum.OperationResult when data.Length >= 3 => new Message(type, (AnonymousNet.OperationEnum)data[1], (AnonymousServerResponse.ResultCodeEnum)data[2], data[3..]),
                     _ => throw new FormatException("Invalid anonymous message."),
@@ -82,6 +89,7 @@ namespace oojjrs.oplat.anonymous
                     TypeEnum.HostResponse => 1,
                     TypeEnum.MemberRequest => 1,
                     TypeEnum.RoomUpdated => 1,
+                    TypeEnum.PlayerUpdated => 1,
                     TypeEnum.Operation => 2,
                     TypeEnum.OperationResult => 3,
                     _ => throw new InvalidOperationException("Invalid anonymous message."),

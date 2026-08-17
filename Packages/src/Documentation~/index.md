@@ -62,7 +62,7 @@ Steam은 호스트가 나가면 다른 멤버에게 Lobby 소유권을 자동 �
 
 `MyNetHostServiceInterface.Send`와 `MyNetMemberServiceInterface.Send`는 반환값이 없는 전송 큐 API다. 따라서 개별 Steam P2P 전송 실패는 호출자에게 결과 콜백으로 전달되지 않으며, 중요한 애플리케이션 메시지는 상위 프로토콜에서 응답이나 확인 메시지를 정의해야 한다.
 
-방 정보가 갱신되면 요청자와 나머지 방 구성원 모두 `MyNetRoomServiceInterface.UpdateResultInterface.OnOk` 함수로 자신의 가시성 권한에 맞게 필터링된 최신 방 스냅샷을 받는다. 구성원 알림에 사용할 결과 객체는 초기화 콜백의 `RoomResult`로 전달한다.
+방 또는 플레이어 정보가 갱신되면 요청자는 해당 `UpdateResultInterface.OnOk`로 결과를 받는다. 나머지 방 구성원은 방 갱신을 `RoomResult.OnOk`의 최신 방 스냅샷으로, 플레이어 갱신을 `PlayerResult.OnOk`의 최신 플레이어 스냅샷으로 받으며 각 결과는 자신의 가시성 권한에 맞게 필터링된다.
 
 Lobby/Room/Player 작업과 플랫폼 종료는 Unity 메인 스레드에서 호출해야 한다. 두 `Send` 메서드는 다른 스레드에서도 큐에 넣을 수 있다. `CreateAsync`와 `JoinAsync` 취소는 Steam의 네이티브 요청을 직접 취소할 수 없으므로 그 결과를 확인하고 늦게 만들어지거나 참가된 Lobby를 정리한 뒤 완료된다. 패키지는 `ISteamNetworkingMessages` 채널 `45831`을 사용하며, 같은 피어에 대해 다른 시스템도 이 API의 전역 session callback을 관리한다면 하나의 dispatcher와 session 소유권 정책으로 조정해야 한다.
 
