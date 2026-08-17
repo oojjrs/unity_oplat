@@ -39,6 +39,7 @@ namespace oojjrs.oplat.anonymous
                 throw new InvalidOperationException("Anonymous client is not connected.");
 
             var message = await _messages.ReceiveAsync(value => (value.Type == AnonymousTransport.Message.TypeEnum.OperationResult) && (value.Operation == operation), cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (message == null)
                 throw new EndOfStreamException("Anonymous server disconnected.");
 
