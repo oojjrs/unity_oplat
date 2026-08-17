@@ -61,7 +61,6 @@ namespace oojjrs.oplat.anonymous
                 AnonymousNet.OperationEnum.ExitRoom => await AnonymousServerExitRoom.RunAsync(content, RoomState, session),
                 AnonymousNet.OperationEnum.GetCurrentRoom => await AnonymousServerGetCurrentRoom.RunAsync(RoomState, session),
                 AnonymousNet.OperationEnum.GetRequests => await AnonymousServerGetRequests.RunAsync(RoomState, session),
-                AnonymousNet.OperationEnum.GetResponses => await AnonymousServerGetResponses.RunAsync(RoomState, session),
                 AnonymousNet.OperationEnum.GetRooms => await AnonymousServerGetRooms.RunAsync(RoomState),
                 AnonymousNet.OperationEnum.JoinRoom => await AnonymousServerJoinRoom.RunAsync(content, RoomState, session),
                 AnonymousNet.OperationEnum.UpdatePlayer => await AnonymousServerUpdatePlayer.RunAsync(content, RoomState, session),
@@ -92,7 +91,6 @@ namespace oojjrs.oplat.anonymous
             }
 
             room.Room.Players = room.Room.Players.Where(player => player.Id != session.Account).ToArray();
-            room.Responses.Remove(session.Account);
         }
 
         private async Task RunConnectionAsync(TcpClient client)
@@ -114,7 +112,7 @@ namespace oojjrs.oplat.anonymous
 
                             if (message.Type == AnonymousTransport.Message.TypeEnum.HostResponse)
                             {
-                                await AnonymousServerAddResponse.RunAsync(message.Content, RoomState, session);
+                                await AnonymousServerAddResponse.RunAsync(message.Content, RoomState, Sessions, session);
                             }
                             else if (message.Type == AnonymousTransport.Message.TypeEnum.MemberRequest)
                             {

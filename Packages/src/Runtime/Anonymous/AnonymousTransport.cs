@@ -179,7 +179,7 @@ namespace oojjrs.oplat.anonymous
                     throw new IOException("Anonymous message stream failed.", _exception);
             }
 
-            private bool TryReceive(Func<Message, bool> predicate, out Message message)
+            internal bool TryReceive(Func<Message, bool> predicate, out Message message)
             {
                 var count = ReceivedMessages.Count;
                 while (count-- > 0)

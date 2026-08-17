@@ -1,6 +1,6 @@
 ﻿using oojjrs.oplat.anonymous.controllers;
 using System;
-using System.Linq;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -19,7 +19,6 @@ namespace oojjrs.oplat.anonymous
             UpdateRoom = 7,
             GetCurrentRoom = 8,
             GetRequests = 9,
-            GetResponses = 10,
         }
 
         internal const int Port = 45831;
@@ -136,41 +135,15 @@ namespace oojjrs.oplat.anonymous
                                 // 나에게는 즉시 수행
                                 MemberService.Receive(response);
 
-                                var content = MyNetSerializer.Serialize(response);
-                                foreach (var player in room.Players.Where(player => player.IsHost == false))
-                                {
-                                    Client.SendHostResponse(MyNetSerializer.Serialize(new AnonymousServerAddResponse.RequestArgument()
-                                    {
-                                        Content = content,
-                                        PlayerId = player.Id,
-                                    }));
-                                }
+                                // 나를 제외한 멤버들에게 동기화
+                                if (room.PlayerCount > 1)
+                                    Client.SendHostResponse(MyNetSerializer.Serialize(response));
                             }
                         }
                         else
                         {
-                            await SendAsync(OperationEnum.GetResponses, null, cancellationToken);
-                            var response = await ReceiveAsync(OperationEnum.GetResponses, cancellationToken);
-                            cancellationToken.ThrowIfCancellationRequested();
-                            response.EnsureSuccess();
-
-                            var responseArgument = await response.GetContentAsync<AnonymousServerGetResponses.ResponseArgument>();
-                            cancellationToken.ThrowIfCancellationRequested();
-                            if (responseArgument == null)
-                                throw new FormatException("Invalid anonymous responses response.");
-
-                            foreach (var responseData in responseArgument.Responses ?? Array.Empty<AnonymousServerGetResponses.ResponseData>())
-                            {
-                                if (responseData?.Content == null)
-                                    throw new FormatException("Invalid anonymous response response.");
-
-                                var receivedResponse = await AnonymousServer.DeserializeAsync<MyNetResponse>(responseData.Content);
-                                cancellationToken.ThrowIfCancellationRequested();
-                                if (receivedResponse == null)
-                                    throw new FormatException("Invalid anonymous response response.");
-
-                                MemberService.Receive(receivedResponse);
-                            }
+                            while (Client.TryReceiveHostResponse(out var content))
+                                MemberService.Receive(await AnonymousServer.DeserializeAsync<MyNetResponse>(content));
                         }
 
                         MemberService.HandleResponses();
@@ -183,6 +156,7 @@ namespace oojjrs.oplat.anonymous
                             while (MemberService.TryDequeue(out var request))
                                 HostService.Receive(request);
 
+                            // 나에게 날아온 요청들 적재
                             await SendAsync(OperationEnum.GetRequests, null, cancellationToken);
                             var response = await ReceiveAsync(OperationEnum.GetRequests, cancellationToken);
                             cancellationToken.ThrowIfCancellationRequested();
@@ -208,6 +182,7 @@ namespace oojjrs.oplat.anonymous
                         }
                         else
                         {
+                            // 호스트에게 요청
                             while (MemberService.TryDequeue(out var request))
                                 Client.SendMemberRequest(MyNetSerializer.Serialize(request));
                         }

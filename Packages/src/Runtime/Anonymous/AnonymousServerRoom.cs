@@ -132,7 +132,6 @@ namespace oojjrs.oplat.anonymous
         {
             internal string Password { get; }
             internal Queue<MyNetRequest> Requests { get; } = new();
-            internal Dictionary<string, Queue<MyNetResponse>> Responses { get; } = new();
             internal RoomData Room { get; }
 
             internal RoomSecret(string password, RoomData room)

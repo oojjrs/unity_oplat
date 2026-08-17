@@ -61,6 +61,18 @@ namespace oojjrs.oplat.anonymous
             SendMessage(AnonymousTransport.Message.CreateMemberRequest(content));
         }
 
+        internal bool TryReceiveHostResponse(out byte[] content)
+        {
+            if ((_messages != null) && _messages.TryReceive(message => message.Type == AnonymousTransport.Message.TypeEnum.HostResponse, out var message))
+            {
+                content = message.Content;
+                return true;
+            }
+
+            content = null;
+            return false;
+        }
+
         private void SendMessage(AnonymousTransport.Message message)
         {
             if (_messages == null)
