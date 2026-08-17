@@ -18,7 +18,6 @@ namespace oojjrs.oplat.anonymous
             UpdatePlayer = 6,
             UpdateRoom = 7,
             GetCurrentRoom = 8,
-            GetRequests = 9,
         }
 
         internal const int Port = 45831;
@@ -157,28 +156,8 @@ namespace oojjrs.oplat.anonymous
                                 HostService.Receive(request);
 
                             // 나에게 날아온 요청들 적재
-                            await SendAsync(OperationEnum.GetRequests, null, cancellationToken);
-                            var response = await ReceiveAsync(OperationEnum.GetRequests, cancellationToken);
-                            cancellationToken.ThrowIfCancellationRequested();
-                            response.EnsureSuccess();
-
-                            var responseArgument = await response.GetContentAsync<AnonymousServerGetRequests.ResponseArgument>();
-                            cancellationToken.ThrowIfCancellationRequested();
-                            if (responseArgument == null)
-                                throw new FormatException("Invalid anonymous requests response.");
-
-                            foreach (var requestData in responseArgument.Requests ?? Array.Empty<AnonymousServerGetRequests.RequestData>())
-                            {
-                                if (requestData?.Content == null)
-                                    throw new FormatException("Invalid anonymous request response.");
-
-                                var receivedRequest = await AnonymousServer.DeserializeAsync<MyNetRequest>(requestData.Content);
-                                cancellationToken.ThrowIfCancellationRequested();
-                                if (receivedRequest == null)
-                                    throw new FormatException("Invalid anonymous request response.");
-
-                                HostService.Receive(receivedRequest);
-                            }
+                            while (Client.TryReceiveMemberRequest(out var content))
+                                HostService.Receive(await AnonymousServer.DeserializeAsync<MyNetRequest>(content));
                         }
                         else
                         {

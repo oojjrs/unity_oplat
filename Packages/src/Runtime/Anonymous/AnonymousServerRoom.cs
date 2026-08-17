@@ -131,7 +131,6 @@ namespace oojjrs.oplat.anonymous
         internal sealed class RoomSecret
         {
             internal string Password { get; }
-            internal Queue<MyNetRequest> Requests { get; } = new();
             internal RoomData Room { get; }
 
             internal RoomSecret(string password, RoomData room)
