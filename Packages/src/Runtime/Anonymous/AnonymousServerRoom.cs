@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous
 {
@@ -144,6 +145,18 @@ namespace oojjrs.oplat.anonymous
         {
             internal readonly HashSet<string> RoomCodes = new();
             internal readonly List<RoomSecret> Rooms = new();
+        }
+
+        internal static async Task NotifyUpdatedAsync(RoomData room, IReadOnlyDictionary<string, AnonymousServerSession> sessions, string excludedPlayerId)
+        {
+            foreach (var player in room.Players ?? Array.Empty<PlayerData>())
+            {
+                if ((player.Id == excludedPlayerId) || (sessions.TryGetValue(player.Id, out var playerSession) == false))
+                    continue;
+
+                var memberResponse = await AnonymousServerResponse.CreateAsync(AnonymousServerResponse.ResultCodeEnum.Success, room.GetMemberResponseArgument(player.Id));
+                playerSession.Messages.Send(AnonymousTransport.Message.CreateRoomUpdated(memberResponse.Content));
+            }
         }
     }
 }

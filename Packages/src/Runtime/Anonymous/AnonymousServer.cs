@@ -58,10 +58,10 @@ namespace oojjrs.oplat.anonymous
             var response = operation switch
             {
                 AnonymousNet.OperationEnum.CreateRoom => await AnonymousServerCreateRoom.RunAsync(content, RoomState, session),
-                AnonymousNet.OperationEnum.ExitRoom => await AnonymousServerExitRoom.RunAsync(content, RoomState, session),
+                AnonymousNet.OperationEnum.ExitRoom => await AnonymousServerExitRoom.RunAsync(content, RoomState, Sessions, session),
                 AnonymousNet.OperationEnum.GetCurrentRoom => await AnonymousServerGetCurrentRoom.RunAsync(RoomState, session),
                 AnonymousNet.OperationEnum.GetRooms => await AnonymousServerGetRooms.RunAsync(RoomState),
-                AnonymousNet.OperationEnum.JoinRoom => await AnonymousServerJoinRoom.RunAsync(content, RoomState, session),
+                AnonymousNet.OperationEnum.JoinRoom => await AnonymousServerJoinRoom.RunAsync(content, RoomState, Sessions, session),
                 AnonymousNet.OperationEnum.UpdatePlayer => await AnonymousServerUpdatePlayer.RunAsync(content, RoomState, Sessions, session),
                 AnonymousNet.OperationEnum.UpdateRoom => await AnonymousServerUpdateRoom.RunAsync(content, RoomState, Sessions, session),
                 _ => AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.UnsupportedOperation),
@@ -69,7 +69,7 @@ namespace oojjrs.oplat.anonymous
             return (response, session);
         }
 
-        private void RemoveSession(AnonymousServerSession session)
+        private async Task RemoveSessionAsync(AnonymousServerSession session)
         {
             if (session == null)
                 return;
@@ -90,6 +90,7 @@ namespace oojjrs.oplat.anonymous
             }
 
             room.Room.Players = room.Room.Players.Where(player => player.Id != session.Account).ToArray();
+            await AnonymousServerRoom.NotifyUpdatedAsync(room.Room, Sessions, session.Account);
         }
 
         private async Task RunConnectionAsync(TcpClient client)
@@ -127,7 +128,7 @@ namespace oojjrs.oplat.anonymous
                     }
                     finally
                     {
-                        RemoveSession(session);
+                        await RemoveSessionAsync(session);
                         cancellationSource.Cancel();
                     }
                 }
