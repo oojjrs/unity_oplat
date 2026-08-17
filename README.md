@@ -50,6 +50,8 @@ Steam 구현은 소비 프로젝트에 `STEAMWORKS_NET`이 정의된 경우에�
 
 ## Steam 네트워크
 
+`service.Net.UseLocal`은 런타임 중 언제든 변경할 수 있다. `true`이면 현재 방의 존재나 호스트 여부와 관계없이 `Member.Send` 요청과 `Host.Send` 응답을 현재 프로세스의 Host/Member 결과 처리기로 직접 전달한다. Anonymous와 Steam 모두 같은 로컬 전송을 지원하며, Steam Lobby를 자동 생성하지 않는다. `false`로 되돌리면 이후 전송부터 현재 플랫폼 방 경로를 사용한다.
+
 `service.Net`의 Steam 구현은 별도 게임 서버 없이 Steam Lobby로 방을 관리하고 `ISteamNetworkingMessages`의 reliable P2P 메시지로 멤버 요청과 호스트 응답을 전달한다. Steam 방의 `Id`는 Lobby SteamID의 10진수 문자열이고, `Code`는 같은 ID를 13자리 Base32 문자열로 표현한 값이다.
 
 `IsPrivate` 방은 Steam의 `Invisible` Lobby로 만든다. 패키지의 일반 Lobby 목록에서는 제외하면서 코드 참가를 유지하기 위한 선택이며, Steam 서비스나 변조된 클라이언트에 대한 보안·비밀성 경계는 아니다. `IsLocked` 방은 참가 불가로 설정되며, Steam은 참가 불가이거나 정원이 찬 Lobby를 검색 결과에서 제외하므로 Anonymous처럼 목록에 계속 표시되지 않는다. 한 번의 Lobby 조회는 Steam 제한에 맞춰 최대 50개를 반환한다.

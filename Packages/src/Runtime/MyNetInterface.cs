@@ -37,5 +37,6 @@
         MyNetMemberServiceInterface Member { get; }
         MyNetPlayerServiceInterface Player { get; }
         MyNetRoomServiceInterface Room { get; }
+        bool UseLocal { get; set; }
     }
 }

@@ -34,12 +34,18 @@ namespace oojjrs.oplat.anonymous
 
         private string _account;
         private bool _isInitialized;
+        private bool _useLocal;
 
         MyNetHostServiceInterface MyNetInterface.Host => HostService;
         MyNetLobbyServiceInterface MyNetInterface.Lobby => LobbyService;
         MyNetMemberServiceInterface MyNetInterface.Member => MemberService;
         MyNetPlayerServiceInterface MyNetInterface.Player => PlayerService;
         MyNetRoomServiceInterface MyNetInterface.Room => RoomService;
+        bool MyNetInterface.UseLocal
+        {
+            get => _useLocal;
+            set => _useLocal = value;
+        }
 
         internal MyNetHostResultInterface HostResult { get; private set; }
         internal MyNetMemberResultInterface MemberResult { get; private set; }
@@ -125,6 +131,13 @@ namespace oojjrs.oplat.anonymous
             {
                 if (_isInitialized)
                 {
+                    if (_useLocal)
+                    {
+                        HandleLocalMessages();
+                        await Task.Delay(1, cancellationToken);
+                        continue;
+                    }
+
                     var room = await GetCurrentRoomAsync(cancellationToken);
                     cancellationToken.ThrowIfCancellationRequested();
 
@@ -194,6 +207,19 @@ namespace oojjrs.oplat.anonymous
 
                 await Task.Delay(1, cancellationToken);
             }
+        }
+
+        private void HandleLocalMessages()
+        {
+            while (HostService.TryDequeue(out var response))
+                MemberService.Receive(response);
+
+            MemberService.HandleResponses();
+
+            while (MemberService.TryDequeue(out var request))
+                HostService.Receive(request);
+
+            HostService.HandleRequests();
         }
 
         internal async Task SendAsync(OperationEnum operation, object argument, CancellationToken cancellationToken)

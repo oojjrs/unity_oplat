@@ -507,6 +507,7 @@ namespace oojjrs.oplat.steam
         private MyNetInterface.Field[] _roomFields = Array.Empty<MyNetInterface.Field>();
         private volatile StateEnum _state;
         private string _title;
+        private bool _useLocal;
 
         internal SteamNet()
         {
@@ -528,6 +529,11 @@ namespace oojjrs.oplat.steam
         MyNetMemberServiceInterface MyNetInterface.Member => Member;
         MyNetPlayerServiceInterface MyNetInterface.Player => Player;
         MyNetRoomServiceInterface MyNetInterface.Room => Room;
+        bool MyNetInterface.UseLocal
+        {
+            get => _useLocal;
+            set => _useLocal = value;
+        }
 
         internal void Initialize(MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
         {
@@ -1075,13 +1081,13 @@ namespace oojjrs.oplat.steam
                 throw new ArgumentNullException(nameof(request));
 
             var state = _state;
-            if ((state != StateEnum.Host) && (state != StateEnum.Member))
+            if ((_useLocal == false) && (state != StateEnum.Host) && (state != StateEnum.Member))
                 return;
 
             lock (OutgoingRequestLock)
             {
                 state = _state;
-                if ((state != StateEnum.Host) && (state != StateEnum.Member))
+                if ((_useLocal == false) && (state != StateEnum.Host) && (state != StateEnum.Member))
                     return;
 
                 if (OutgoingRequests.Count >= MessageQueueCountMax)
@@ -1096,12 +1102,12 @@ namespace oojjrs.oplat.steam
             if (response == null)
                 throw new ArgumentNullException(nameof(response));
 
-            if (_state != StateEnum.Host)
+            if ((_useLocal == false) && (_state != StateEnum.Host))
                 return;
 
             lock (OutgoingResponseLock)
             {
-                if (_state != StateEnum.Host)
+                if ((_useLocal == false) && (_state != StateEnum.Host))
                     return;
 
                 if (OutgoingResponses.Count >= MessageQueueCountMax)
@@ -2177,7 +2183,8 @@ namespace oojjrs.oplat.steam
 
         private void FlushResponses()
         {
-            if (_state != StateEnum.Host)
+            var useLocal = _useLocal;
+            if ((useLocal == false) && (_state != StateEnum.Host))
                 return;
 
             for (var index = 0; index < MessagesPerFrameMax; ++index)
@@ -2189,6 +2196,14 @@ namespace oojjrs.oplat.steam
                         return;
 
                     response = OutgoingResponses.Dequeue();
+                }
+
+                if (useLocal)
+                {
+                    if (IncomingResponses.Count < MessageQueueCountMax)
+                        IncomingResponses.Enqueue(response);
+
+                    continue;
                 }
 
                 try
@@ -2242,8 +2257,9 @@ namespace oojjrs.oplat.steam
 
         private void FlushRequests()
         {
+            var useLocal = _useLocal;
             var state = _state;
-            if ((state != StateEnum.Host) && (state != StateEnum.Member))
+            if ((useLocal == false) && (state != StateEnum.Host) && (state != StateEnum.Member))
                 return;
 
             for (var index = 0; index < MessagesPerFrameMax; ++index)
@@ -2260,7 +2276,7 @@ namespace oojjrs.oplat.steam
                 var removeRequest = false;
                 try
                 {
-                    if (state == StateEnum.Host)
+                    if (useLocal || (state == StateEnum.Host))
                     {
                         if (IncomingRequests.Count >= MessageQueueCountMax)
                             return;
