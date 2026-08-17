@@ -1,6 +1,6 @@
 # OOJJRS' Unity Platform
 
-Unity 프로젝트의 플랫폼 인증 초기화를 한 진입점으로 묶는 패키지다.
+Unity 프로젝트의 플랫폼 인증 초기화와 방·메시지 네트워크 기능을 한 진입점으로 묶는 패키지다.
 
 ## 설치
 
@@ -47,3 +47,21 @@ Steam 구현은 소비 프로젝트에 `STEAMWORKS_NET`이 정의된 경우에�
 Unity Editor에서는 재실행을 요청하지 않는다. Steam 클라이언트를 먼저 실행하고 현재 작업 디렉터리의 개발용 `steam_appid.txt`에 같은 App ID를 제공한다. 개발용 파일은 배포 빌드에 포함하지 않는다. Steam은 Unity Editor 프로세스에 연결되므로 Play Mode를 멈춰도 실행 중 표시가 Editor 종료 전까지 남을 수 있다.
 
 초기화 이후 `SteamPlatform`이 매 프레임 콜백을 처리하고, 플랫폼 오브젝트가 파괴될 때 Steam API를 종료한다. Play Mode 중 스크립트를 다시 컴파일했다면 Play Mode를 재시작한다.
+
+## Steam 네트워크
+
+`service.Net`의 Steam 구현은 별도 게임 서버 없이 Steam Lobby로 방을 관리하고 `ISteamNetworkingMessages`의 reliable P2P 메시지로 멤버 요청과 호스트 응답을 전달한다. Steam 방의 `Id`는 Lobby SteamID의 10진수 문자열이고, `Code`는 같은 ID를 13자리 Base32 문자열로 표현한 값이다.
+
+`IsPrivate` 방은 Steam의 `Invisible` Lobby로 만든다. 패키지의 일반 Lobby 목록에서는 제외하면서 코드 참가를 유지하기 위한 선택이며, Steam 서비스나 변조된 클라이언트에 대한 보안·비밀성 경계는 아니다. `IsLocked` 방은 참가 불가로 설정되며, Steam은 참가 불가이거나 정원이 찬 Lobby를 검색 결과에서 제외하므로 Anonymous처럼 목록에 계속 표시되지 않는다. 한 번의 Lobby 조회는 Steam 제한에 맞춰 최대 50개를 반환한다.
+
+Steam Lobby에는 네이티브 방 비밀번호와 강제 퇴장 기능이 없다. 비밀번호는 Lobby 참가 후 호스트가 검사하고, 강퇴는 호스트가 보낸 제어 메시지를 받은 클라이언트가 스스로 Lobby를 나가는 협조형 기능이다. 승인되지 않았거나 강퇴된 Steam 사용자는 패키지의 논리적 플레이어 목록과 게임 메시지 처리에서 제외하지만, 변조된 클라이언트가 Steam Lobby 자체에 남는 것까지 막지는 못한다.
+
+방과 플레이어의 `Public` 필드는 Lobby metadata로 게시하고, `Member` 필드는 비밀번호 승인을 통과한 피어에게만 reliable P2P 스냅샷으로 전달하며, `Private` 필드는 해당 클라이언트 메모리에만 둔다. 멤버 스냅샷 한 개의 상한은 64 KiB이므로 필드와 플레이어가 이를 넘는 변경이나 입장은 실패한다. 플레이어 갱신 결과를 확인할 수 없으면 서로 다른 상태로 계속 진행하지 않도록 해당 멤버가 방을 나간다. 강퇴 작업의 `OnOk`는 Steam Lobby에서 물리적으로 제거됐다는 뜻이 아니라 논리적 플레이어 목록에서 제거되고 협조형 퇴장 메시지를 보냈다는 뜻이다.
+
+Steam은 호스트가 나가면 다른 멤버에게 Lobby 소유권을 자동 이전하지만 이 패키지는 호스트 이전을 지원하지 않는다. 호스트가 나가거나 소유자가 바뀌면 방을 종료하고 남은 정상 클라이언트도 Lobby를 나간다.
+
+`MyNetHostServiceInterface.Send`와 `MyNetMemberServiceInterface.Send`는 반환값이 없는 전송 큐 API다. 따라서 개별 Steam P2P 전송 실패는 호출자에게 결과 콜백으로 전달되지 않으며, 중요한 애플리케이션 메시지는 상위 프로토콜에서 응답이나 확인 메시지를 정의해야 한다.
+
+Lobby/Room/Player 작업과 플랫폼 종료는 Unity 메인 스레드에서 호출해야 한다. 두 `Send` 메서드는 다른 스레드에서도 큐에 넣을 수 있다. `CreateAsync`와 `JoinAsync` 취소는 Steam의 네이티브 요청을 직접 취소할 수 없으므로 그 결과를 확인하고 늦게 만들어지거나 참가된 Lobby를 정리한 뒤 완료된다. 패키지는 `ISteamNetworkingMessages` 채널 `45831`을 사용하며, 같은 피어에 대해 다른 시스템도 이 API의 전역 session callback을 관리한다면 하나의 dispatcher와 session 소유권 정책으로 조정해야 한다.
+
+저장소의 개발용 `steam_appid.txt`는 Valve의 공유 테스트 App ID인 Spacewar `480`을 사용한다. 다른 개발 프로젝트도 같은 App ID를 사용하므로 패키지는 자체 프로토콜 metadata로 Lobby를 구분하지만, 실제 제품 검증과 배포에는 해당 Steamworks 앱의 App ID를 사용해야 한다.

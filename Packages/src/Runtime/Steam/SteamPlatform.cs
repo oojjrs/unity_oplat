@@ -29,25 +29,40 @@ namespace oojjrs.oplat.steam
 
         private void OnDestroy()
         {
-            _avatarImageLoadedSource?.TrySetCanceled();
-            _avatarImageLoadedCallback?.Dispose();
+            var shutdownSteam = _isInitialized;
+            _isInitialized = false;
+            try
+            {
+                _net.Shutdown();
+            }
+            finally
+            {
+                try
+                {
+                    _avatarImageLoadedSource?.TrySetCanceled();
+                    _avatarImageLoadedCallback?.Dispose();
 
-            if (_profileSprite != null)
-                Destroy(_profileSprite);
+                    if (_profileSprite != null)
+                        Destroy(_profileSprite);
 
-            if (_profileSpriteTexture != null)
-                Destroy(_profileSpriteTexture);
-
-            if (_isInitialized == false)
-                return;
-
-            SteamAPI.Shutdown();
+                    if (_profileSpriteTexture != null)
+                        Destroy(_profileSpriteTexture);
+                }
+                finally
+                {
+                    if (shutdownSteam)
+                        SteamAPI.Shutdown();
+                }
+            }
         }
 
         private void Update()
         {
-            if (_isInitialized)
-                SteamAPI.RunCallbacks();
+            if (_isInitialized == false)
+                return;
+
+            SteamAPI.RunCallbacks();
+            _net.Update();
         }
 
         async Task MyPlatform.PlatformInterface.RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken)
@@ -76,6 +91,7 @@ namespace oojjrs.oplat.steam
             if (actualAppId != callback.AppId)
                 throw new InvalidOperationException($"Steam initialized with App ID {actualAppId}, but {callback.AppId} was expected.");
 
+            _net.Initialize(callback.HostResult, callback.MemberResult);
             _profileSprite = await LoadProfileSpriteAsync(cancellationToken);
         }
 

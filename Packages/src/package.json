@@ -1,9 +1,9 @@
 {
   "name": "com.oojjrs.oplat",
   "displayName": "OOJJRS' Unity Platform",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "unity": "6000.0",
-  "description": "Platform authentication initialization for Unity projects.",
+  "description": "Platform authentication and multiplayer networking for Unity projects.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/oojjrs/unity_oplat.git?path=/Packages/src"

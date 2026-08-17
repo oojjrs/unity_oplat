@@ -2,21 +2,30 @@
 
 namespace oojjrs.oplat.steam
 {
+#if STEAMWORKS_NET
     internal class SteamNetLobbyService : MyNetLobbyServiceInterface
     {
+        private readonly SteamNet Net;
+
+        internal SteamNetLobbyService(SteamNet net)
+        {
+            Net = net;
+        }
+
         Task MyNetLobbyServiceInterface.RefreshAsync(MyNetLobbyServiceInterface.ResultInterface result)
         {
-            throw new System.NotImplementedException();
+            return Net.RefreshLobbyAsync(result, System.Threading.CancellationToken.None);
         }
 
         Task MyNetLobbyServiceInterface.StartAsync(MyNetLobbyServiceInterface.ConfigInterface config, MyNetLobbyServiceInterface.ResultInterface result)
         {
-            throw new System.NotImplementedException();
+            return Net.StartLobbyAsync(config, result);
         }
 
         void MyNetLobbyServiceInterface.Stop()
         {
-            throw new System.NotImplementedException();
+            Net.StopLobby();
         }
     }
+#endif
 }
