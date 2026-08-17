@@ -30,6 +30,7 @@ namespace oojjrs.oplat.anonymous.controllers
             var players = room.Players ?? Array.Empty<AnonymousServerRoom.PlayerData>();
             if (room.HostId == requestArgument.PlayerId)
             {
+                AnonymousServerRoom.NotifyExited(room, sessions, requestArgument.PlayerId);
                 roomState.RoomCodes.Remove(room.Code);
                 roomState.Rooms.RemoveAt(roomIndex);
             }
@@ -37,7 +38,12 @@ namespace oojjrs.oplat.anonymous.controllers
             {
                 room.Players = players.Where(player => player.Id != requestArgument.PlayerId).ToArray();
                 if (room.Players.Length != players.Length)
+                {
+                    if ((requestArgument.PlayerId != session.Account) && sessions.TryGetValue(requestArgument.PlayerId, out var exitedSession))
+                        exitedSession.Messages.Send(AnonymousTransport.Message.CreateRoomExited(room.Id));
+
                     await AnonymousServerRoom.NotifyUpdatedAsync(room, sessions, requestArgument.PlayerId);
+                }
             }
 
             return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Success);

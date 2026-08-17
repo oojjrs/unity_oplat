@@ -147,6 +147,17 @@ namespace oojjrs.oplat.anonymous
             internal readonly List<RoomSecret> Rooms = new();
         }
 
+        internal static void NotifyExited(RoomData room, IReadOnlyDictionary<string, AnonymousServerSession> sessions, string excludedPlayerId)
+        {
+            foreach (var player in room.Players ?? Array.Empty<PlayerData>())
+            {
+                if ((player.Id == excludedPlayerId) || (sessions.TryGetValue(player.Id, out var playerSession) == false))
+                    continue;
+
+                playerSession.Messages.Send(AnonymousTransport.Message.CreateRoomExited(room.Id));
+            }
+        }
+
         internal static async Task NotifyUpdatedAsync(RoomData room, IReadOnlyDictionary<string, AnonymousServerSession> sessions, string excludedPlayerId)
         {
             foreach (var player in room.Players ?? Array.Empty<PlayerData>())

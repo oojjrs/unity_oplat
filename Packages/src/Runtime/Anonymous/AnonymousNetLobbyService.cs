@@ -83,8 +83,7 @@ namespace oojjrs.oplat.anonymous
             _nextUpdateTimeSeconds = Time.realtimeSinceStartup + Math.Max(MinimumPollingDelaySeconds, config.PollingDelaySeconds);
             try
             {
-                var room = await Net.GetCurrentRoomAsync(config.CancellationToken);
-                if ((_config == config) && (room == null))
+                if ((_config == config) && (Net.HasCurrentRoom == false))
                     await RefreshAsync(config.CancellationToken, _result);
             }
             catch (OperationCanceledException)

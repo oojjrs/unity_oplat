@@ -20,6 +20,13 @@ namespace oojjrs.oplat.anonymous
             GetCurrentRoom = 8,
         }
 
+        private enum RoomRoleEnum : byte
+        {
+            Host = 1,
+            Member = 2,
+            None = 0,
+        }
+
         internal const int Port = 45831;
 
         private readonly AnonymousClient Client;
@@ -33,7 +40,10 @@ namespace oojjrs.oplat.anonymous
         private readonly AnonymousServer Server = new();
 
         private string _account;
+        private string _currentRoomId;
+        private bool _hasRemoteMember;
         private bool _isInitialized;
+        private RoomRoleEnum _roomRole;
         private bool _useLocal;
 
         MyNetHostServiceInterface MyNetInterface.Host => HostService;
@@ -47,6 +57,7 @@ namespace oojjrs.oplat.anonymous
             set => _useLocal = value;
         }
 
+        internal bool HasCurrentRoom => _roomRole != RoomRoleEnum.None;
         internal MyNetHostResultInterface HostResult { get; private set; }
         internal MyNetMemberResultInterface MemberResult { get; private set; }
         internal MyNetPlayerServiceInterface.UpdateResultInterface PlayerResult { get; private set; }
@@ -82,6 +93,22 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
+        internal void ClearCurrentRoom(string roomId = null)
+        {
+            if ((roomId != null) && (_currentRoomId != roomId))
+                return;
+
+            _currentRoomId = null;
+            _hasRemoteMember = false;
+            _roomRole = RoomRoleEnum.None;
+        }
+
+        internal void ClearCurrentRoomForPlayer(string roomId, string playerId)
+        {
+            if (_account == playerId)
+                ClearCurrentRoom(roomId);
+        }
+
         internal CancellationTokenSource CreateCancellationSource(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -98,7 +125,10 @@ namespace oojjrs.oplat.anonymous
                 var response = await ReceiveAsync(OperationEnum.GetCurrentRoom, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (response.ResultCode == AnonymousServerResponse.ResultCodeEnum.NotFound)
+                {
+                    ClearCurrentRoom();
                     return null;
+                }
 
                 response.EnsureSuccess();
                 var roomData = await response.GetContentAsync<AnonymousServerRoom.RoomData>();
@@ -106,13 +136,23 @@ namespace oojjrs.oplat.anonymous
                 if (roomData == null)
                     throw new FormatException("Invalid anonymous current room response.");
 
-                return roomData.ToNetRoom();
+                var room = roomData.ToNetRoom();
+                SetCurrentRoom(room);
+                return room;
             }
         }
 
-        internal Task<AnonymousServerResponse> ReceiveAsync(OperationEnum operation, CancellationToken cancellationToken)
+        private void HandleLocalMessages()
         {
-            return Client.ReceiveAsync(operation, cancellationToken);
+            while (HostService.TryDequeue(out var response))
+                MemberService.Receive(response);
+
+            MemberService.HandleResponses();
+
+            while (MemberService.TryDequeue(out var request))
+                HostService.Receive(request);
+
+            HostService.HandleRequests();
         }
 
         internal void Initialize(string account, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
@@ -123,6 +163,11 @@ namespace oojjrs.oplat.anonymous
             PlayerResult = playerResult;
             RoomResult = roomResult;
             _isInitialized = true;
+        }
+
+        internal Task<AnonymousServerResponse> ReceiveAsync(OperationEnum operation, CancellationToken cancellationToken)
+        {
+            return Client.ReceiveAsync(operation, cancellationToken);
         }
 
         internal async Task RunServiceLoopAsync(CancellationToken cancellationToken)
@@ -138,10 +183,26 @@ namespace oojjrs.oplat.anonymous
                         continue;
                     }
 
-                    var room = await GetCurrentRoomAsync(cancellationToken);
-                    cancellationToken.ThrowIfCancellationRequested();
+                    while (Client.TryReceiveRoomChanged(out var exitedRoomId, out var updatedContent))
+                    {
+                        if (exitedRoomId != null)
+                        {
+                            ClearCurrentRoom(exitedRoomId);
+                            continue;
+                        }
 
-                    if (room != null)
+                        var roomData = await AnonymousServer.DeserializeAsync<AnonymousServerRoom.RoomData>(updatedContent);
+                        if (roomData == null)
+                            throw new FormatException("Invalid anonymous room update notification.");
+
+                        var updatedRoom = roomData.ToNetRoom();
+                        _hasRemoteMember = updatedRoom.PlayerCount > 1;
+                        RoomResult.OnOk(updatedRoom);
+                    }
+
+                    var roomRole = _roomRole;
+
+                    if (roomRole != RoomRoleEnum.None)
                     {
                         while (Client.TryReceivePlayerUpdated(out var content))
                         {
@@ -152,16 +213,7 @@ namespace oojjrs.oplat.anonymous
                             PlayerResult.OnOk(playerData.ToNetPlayer());
                         }
 
-                        while (Client.TryReceiveRoomUpdated(out var content))
-                        {
-                            var roomData = await AnonymousServer.DeserializeAsync<AnonymousServerRoom.RoomData>(content);
-                            if (roomData == null)
-                                throw new FormatException("Invalid anonymous room update notification.");
-
-                            RoomResult.OnOk(roomData.ToNetRoom());
-                        }
-
-                        if (room.HostId == _account)
+                        if (roomRole == RoomRoleEnum.Host)
                         {
                             // 서버 -> 클라 응답 전송
                             while (HostService.TryDequeue(out var response))
@@ -170,7 +222,7 @@ namespace oojjrs.oplat.anonymous
                                 MemberService.Receive(response);
 
                                 // 나를 제외한 멤버들에게 동기화
-                                if (room.PlayerCount > 1)
+                                if (_hasRemoteMember)
                                     Client.SendHostResponse(MyNetSerializer.Serialize(response));
                             }
                         }
@@ -184,7 +236,7 @@ namespace oojjrs.oplat.anonymous
 
                         // 의도적으로 요청은 응답보다 늦게 처리하는 것이다.
                         // 클라 -> 서버 요청 적재
-                        if (room.HostId == _account)
+                        if (roomRole == RoomRoleEnum.Host)
                         {
                             // 나에게는 즉시 수행
                             while (MemberService.TryDequeue(out var request))
@@ -209,25 +261,19 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
-        private void HandleLocalMessages()
-        {
-            while (HostService.TryDequeue(out var response))
-                MemberService.Receive(response);
-
-            MemberService.HandleResponses();
-
-            while (MemberService.TryDequeue(out var request))
-                HostService.Receive(request);
-
-            HostService.HandleRequests();
-        }
-
         internal async Task SendAsync(OperationEnum operation, object argument, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var content = argument == null ? Array.Empty<byte>() : await Task.Run(() => MyNetSerializer.Serialize(argument));
             cancellationToken.ThrowIfCancellationRequested();
             Client.Send(operation, content);
+        }
+
+        internal void SetCurrentRoom(MyNetRoomInterface room)
+        {
+            _currentRoomId = room.Id;
+            _hasRemoteMember = room.PlayerCount > 1;
+            _roomRole = room.HostId == _account ? RoomRoleEnum.Host : RoomRoleEnum.Member;
         }
 
         internal void Shutdown()

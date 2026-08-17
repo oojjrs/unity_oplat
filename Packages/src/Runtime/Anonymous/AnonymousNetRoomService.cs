@@ -44,6 +44,7 @@ namespace oojjrs.oplat.anonymous
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
+                Net.SetCurrentRoom(room);
                 result.OnOk(room);
             }
         }
@@ -103,6 +104,7 @@ namespace oojjrs.oplat.anonymous
                     return;
                 }
 
+                Net.ClearCurrentRoomForPlayer(roomId, playerId);
                 result.OnOk(roomId, playerId);
             }
         }
@@ -162,6 +164,7 @@ namespace oojjrs.oplat.anonymous
                     return;
                 }
 
+                Net.SetCurrentRoom(room);
                 result.OnOk(room);
             }
         }

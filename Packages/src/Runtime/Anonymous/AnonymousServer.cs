@@ -84,6 +84,7 @@ namespace oojjrs.oplat.anonymous
             var room = RoomState.Rooms[roomIndex];
             if (room.Room.HostId == session.Account)
             {
+                AnonymousServerRoom.NotifyExited(room.Room, Sessions, session.Account);
                 RoomState.RoomCodes.Remove(room.Room.Code);
                 RoomState.Rooms.RemoveAt(roomIndex);
                 return;

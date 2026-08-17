@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -61,6 +62,21 @@ namespace oojjrs.oplat.anonymous
             SendMessage(AnonymousTransport.Message.CreateMemberRequest(content));
         }
 
+        private void SendMessage(AnonymousTransport.Message message)
+        {
+            if (_messages == null)
+                throw new InvalidOperationException("Anonymous client is not connected.");
+
+            _messages.Send(message);
+        }
+
+        internal void Shutdown()
+        {
+            _client?.Close();
+            _client = null;
+            _messages = null;
+        }
+
         internal bool TryReceiveHostResponse(out byte[] content)
         {
             if ((_messages != null) && _messages.TryReceive(message => message.Type == AnonymousTransport.Message.TypeEnum.HostResponse, out var message))
@@ -97,31 +113,26 @@ namespace oojjrs.oplat.anonymous
             return false;
         }
 
-        internal bool TryReceiveRoomUpdated(out byte[] content)
+        internal bool TryReceiveRoomChanged(out string exitedRoomId, out byte[] updatedContent)
         {
-            if ((_messages != null) && _messages.TryReceive(message => message.Type == AnonymousTransport.Message.TypeEnum.RoomUpdated, out var message))
+            if ((_messages != null) && _messages.TryReceive(message => (message.Type == AnonymousTransport.Message.TypeEnum.RoomUpdated) || (message.Type == AnonymousTransport.Message.TypeEnum.RoomExited), out var message))
             {
-                content = message.Content;
+                if (message.Type == AnonymousTransport.Message.TypeEnum.RoomExited)
+                {
+                    exitedRoomId = Encoding.UTF8.GetString(message.Content);
+                    updatedContent = null;
+                    return true;
+                }
+
+                exitedRoomId = null;
+                updatedContent = message.Content;
                 return true;
             }
 
-            content = null;
+            exitedRoomId = null;
+            updatedContent = null;
             return false;
         }
 
-        private void SendMessage(AnonymousTransport.Message message)
-        {
-            if (_messages == null)
-                throw new InvalidOperationException("Anonymous client is not connected.");
-
-            _messages.Send(message);
-        }
-
-        internal void Shutdown()
-        {
-            _client?.Close();
-            _client = null;
-            _messages = null;
-        }
     }
 }
