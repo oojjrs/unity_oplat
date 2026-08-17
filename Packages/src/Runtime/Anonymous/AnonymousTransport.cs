@@ -14,13 +14,14 @@ namespace oojjrs.oplat.anonymous
         {
             internal enum TypeEnum : byte
             {
+                ChatReceived = 8,
+                HostResponse = 4,
+                MemberRequest = 3,
                 Operation = 1,
                 OperationResult = 2,
-                MemberRequest = 3,
-                HostResponse = 4,
-                RoomUpdated = 5,
                 PlayerUpdated = 6,
                 RoomExited = 7,
+                RoomUpdated = 5,
             }
 
             internal byte[] Content { get; }
@@ -34,6 +35,11 @@ namespace oojjrs.oplat.anonymous
                 Operation = operation;
                 ResultCode = resultCode;
                 Type = type;
+            }
+
+            internal static Message CreateChatReceived(byte[] content)
+            {
+                return new Message(TypeEnum.ChatReceived, default, default, content);
             }
 
             internal static Message CreateHostResponse(byte[] content)
@@ -82,13 +88,14 @@ namespace oojjrs.oplat.anonymous
                 var type = (TypeEnum)data[0];
                 return type switch
                 {
+                    TypeEnum.ChatReceived => new Message(type, default, default, data[1..]),
                     TypeEnum.HostResponse => new Message(type, default, default, data[1..]),
                     TypeEnum.MemberRequest => new Message(type, default, default, data[1..]),
-                    TypeEnum.RoomUpdated => new Message(type, default, default, data[1..]),
-                    TypeEnum.PlayerUpdated => new Message(type, default, default, data[1..]),
-                    TypeEnum.RoomExited => new Message(type, default, default, data[1..]),
                     TypeEnum.Operation when data.Length >= 2 => new Message(type, (AnonymousNet.OperationEnum)data[1], default, data[2..]),
                     TypeEnum.OperationResult when data.Length >= 3 => new Message(type, (AnonymousNet.OperationEnum)data[1], (AnonymousServerResponse.ResultCodeEnum)data[2], data[3..]),
+                    TypeEnum.PlayerUpdated => new Message(type, default, default, data[1..]),
+                    TypeEnum.RoomExited => new Message(type, default, default, data[1..]),
+                    TypeEnum.RoomUpdated => new Message(type, default, default, data[1..]),
                     _ => throw new FormatException("Invalid anonymous message."),
                 };
             }
@@ -97,13 +104,14 @@ namespace oojjrs.oplat.anonymous
             {
                 var headerLength = Type switch
                 {
+                    TypeEnum.ChatReceived => 1,
                     TypeEnum.HostResponse => 1,
                     TypeEnum.MemberRequest => 1,
-                    TypeEnum.RoomUpdated => 1,
-                    TypeEnum.PlayerUpdated => 1,
-                    TypeEnum.RoomExited => 1,
                     TypeEnum.Operation => 2,
                     TypeEnum.OperationResult => 3,
+                    TypeEnum.PlayerUpdated => 1,
+                    TypeEnum.RoomExited => 1,
+                    TypeEnum.RoomUpdated => 1,
                     _ => throw new InvalidOperationException("Invalid anonymous message."),
                 };
                 var data = new byte[headerLength + Content.Length];

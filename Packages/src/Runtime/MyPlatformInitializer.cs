@@ -10,6 +10,7 @@ namespace oojjrs.oplat
         {
             string AnonymousInstanceId { get; }
             uint AppId { get; }
+            MyNetChatResultInterface ChatResult { get; }
             MyNetHostResultInterface HostResult { get; }
             MyPlatformTypeEnum InitialType { get; }
             MyNetMemberResultInterface MemberResult { get; }

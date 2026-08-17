@@ -13,7 +13,7 @@ namespace oojjrs.oplat.anonymous.controllers
             public string RoomId { get; set; }
         }
 
-        internal static async Task<AnonymousServerResponse> RunAsync(byte[] content, AnonymousServerRoom.State roomState, IReadOnlyDictionary<string, AnonymousServerSession> sessions, AnonymousServerSession session)
+        internal static async Task<AnonymousServerResponse> RunAsync(byte[] content, AnonymousServerChat.State chatState, AnonymousServerRoom.State roomState, IReadOnlyDictionary<string, AnonymousServerSession> sessions, AnonymousServerSession session)
         {
             var requestArgument = await AnonymousServer.DeserializeAsync<RequestArgument>(content);
             if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.PlayerId) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
@@ -30,12 +30,16 @@ namespace oojjrs.oplat.anonymous.controllers
             var players = room.Players ?? Array.Empty<AnonymousServerRoom.PlayerData>();
             if (room.HostId == requestArgument.PlayerId)
             {
+                foreach (var player in players)
+                    chatState.Remove(player.Id, room.Id);
+
                 AnonymousServerRoom.NotifyExited(room, sessions, requestArgument.PlayerId);
                 roomState.RoomCodes.Remove(room.Code);
                 roomState.Rooms.RemoveAt(roomIndex);
             }
             else
             {
+                chatState.Remove(requestArgument.PlayerId, room.Id);
                 room.Players = players.Where(player => player.Id != requestArgument.PlayerId).ToArray();
                 if (room.Players.Length != players.Length)
                 {

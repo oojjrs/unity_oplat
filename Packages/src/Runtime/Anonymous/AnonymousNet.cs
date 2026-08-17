@@ -12,12 +12,15 @@ namespace oojjrs.oplat.anonymous
         {
             Authenticate = 1,
             CreateRoom = 2,
+            ExitChat = 9,
             ExitRoom = 3,
+            GetCurrentRoom = 8,
             GetRooms = 4,
+            JoinChat = 10,
             JoinRoom = 5,
+            SendChat = 11,
             UpdatePlayer = 6,
             UpdateRoom = 7,
-            GetCurrentRoom = 8,
         }
 
         private enum RoomRoleEnum : byte
@@ -30,6 +33,7 @@ namespace oojjrs.oplat.anonymous
         internal const int Port = 45831;
 
         private readonly AnonymousClient Client;
+        private readonly AnonymousNetChatService ChatService;
         private readonly AnonymousNetHostService HostService;
         private readonly CancellationTokenSource LifetimeCancellationSource = new();
         private readonly CancellationToken LifetimeCancellationToken;
@@ -46,6 +50,7 @@ namespace oojjrs.oplat.anonymous
         private RoomRoleEnum _roomRole;
         private bool _useLocal;
 
+        MyNetChatServiceInterface MyNetInterface.Chat => ChatService;
         MyNetHostServiceInterface MyNetInterface.Host => HostService;
         MyNetLobbyServiceInterface MyNetInterface.Lobby => LobbyService;
         MyNetMemberServiceInterface MyNetInterface.Member => MemberService;
@@ -57,18 +62,21 @@ namespace oojjrs.oplat.anonymous
             set => _useLocal = value;
         }
 
+        internal string Account => _account;
+        internal MyNetChatResultInterface ChatResult { get; private set; }
         internal bool HasCurrentRoom => _roomRole != RoomRoleEnum.None;
         internal MyNetHostResultInterface HostResult { get; private set; }
         internal MyNetMemberResultInterface MemberResult { get; private set; }
         internal MyNetPlayerServiceInterface.UpdateResultInterface PlayerResult { get; private set; }
         internal MyNetRoomServiceInterface.UpdateResultInterface RoomResult { get; private set; }
+        internal bool UseLocal => _useLocal;
 
         internal AnonymousNet()
         {
-            HostService = new(this);
-            // 순서 존나 맘에 안 드네
             LifetimeCancellationToken = LifetimeCancellationSource.Token;
             Client = new AnonymousClient(LifetimeCancellationToken);
+            ChatService = new(this);
+            HostService = new(this);
             LobbyService = new AnonymousNetLobbyService(this);
             MemberService = new(this);
             PlayerService = new AnonymousNetPlayerService(this);
@@ -155,9 +163,10 @@ namespace oojjrs.oplat.anonymous
             HostService.HandleRequests();
         }
 
-        internal void Initialize(string account, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
+        internal void Initialize(string account, MyNetChatResultInterface chatResult, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
         {
             _account = account;
+            ChatResult = chatResult ?? throw new ArgumentNullException(nameof(chatResult));
             HostResult = hostResult;
             MemberResult = memberResult;
             PlayerResult = playerResult;
@@ -176,6 +185,12 @@ namespace oojjrs.oplat.anonymous
             {
                 if (_isInitialized)
                 {
+                    while (Client.TryReceiveChat(out var chatContent))
+                    {
+                        var chat = await AnonymousServer.DeserializeAsync<AnonymousServerChat.MessageData>(chatContent);
+                        ChatResult.OnReceived(chat.Message, chat.PlayerId, chat.RoomId);
+                    }
+
                     if (_useLocal)
                     {
                         HandleLocalMessages();

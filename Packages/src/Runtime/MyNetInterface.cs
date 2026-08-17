@@ -7,8 +7,10 @@
             public enum FailureEnum
             {
                 EmptyCode,
+                EmptyMessage,
                 EmptyPlayerId,
                 EmptyRoomId,
+                MessageTooLong,
                 NotFoundRoom,
                 NotPermitted
             }
@@ -32,6 +34,7 @@
             public VisibilityEnum visibility;
         }
 
+        MyNetChatServiceInterface Chat { get; }
         MyNetHostServiceInterface Host { get; }
         MyNetLobbyServiceInterface Lobby { get; }
         MyNetMemberServiceInterface Member { get; }

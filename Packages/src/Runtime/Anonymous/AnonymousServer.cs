@@ -12,6 +12,7 @@ namespace oojjrs.oplat.anonymous
 {
     internal sealed class AnonymousServer
     {
+        private readonly AnonymousServerChat.State ChatState = new();
         private readonly CancellationTokenSource LifetimeCancellationSource = new();
         private readonly TcpListener Listener = new(IPAddress.Loopback, AnonymousNet.Port);
         private readonly AnonymousServerRoom.State RoomState = new();
@@ -58,10 +59,13 @@ namespace oojjrs.oplat.anonymous
             var response = operation switch
             {
                 AnonymousNet.OperationEnum.CreateRoom => await AnonymousServerCreateRoom.RunAsync(content, RoomState, session),
-                AnonymousNet.OperationEnum.ExitRoom => await AnonymousServerExitRoom.RunAsync(content, RoomState, Sessions, session),
+                AnonymousNet.OperationEnum.ExitChat => await AnonymousServerExitChat.RunAsync(content, ChatState, session),
+                AnonymousNet.OperationEnum.ExitRoom => await AnonymousServerExitRoom.RunAsync(content, ChatState, RoomState, Sessions, session),
                 AnonymousNet.OperationEnum.GetCurrentRoom => await AnonymousServerGetCurrentRoom.RunAsync(RoomState, session),
                 AnonymousNet.OperationEnum.GetRooms => await AnonymousServerGetRooms.RunAsync(RoomState),
+                AnonymousNet.OperationEnum.JoinChat => await AnonymousServerJoinChat.RunAsync(content, ChatState, RoomState, session),
                 AnonymousNet.OperationEnum.JoinRoom => await AnonymousServerJoinRoom.RunAsync(content, RoomState, Sessions, session),
+                AnonymousNet.OperationEnum.SendChat => await AnonymousServerSendChat.RunAsync(content, ChatState, RoomState, Sessions, session),
                 AnonymousNet.OperationEnum.UpdatePlayer => await AnonymousServerUpdatePlayer.RunAsync(content, RoomState, Sessions, session),
                 AnonymousNet.OperationEnum.UpdateRoom => await AnonymousServerUpdateRoom.RunAsync(content, RoomState, Sessions, session),
                 _ => AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.UnsupportedOperation),
@@ -77,6 +81,8 @@ namespace oojjrs.oplat.anonymous
             if (Sessions.TryGetValue(session.Account, out var currentSession) && ReferenceEquals(currentSession, session))
                 Sessions.Remove(session.Account);
 
+            ChatState.Remove(session.Account);
+
             var roomIndex = RoomState.Rooms.FindIndex(secret => (secret.Room.Players ?? Array.Empty<AnonymousServerRoom.PlayerData>()).Any(player => player.Id == session.Account));
             if (roomIndex < 0)
                 return;
@@ -84,6 +90,9 @@ namespace oojjrs.oplat.anonymous
             var room = RoomState.Rooms[roomIndex];
             if (room.Room.HostId == session.Account)
             {
+                foreach (var player in room.Room.Players ?? Array.Empty<AnonymousServerRoom.PlayerData>())
+                    ChatState.Remove(player.Id, room.Room.Id);
+
                 AnonymousServerRoom.NotifyExited(room.Room, Sessions, session.Account);
                 RoomState.RoomCodes.Remove(room.Room.Code);
                 RoomState.Rooms.RemoveAt(roomIndex);

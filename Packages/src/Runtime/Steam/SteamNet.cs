@@ -438,6 +438,7 @@ namespace oojjrs.oplat.steam
         private const int ProtocolVersion = 1;
         private const int RosterChunkCharacterCount = 7000;
         private const int RosterChunkCountMax = 16;
+        private const uint ChatMagic = 0x4f504c48;
         private const uint ControlMagic = 0x4f504c43;
         private const uint MessageMagic = 0x4f504c4e;
         private const string CodeAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -471,15 +472,8 @@ namespace oojjrs.oplat.steam
         private readonly HashSet<ulong> PendingRosterPlayerIds = new();
 
         private TaskCompletionSource<bool> _admissionSource;
-        private Callback<LobbyChatMsg_t> _lobbyChatMessageCallback;
-        private Callback<LobbyChatUpdate_t> _lobbyChatUpdateCallback;
-        private Callback<LobbyDataUpdate_t> _lobbyDataUpdateCallback;
-        private MyNetLobbyServiceInterface.ConfigInterface _lobbyPollingConfig;
-        private int _lobbyPollingGeneration;
-        private MyNetLobbyServiceInterface.ResultInterface _lobbyPollingResult;
-        private CancellationTokenSource _lifetimeSource;
-        private Callback<SteamNetworkingMessagesSessionFailed_t> _messageSessionFailedCallback;
-        private Callback<SteamNetworkingMessagesSessionRequest_t> _messageSessionRequestCallback;
+        private MyNetChatResultInterface _chatResult;
+        private string _chatRoomId;
         private CSteamID _currentLobby;
         private string _epoch;
         private MyNetHostResultInterface _hostResult;
@@ -487,30 +481,40 @@ namespace oojjrs.oplat.steam
         private bool _isLobbyPolling;
         private bool _isLocked;
         private bool _isPrivate;
+        private CancellationTokenSource _lifetimeSource;
+        private Callback<LobbyChatMsg_t> _lobbyChatMessageCallback;
+        private Callback<LobbyChatUpdate_t> _lobbyChatUpdateCallback;
+        private Callback<LobbyDataUpdate_t> _lobbyDataUpdateCallback;
+        private MyNetLobbyServiceInterface.ConfigInterface _lobbyPollingConfig;
+        private int _lobbyPollingGeneration;
+        private MyNetLobbyServiceInterface.ResultInterface _lobbyPollingResult;
         private MyNetInterface.Field[] _localPlayerFields = Array.Empty<MyNetInterface.Field>();
         private string _localPlayerNickname;
         private ulong _localSteamId;
         private int _mainThreadId;
         private int _maxPlayers;
-        private MyNetInterface.Field[] _memberRoomFields = Array.Empty<MyNetInterface.Field>();
         private MyNetMemberResultInterface _memberResult;
-        private MyNetPlayerServiceInterface.UpdateResultInterface _playerResult;
-        private MyNetRoomServiceInterface.UpdateResultInterface _roomResult;
+        private MyNetInterface.Field[] _memberRoomFields = Array.Empty<MyNetInterface.Field>();
+        private Callback<SteamNetworkingMessagesSessionFailed_t> _messageSessionFailedCallback;
+        private Callback<SteamNetworkingMessagesSessionRequest_t> _messageSessionRequestCallback;
         private float _nextLobbyPollTimeSeconds;
+        private ulong _nextPlayerUpdateId;
         private ulong _originalHostId;
         private string _password;
-        private byte[] _pendingRosterPayload;
-        private MessageKind _pendingRosterKind;
         private ulong _pendingPlayerUpdateId;
+        private MessageKind _pendingRosterKind;
+        private byte[] _pendingRosterPayload;
+        private MyNetPlayerServiceInterface.UpdateResultInterface _playerResult;
         private TaskCompletionSource<PlayerUpdateOutcomeEnum> _playerUpdateSource;
-        private ulong _nextPlayerUpdateId;
         private MyNetInterface.Field[] _roomFields = Array.Empty<MyNetInterface.Field>();
+        private MyNetRoomServiceInterface.UpdateResultInterface _roomResult;
         private volatile StateEnum _state;
         private string _title;
         private bool _useLocal;
 
         internal SteamNet()
         {
+            Chat = new SteamNetChatService(this);
             Host = new SteamNetHostService(this);
             Lobby = new SteamNetLobbyService(this);
             Member = new SteamNetMemberService(this);
@@ -518,12 +522,14 @@ namespace oojjrs.oplat.steam
             Room = new SteamNetRoomService(this);
         }
 
+        private MyNetChatServiceInterface Chat { get; }
         private MyNetHostServiceInterface Host { get; }
         private MyNetLobbyServiceInterface Lobby { get; }
         private MyNetMemberServiceInterface Member { get; }
         private MyNetPlayerServiceInterface Player { get; }
         private MyNetRoomServiceInterface Room { get; }
 
+        MyNetChatServiceInterface MyNetInterface.Chat => Chat;
         MyNetHostServiceInterface MyNetInterface.Host => Host;
         MyNetLobbyServiceInterface MyNetInterface.Lobby => Lobby;
         MyNetMemberServiceInterface MyNetInterface.Member => Member;
@@ -535,11 +541,12 @@ namespace oojjrs.oplat.steam
             set => _useLocal = value;
         }
 
-        internal void Initialize(MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
+        internal void Initialize(MyNetChatResultInterface chatResult, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
         {
             if (_isInitialized)
                 return;
 
+            _chatResult = chatResult ?? throw new ArgumentNullException(nameof(chatResult));
             _hostResult = hostResult ?? throw new ArgumentNullException(nameof(hostResult));
             _memberResult = memberResult ?? throw new ArgumentNullException(nameof(memberResult));
             _playerResult = playerResult ?? throw new ArgumentNullException(nameof(playerResult));
@@ -698,6 +705,205 @@ namespace oojjrs.oplat.steam
             ++_lobbyPollingGeneration;
             _lobbyPollingConfig = null;
             _lobbyPollingResult = null;
+        }
+
+        internal async Task ExitChatAsync(MyNetChatServiceInterface.ExitConfigInterface config, MyNetChatServiceInterface.ExitResultInterface result)
+        {
+            EnsureInitialized();
+            var roomId = config.RoomId;
+            if (string.IsNullOrWhiteSpace(roomId))
+            {
+                result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyRoomId);
+                return;
+            }
+
+            using (var cancellationSource = CreateCancellationSource(config.CancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                if (_useLocal)
+                {
+                    result.OnOk(roomId);
+                    return;
+                }
+
+                if (await OperationGate.WaitAsync(0, cancellationToken) == false)
+                {
+                    result.OnBusy();
+                    return;
+                }
+
+                MyNetInterface.CatchInterface.FailureEnum? failure = null;
+                Exception caughtException = null;
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    EnsureCurrentRoom(roomId);
+                    if (_chatRoomId != roomId)
+                        throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
+
+                    _chatRoomId = null;
+                }
+                catch (FailureException exception)
+                {
+                    failure = exception.Failure;
+                }
+                catch (Exception exception)
+                {
+                    caughtException = exception;
+                }
+                finally
+                {
+                    OperationGate.Release();
+                }
+
+                if (failure.HasValue || (caughtException != null))
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                if (failure.HasValue)
+                    result.OnFailed(failure.Value);
+                else if (caughtException != null)
+                    result.OnException(new MyNetSessionException("Failed to exit Steam chat.", caughtException));
+                else
+                    result.OnOk(roomId);
+            }
+        }
+
+        internal async Task JoinChatAsync(MyNetChatServiceInterface.JoinConfigInterface config, MyNetChatServiceInterface.JoinResultInterface result)
+        {
+            EnsureInitialized();
+            var roomId = config.RoomId;
+            if (string.IsNullOrWhiteSpace(roomId))
+            {
+                result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyRoomId);
+                return;
+            }
+
+            using (var cancellationSource = CreateCancellationSource(config.CancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                if (_useLocal)
+                {
+                    result.OnOk(roomId);
+                    return;
+                }
+
+                if (await OperationGate.WaitAsync(0, cancellationToken) == false)
+                {
+                    result.OnBusy();
+                    return;
+                }
+
+                MyNetInterface.CatchInterface.FailureEnum? failure = null;
+                Exception caughtException = null;
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    EnsureCurrentRoom(roomId);
+                    if (AcceptedPlayerIds.Contains(_localSteamId) == false)
+                        throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
+
+                    _chatRoomId = roomId;
+                }
+                catch (FailureException exception)
+                {
+                    failure = exception.Failure;
+                }
+                catch (Exception exception)
+                {
+                    caughtException = exception;
+                }
+                finally
+                {
+                    OperationGate.Release();
+                }
+
+                if (failure.HasValue || (caughtException != null))
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                if (failure.HasValue)
+                    result.OnFailed(failure.Value);
+                else if (caughtException != null)
+                    result.OnException(new MyNetSessionException("Failed to join Steam chat.", caughtException));
+                else
+                    result.OnOk(roomId);
+            }
+        }
+
+        internal async Task SendChatAsync(MyNetChatServiceInterface.SendConfigInterface config, MyNetChatServiceInterface.SendResultInterface result)
+        {
+            EnsureInitialized();
+            var message = config.Message;
+            var roomId = config.RoomId;
+            if (string.IsNullOrWhiteSpace(roomId))
+            {
+                result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyRoomId);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyMessage);
+                return;
+            }
+
+            if (Encoding.UTF8.GetByteCount(message) > SteamNetChatService.MessageByteCountMax)
+            {
+                result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.MessageTooLong);
+                return;
+            }
+
+            using (var cancellationSource = CreateCancellationSource(config.CancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                if (_useLocal)
+                {
+                    _chatResult.OnReceived(message, _localSteamId.ToString(), roomId);
+                    result.OnOk(roomId);
+                    return;
+                }
+
+                if (await OperationGate.WaitAsync(0, cancellationToken) == false)
+                {
+                    result.OnBusy();
+                    return;
+                }
+
+                MyNetInterface.CatchInterface.FailureEnum? failure = null;
+                Exception caughtException = null;
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    EnsureCurrentRoom(roomId);
+                    if ((_chatRoomId != roomId) || (AcceptedPlayerIds.Contains(_localSteamId) == false))
+                        throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
+
+                    var data = EncodeChat(message);
+                    if (SteamMatchmaking.SendLobbyChatMsg(_currentLobby, data, data.Length) == false)
+                        throw new InvalidOperationException("Steam rejected the chat message.");
+                }
+                catch (FailureException exception)
+                {
+                    failure = exception.Failure;
+                }
+                catch (Exception exception)
+                {
+                    caughtException = exception;
+                }
+                finally
+                {
+                    OperationGate.Release();
+                }
+
+                if (failure.HasValue || (caughtException != null))
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                if (failure.HasValue)
+                    result.OnFailed(failure.Value);
+                else if (caughtException != null)
+                    result.OnException(new MyNetSessionException("Failed to send Steam chat message.", caughtException));
+                else
+                    result.OnOk(roomId);
+            }
         }
 
         internal async Task CreateRoomAsync(MyNetRoomServiceInterface.CreateConfigInterface config, MyNetRoomServiceInterface.CreateResultInterface result)
@@ -1695,6 +1901,7 @@ namespace oojjrs.oplat.steam
             _playerUpdateSource?.TrySetResult(PlayerUpdateOutcomeEnum.Unknown);
             _playerUpdateSource = null;
             _pendingPlayerUpdateId = 0;
+            _chatRoomId = null;
             _currentLobby = CSteamID.Nil;
             _originalHostId = 0;
             _epoch = null;
@@ -1892,18 +2099,36 @@ namespace oojjrs.oplat.steam
         {
             try
             {
-                if ((_currentLobby.m_SteamID == 0) || (callback.m_ulSteamIDLobby != _currentLobby.m_SteamID) || (callback.m_ulSteamIDUser != _originalHostId) || (callback.m_iChatID > int.MaxValue))
+                if ((_currentLobby.m_SteamID == 0) || (callback.m_ulSteamIDLobby != _currentLobby.m_SteamID) || (callback.m_iChatID > int.MaxValue))
                     return;
 
-                var data = new byte[256];
+                var data = new byte[4096];
                 var length = SteamMatchmaking.GetLobbyChatEntry(_currentLobby, (int)callback.m_iChatID, out var sender, data, data.Length, out var entryType);
-                if ((length <= 0) || (sender.m_SteamID != _originalHostId) || (entryType != EChatEntryType.k_EChatEntryTypeChatMsg))
+                if ((length <= 0) || (entryType != EChatEntryType.k_EChatEntryTypeChatMsg))
                     return;
 
                 using (var stream = new MemoryStream(data, 0, length, false))
                 using (var reader = new BinaryReader(stream, Encoding.UTF8))
                 {
-                    if ((reader.ReadUInt32() != ControlMagic) || (reader.ReadByte() != ProtocolVersion))
+                    var magic = reader.ReadUInt32();
+                    if (reader.ReadByte() != ProtocolVersion)
+                        return;
+
+                    if (magic == ChatMagic)
+                    {
+                        var roomId = _currentLobby.m_SteamID.ToString();
+                        if ((_chatRoomId != roomId) || (AcceptedPlayerIds.Contains(sender.m_SteamID) == false))
+                            return;
+
+                        var message = reader.ReadString();
+                        if ((Encoding.UTF8.GetByteCount(message) > SteamNetChatService.MessageByteCountMax) || (stream.Position != stream.Length))
+                            return;
+
+                        _chatResult.OnReceived(message, sender.m_SteamID.ToString(), roomId);
+                        return;
+                    }
+
+                    if ((magic != ControlMagic) || (sender.m_SteamID != _originalHostId))
                         return;
 
                     var kind = (MessageKind)reader.ReadByte();
@@ -1918,7 +2143,25 @@ namespace oojjrs.oplat.steam
             }
             catch (Exception exception)
             {
-                Debug.LogWarning($"Dropped invalid Steam lobby control message: {exception.Message}");
+                Debug.LogWarning($"Dropped invalid Steam lobby message: {exception.Message}");
+            }
+        }
+
+        private static byte[] EncodeChat(string message)
+        {
+            using (var stream = new MemoryStream())
+            {
+                using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
+                {
+                    writer.Write(ChatMagic);
+                    writer.Write((byte)ProtocolVersion);
+                    writer.Write(message);
+                }
+
+                if (stream.Length > 4096)
+                    throw new FormatException("Steam chat message exceeds the lobby message size limit.");
+
+                return stream.ToArray();
             }
         }
 
