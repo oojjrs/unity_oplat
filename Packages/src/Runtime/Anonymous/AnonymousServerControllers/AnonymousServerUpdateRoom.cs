@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous.controllers
@@ -12,7 +13,7 @@ namespace oojjrs.oplat.anonymous.controllers
             public string RoomId { get; set; }
         }
 
-        internal static async Task<AnonymousServerResponse> RunAsync(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
+        internal static async Task<AnonymousServerResponse> RunAsync(byte[] content, AnonymousServerRoom.State roomState, IReadOnlyDictionary<string, AnonymousServerSession> sessions, AnonymousServerSession session)
         {
             var requestArgument = await AnonymousServer.DeserializeAsync<RequestArgument>(content);
             if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
@@ -32,6 +33,15 @@ namespace oojjrs.oplat.anonymous.controllers
 
             room.Fields = AnonymousServerRoom.FieldData.Merge(room.Fields, requestArgument.RoomFields);
             room.IsPrivate = requestArgument.IsPrivate;
+
+            foreach (var player in room.Players ?? Array.Empty<AnonymousServerRoom.PlayerData>())
+            {
+                if ((player.Id == session.Account) || (sessions.TryGetValue(player.Id, out var playerSession) == false))
+                    continue;
+
+                var memberResponse = await AnonymousServerResponse.CreateAsync(AnonymousServerResponse.ResultCodeEnum.Success, room.GetMemberResponseArgument(player.Id));
+                playerSession.Messages.Send(AnonymousTransport.Message.CreateRoomUpdated(memberResponse.Content));
+            }
 
             return await AnonymousServerResponse.CreateAsync(AnonymousServerResponse.ResultCodeEnum.Success, room.GetMemberResponseArgument(session.Account));
         }

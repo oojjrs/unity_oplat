@@ -43,6 +43,7 @@ namespace oojjrs.oplat.anonymous
 
         internal MyNetHostResultInterface HostResult { get; private set; }
         internal MyNetMemberResultInterface MemberResult { get; private set; }
+        internal MyNetRoomServiceInterface.UpdateResultInterface RoomResult { get; private set; }
 
         internal AnonymousNet()
         {
@@ -107,11 +108,12 @@ namespace oojjrs.oplat.anonymous
             return Client.ReceiveAsync(operation, cancellationToken);
         }
 
-        internal void Initialize(string account, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult)
+        internal void Initialize(string account, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
         {
             _account = account;
             HostResult = hostResult;
             MemberResult = memberResult;
+            RoomResult = roomResult;
             _isInitialized = true;
         }
 
@@ -126,6 +128,15 @@ namespace oojjrs.oplat.anonymous
 
                     if (room != null)
                     {
+                        while (Client.TryReceiveRoomUpdated(out var content))
+                        {
+                            var roomData = await AnonymousServer.DeserializeAsync<AnonymousServerRoom.RoomData>(content);
+                            if (roomData == null)
+                                throw new FormatException("Invalid anonymous room update notification.");
+
+                            RoomResult.OnOk(roomData.ToNetRoom());
+                        }
+
                         if (room.HostId == _account)
                         {
                             // 서버 -> 클라 응답 전송

@@ -493,6 +493,7 @@ namespace oojjrs.oplat.steam
         private int _maxPlayers;
         private MyNetInterface.Field[] _memberRoomFields = Array.Empty<MyNetInterface.Field>();
         private MyNetMemberResultInterface _memberResult;
+        private MyNetRoomServiceInterface.UpdateResultInterface _roomResult;
         private float _nextLobbyPollTimeSeconds;
         private ulong _originalHostId;
         private string _password;
@@ -525,13 +526,14 @@ namespace oojjrs.oplat.steam
         MyNetPlayerServiceInterface MyNetInterface.Player => Player;
         MyNetRoomServiceInterface MyNetInterface.Room => Room;
 
-        internal void Initialize(MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult)
+        internal void Initialize(MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
         {
             if (_isInitialized)
                 return;
 
             _hostResult = hostResult ?? throw new ArgumentNullException(nameof(hostResult));
             _memberResult = memberResult ?? throw new ArgumentNullException(nameof(memberResult));
+            _roomResult = roomResult ?? throw new ArgumentNullException(nameof(roomResult));
             _mainThreadId = Environment.CurrentManagedThreadId;
             var localSteamId = SteamUser.GetSteamID();
             if ((localSteamId.IsValid() == false) || (localSteamId.BIndividualAccount() == false))
@@ -2036,6 +2038,8 @@ namespace oojjrs.oplat.steam
                         ApplyMemberSnapshot(payload);
                         if (AcceptedPlayerIds.Contains(_localSteamId) == false)
                             ResetSession(true, StateEnum.Ready);
+                        else
+                            _roomResult.OnOk(BuildCurrentRoom());
                     }
                     break;
                 case MessageKind.PlayerDataChanged:
