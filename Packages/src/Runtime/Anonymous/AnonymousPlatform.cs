@@ -8,6 +8,7 @@ namespace oojjrs.oplat.anonymous
     internal class AnonymousPlatform : MonoBehaviour, MyPlatform.PlatformInterface
     {
         private readonly AnonymousNet Net = new();
+        private readonly AnonymousStorage _storage = new();
 
         private string _account;
         private bool _isInitialized;
@@ -20,10 +21,18 @@ namespace oojjrs.oplat.anonymous
         MyNetInterface MyPlatformServiceInterface.Net => Net;
         string MyPlatformServiceInterface.Nickname => _nickname ?? GetNickname();
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
+        MyStorageServiceInterface MyPlatformServiceInterface.Storage => _storage;
 
         private void OnDestroy()
         {
-            Net.Shutdown();
+            try
+            {
+                _storage.Shutdown();
+            }
+            finally
+            {
+                Net.Shutdown();
+            }
         }
 
         private async void Start()
@@ -65,6 +74,26 @@ namespace oojjrs.oplat.anonymous
             return nameof(AnonymousPlatform);
         }
 
+        private static string GetStorageProjectKey()
+        {
+            var identifier = Application.identifier?.Trim();
+            if (string.IsNullOrEmpty(identifier) == false)
+                return identifier;
+
+            var companyName = Application.companyName?.Trim();
+            var productName = Application.productName?.Trim();
+            if (string.IsNullOrEmpty(companyName) == false && string.IsNullOrEmpty(productName) == false)
+                return $"{companyName}.{productName}";
+
+            if (string.IsNullOrEmpty(productName) == false)
+                return productName;
+
+            if (string.IsNullOrEmpty(companyName) == false)
+                return companyName;
+
+            return nameof(AnonymousPlatform);
+        }
+
         async Task MyPlatform.PlatformInterface.RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -82,6 +111,7 @@ namespace oojjrs.oplat.anonymous
 
             _account = account;
             _nickname = nickname;
+            _storage.Initialize(callback.AppId, GetStorageProjectKey(), _account);
 
             var profileSpriteRequest = Resources.LoadAsync<Sprite>("AnonymousProfile");
             await Awaitable.FromAsyncOperation(profileSpriteRequest, cancellationToken);

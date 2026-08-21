@@ -1,6 +1,6 @@
 # OOJJRS' Unity Platform
 
-Unity 프로젝트의 플랫폼 인증 초기화와 방·메시지 네트워크 기능을 한 진입점으로 묶는 패키지다.
+Unity 프로젝트의 플랫폼 인증 초기화, 사용자 파일 저장소와 방·메시지 네트워크 기능을 한 진입점으로 묶는 패키지다.
 
 ## 설치
 
@@ -47,6 +47,16 @@ Steam 구현은 소비 프로젝트에 `STEAMWORKS_NET`이 정의된 경우에�
 Unity Editor에서는 재실행을 요청하지 않는다. Steam 클라이언트를 먼저 실행하고 현재 작업 디렉터리의 개발용 `steam_appid.txt`에 같은 App ID를 제공한다. 개발용 파일은 배포 빌드에 포함하지 않는다. Steam은 Unity Editor 프로세스에 연결되므로 Play Mode를 멈춰도 실행 중 표시가 Editor 종료 전까지 남을 수 있다.
 
 초기화 이후 `SteamPlatform`이 매 프레임 콜백을 처리하고, 플랫폼 오브젝트가 파괴될 때 Steam API를 종료한다. Play Mode 중 스크립트를 다시 컴파일했다면 Play Mode를 재시작한다.
+
+## 플랫폼 저장소
+
+`service.Storage`는 플랫폼별 사용자 저장소를 파일 단위 raw bytes API로 제공한다. 직렬화 형식은 소비 프로젝트가 결정하며, `FileByteCountMax`는 한 파일의 상한인 100 MiB를 반환한다. `WriteAsync`는 데이터를 새 파일로 쓰거나 기존 파일 전체를 덮어쓰고, 빈 배열도 0-byte 파일로 저장한다. `ReadAsync` 결과의 `IsFound`가 `false`이면 파일이 없으며 이때 `Data`는 빈 배열이다. `IsFound`가 `true`이면서 `Data`가 비어 있으면 존재하는 0-byte 파일이다. `ExistsAsync`는 존재 여부를, `DeleteAsync`는 존재하던 파일을 삭제했는지를 반환한다.
+
+`ListAsync`는 `FileName`, `SizeBytes`, `LastWriteTimeUtc`를 가진 파일 스냅샷을 반환하며 파일이 없으면 빈 목록을 반환한다. 수정 시각은 UTC지만 플랫폼별 시각 해상도는 다를 수 있다. 파일명은 `/`를 구분자로 쓰는 portable relative path다. 절대 경로, `\\`, 빈 경로 구간, `.`이나 `..`, 지원 플랫폼에서 유효하지 않은 이름은 거부한다.
+
+Anonymous 저장소는 로컬 서버를 거치지 않고 현재 프로세스가 `%LOCALAPPDATA%\oojjrs\Oplat\AnonymousStorage\v1\<project-key SHA-256>\<AppId>\users\<account SHA-256>\files\<logical path>`를 직접 사용한다. Project Key는 `Application.identifier`이고, 값이 없으면 company/product 이름으로 대체하며 프로젝트, App ID와 Account별로 격리한다. 이는 같은 Windows 계정의 Editor와 빌드에서 사용하는 로컬 개발용 저장소이며 신뢰할 수 있는 원격 서버 데이터베이스가 아니다.
+
+Steam 저장소를 사용하려면 Steamworks App Admin에서 사용자별 byte quota와 file count를 설정하고 Cloud 설정을 저장·게시해야 한다. Storage Task의 완료는 현재 프로세스에서 `ISteamRemoteStorage` 작업이 완료됐다는 뜻이며, 다른 기기에서 사용할 수 있게 되는 후속 업로드·다운로드는 Steam 클라이언트의 Cloud 동기화가 담당한다. Steam Storage 호출은 Unity 메인 스레드에서 시작해야 한다. 취소는 작업이 백엔드에 전달되기 전까지만 즉시 적용되며, 전달된 뒤에는 변경을 롤백하거나 성공을 취소로 오인하지 않도록 실제 결과까지 기다린다.
 
 ## Steam 네트워크
 

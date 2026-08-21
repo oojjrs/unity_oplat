@@ -12,6 +12,7 @@ namespace oojjrs.oplat.steam
         private const int ProfileSpriteLoadTimeoutMilliseconds = 5000;
 
         private readonly SteamNet _net = new();
+        private readonly SteamStorage _storage = new();
 
         private Callback<AvatarImageLoaded_t> _avatarImageLoadedCallback;
         private TaskCompletionSource<bool> _avatarImageLoadedSource;
@@ -26,6 +27,7 @@ namespace oojjrs.oplat.steam
         MyNetInterface MyPlatformServiceInterface.Net => _net;
         string MyPlatformServiceInterface.Nickname => SteamFriends.GetPersonaName();
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
+        MyStorageServiceInterface MyPlatformServiceInterface.Storage => _storage;
 
         private void OnDestroy()
         {
@@ -33,25 +35,32 @@ namespace oojjrs.oplat.steam
             _isInitialized = false;
             try
             {
-                _net.Shutdown();
+                _storage.Shutdown();
             }
             finally
             {
                 try
                 {
-                    _avatarImageLoadedSource?.TrySetCanceled();
-                    _avatarImageLoadedCallback?.Dispose();
-
-                    if (_profileSprite != null)
-                        Destroy(_profileSprite);
-
-                    if (_profileSpriteTexture != null)
-                        Destroy(_profileSpriteTexture);
+                    _net.Shutdown();
                 }
                 finally
                 {
-                    if (shutdownSteam)
-                        SteamAPI.Shutdown();
+                    try
+                    {
+                        _avatarImageLoadedSource?.TrySetCanceled();
+                        _avatarImageLoadedCallback?.Dispose();
+
+                        if (_profileSprite != null)
+                            Destroy(_profileSprite);
+
+                        if (_profileSpriteTexture != null)
+                            Destroy(_profileSpriteTexture);
+                    }
+                    finally
+                    {
+                        if (shutdownSteam)
+                            SteamAPI.Shutdown();
+                    }
                 }
             }
         }
@@ -91,6 +100,7 @@ namespace oojjrs.oplat.steam
             if (actualAppId != callback.AppId)
                 throw new InvalidOperationException($"Steam initialized with App ID {actualAppId}, but {callback.AppId} was expected.");
 
+            _storage.Initialize();
             _net.Initialize(callback.ChatResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomResult);
             _profileSprite = await LoadProfileSpriteAsync(cancellationToken);
         }
