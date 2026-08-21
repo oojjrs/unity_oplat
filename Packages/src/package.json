@@ -1,7 +1,7 @@
 {
   "name": "com.oojjrs.oplat",
   "displayName": "OOJJRS' Unity Platform",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "unity": "6000.0",
   "description": "Platform authentication, raw-byte user storage, and multiplayer networking for Unity projects.",
   "repository": {

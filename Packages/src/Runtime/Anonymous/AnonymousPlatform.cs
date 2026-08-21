@@ -111,7 +111,6 @@ namespace oojjrs.oplat.anonymous
 
             _account = account;
             _nickname = nickname;
-            _storage.Initialize(callback.AppId, GetStorageProjectKey(), _account);
 
             var profileSpriteRequest = Resources.LoadAsync<Sprite>("AnonymousProfile");
             await Awaitable.FromAsyncOperation(profileSpriteRequest, cancellationToken);
@@ -123,6 +122,7 @@ namespace oojjrs.oplat.anonymous
             cancellationToken.ThrowIfCancellationRequested();
 
             Net.Initialize(_account, callback.ChatResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomResult);
+            _storage.Initialize(callback.AppId, GetStorageProjectKey(), _account);
 
             _isInitialized = true;
         }
