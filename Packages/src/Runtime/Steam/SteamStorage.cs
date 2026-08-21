@@ -11,8 +11,6 @@ namespace oojjrs.oplat.steam
     {
         private static readonly byte[] EmptyNativeData = new byte[1];
 
-        private readonly SemaphoreSlim OperationGate = new(1, 1);
-
         private bool _isInitialized;
         private CancellationTokenSource _lifetimeSource;
         private int _mainThreadId;
@@ -33,23 +31,15 @@ namespace oojjrs.oplat.steam
             using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
-                await OperationGate.WaitAsync(cancellationToken);
-                try
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    if (SteamRemoteStorage.FileExists(fileName) == false)
-                        return false;
+                cancellationToken.ThrowIfCancellationRequested();
+                if (SteamRemoteStorage.FileExists(fileName) == false)
+                    return await Task.FromResult(false);
 
-                    cancellationToken.ThrowIfCancellationRequested();
-                    if (SteamRemoteStorage.FileDelete(fileName) == false)
-                        throw new InvalidOperationException($"Steam failed to delete storage file '{fileName}'.");
+                cancellationToken.ThrowIfCancellationRequested();
+                if (SteamRemoteStorage.FileDelete(fileName) == false)
+                    throw new InvalidOperationException($"Steam failed to delete storage file '{fileName}'.");
 
-                    return true;
-                }
-                finally
-                {
-                    OperationGate.Release();
-                }
+                return await Task.FromResult(true);
             }
         }
 
@@ -60,16 +50,8 @@ namespace oojjrs.oplat.steam
             using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
-                await OperationGate.WaitAsync(cancellationToken);
-                try
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    return SteamRemoteStorage.FileExists(fileName);
-                }
-                finally
-                {
-                    OperationGate.Release();
-                }
+                cancellationToken.ThrowIfCancellationRequested();
+                return await Task.FromResult(SteamRemoteStorage.FileExists(fileName));
             }
         }
 
@@ -79,37 +61,29 @@ namespace oojjrs.oplat.steam
             using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
-                await OperationGate.WaitAsync(cancellationToken);
-                try
+                cancellationToken.ThrowIfCancellationRequested();
+                var fileCount = SteamRemoteStorage.GetFileCount();
+                if (fileCount < 0)
+                    throw new InvalidOperationException("Steam returned an invalid storage file count.");
+
+                var files = new List<MyStorageServiceInterface.FileInfo>(fileCount);
+                for (var index = 0; index < fileCount; ++index)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var fileCount = SteamRemoteStorage.GetFileCount();
-                    if (fileCount < 0)
-                        throw new InvalidOperationException("Steam returned an invalid storage file count.");
+                    var fileName = SteamRemoteStorage.GetFileNameAndSize(index, out var sizeBytes);
+                    if (string.IsNullOrEmpty(fileName))
+                        continue;
 
-                    var files = new List<MyStorageServiceInterface.FileInfo>(fileCount);
-                    for (var index = 0; index < fileCount; ++index)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        var fileName = SteamRemoteStorage.GetFileNameAndSize(index, out var sizeBytes);
-                        if (string.IsNullOrEmpty(fileName))
-                            continue;
+                    if (sizeBytes < 0)
+                        throw new InvalidOperationException($"Steam returned an invalid size for storage file '{fileName}'.");
 
-                        if (sizeBytes < 0)
-                            throw new InvalidOperationException($"Steam returned an invalid size for storage file '{fileName}'.");
-
-                        var lastWriteTimeUtc = DateTimeOffset.FromUnixTimeSeconds(SteamRemoteStorage.GetFileTimestamp(fileName)).UtcDateTime;
-                        files.Add(new MyStorageServiceInterface.FileInfo(fileName, lastWriteTimeUtc, sizeBytes));
-                    }
-
-                    cancellationToken.ThrowIfCancellationRequested();
-                    files.Sort((left, right) => string.Compare(left.FileName, right.FileName, StringComparison.Ordinal));
-                    return files.ToArray();
+                    var lastWriteTimeUtc = DateTimeOffset.FromUnixTimeSeconds(SteamRemoteStorage.GetFileTimestamp(fileName)).UtcDateTime;
+                    files.Add(new MyStorageServiceInterface.FileInfo(fileName, lastWriteTimeUtc, sizeBytes));
                 }
-                finally
-                {
-                    OperationGate.Release();
-                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                files.Sort((left, right) => string.Compare(left.FileName, right.FileName, StringComparison.Ordinal));
+                return await Task.FromResult<IReadOnlyList<MyStorageServiceInterface.FileInfo>>(files.ToArray());
             }
         }
 
@@ -120,36 +94,28 @@ namespace oojjrs.oplat.steam
             using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
-                await OperationGate.WaitAsync(cancellationToken);
-                try
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    if (SteamRemoteStorage.FileExists(fileName) == false)
-                        return new MyStorageServiceInterface.ReadResult(false, Array.Empty<byte>());
+                cancellationToken.ThrowIfCancellationRequested();
+                if (SteamRemoteStorage.FileExists(fileName) == false)
+                    return new MyStorageServiceInterface.ReadResult(false, Array.Empty<byte>());
 
-                    var fileByteCount = SteamRemoteStorage.GetFileSize(fileName);
-                    if (fileByteCount < 0)
-                        throw new InvalidOperationException($"Steam returned an invalid size for storage file '{fileName}'.");
+                var fileByteCount = SteamRemoteStorage.GetFileSize(fileName);
+                if (fileByteCount < 0)
+                    throw new InvalidOperationException($"Steam returned an invalid size for storage file '{fileName}'.");
 
-                    if (fileByteCount > MyStorage.FileByteCountMax)
-                        throw new InvalidOperationException($"Steam storage file '{fileName}' exceeds the {MyStorage.FileByteCountMax}-byte limit.");
+                if (fileByteCount > MyStorage.FileByteCountMax)
+                    throw new InvalidOperationException($"Steam storage file '{fileName}' exceeds the {MyStorage.FileByteCountMax}-byte limit.");
 
-                    if (fileByteCount == 0)
-                        return new MyStorageServiceInterface.ReadResult(true, Array.Empty<byte>());
+                if (fileByteCount == 0)
+                    return new MyStorageServiceInterface.ReadResult(true, Array.Empty<byte>());
 
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var lifetimeCancellationToken = _lifetimeSource.Token;
-                    var apiCall = SteamRemoteStorage.FileReadAsync(fileName, 0, checked((uint)fileByteCount));
-                    if (apiCall == SteamAPICall_t.Invalid)
-                        throw new InvalidOperationException($"Steam rejected the storage read request for '{fileName}'.");
+                cancellationToken.ThrowIfCancellationRequested();
+                var lifetimeCancellationToken = _lifetimeSource.Token;
+                var apiCall = SteamRemoteStorage.FileReadAsync(fileName, 0, checked((uint)fileByteCount));
+                if (apiCall == SteamAPICall_t.Invalid)
+                    throw new InvalidOperationException($"Steam rejected the storage read request for '{fileName}'.");
 
-                    var data = await WaitForReadAsync(apiCall, checked((uint)fileByteCount), lifetimeCancellationToken);
-                    return new MyStorageServiceInterface.ReadResult(true, data);
-                }
-                finally
-                {
-                    OperationGate.Release();
-                }
+                var data = await WaitForReadAsync(apiCall, checked((uint)fileByteCount), lifetimeCancellationToken);
+                return new MyStorageServiceInterface.ReadResult(true, data);
             }
         }
 
@@ -163,22 +129,14 @@ namespace oojjrs.oplat.steam
             using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
-                await OperationGate.WaitAsync(cancellationToken);
-                try
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var lifetimeCancellationToken = _lifetimeSource.Token;
-                    var nativeData = snapshot.Length == 0 ? EmptyNativeData : snapshot;
-                    var apiCall = SteamRemoteStorage.FileWriteAsync(fileName, nativeData, checked((uint)snapshot.Length));
-                    if (apiCall == SteamAPICall_t.Invalid)
-                        throw new InvalidOperationException($"Steam rejected the storage write request for '{fileName}'. The file name, file size, or Steam Cloud quota may be invalid.");
+                cancellationToken.ThrowIfCancellationRequested();
+                var lifetimeCancellationToken = _lifetimeSource.Token;
+                var nativeData = snapshot.Length == 0 ? EmptyNativeData : snapshot;
+                var apiCall = SteamRemoteStorage.FileWriteAsync(fileName, nativeData, checked((uint)snapshot.Length));
+                if (apiCall == SteamAPICall_t.Invalid)
+                    throw new InvalidOperationException($"Steam rejected the storage write request for '{fileName}'. The file name, file size, or Steam Cloud quota may be invalid.");
 
-                    await WaitForWriteAsync(apiCall, lifetimeCancellationToken);
-                }
-                finally
-                {
-                    OperationGate.Release();
-                }
+                await WaitForWriteAsync(apiCall, lifetimeCancellationToken);
             }
         }
 

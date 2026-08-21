@@ -17,7 +17,7 @@ namespace oojjrs.oplat.anonymous
         private const string TemporaryDirectoryName = "temp";
 
         private readonly CancellationTokenSource LifetimeCancellationSource = new();
-        private readonly SemaphoreSlim OperationGate = new(1, 1);
+        private readonly HashSet<string> ReadingFileNames = new(StringComparer.Ordinal);
 
         private string _accountRootPath;
         private bool _isInitialized;
@@ -32,15 +32,7 @@ namespace oojjrs.oplat.anonymous
             using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
-                await OperationGate.WaitAsync(cancellationToken);
-                try
-                {
-                    return await Task.Run(() => Delete(fileName, cancellationToken), cancellationToken);
-                }
-                finally
-                {
-                    OperationGate.Release();
-                }
+                return await Task.Run(() => Delete(fileName, cancellationToken), cancellationToken);
             }
         }
 
@@ -51,15 +43,7 @@ namespace oojjrs.oplat.anonymous
             using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
-                await OperationGate.WaitAsync(cancellationToken);
-                try
-                {
-                    return await Task.Run(() => Exists(fileName, cancellationToken), cancellationToken);
-                }
-                finally
-                {
-                    OperationGate.Release();
-                }
+                return await Task.Run(() => Exists(fileName, cancellationToken), cancellationToken);
             }
         }
 
@@ -69,15 +53,7 @@ namespace oojjrs.oplat.anonymous
             using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
-                await OperationGate.WaitAsync(cancellationToken);
-                try
-                {
-                    return await Task.Run(() => GetFiles(cancellationToken), cancellationToken);
-                }
-                finally
-                {
-                    OperationGate.Release();
-                }
+                return await Task.Run(() => GetFiles(cancellationToken), cancellationToken);
             }
         }
 
@@ -88,14 +64,17 @@ namespace oojjrs.oplat.anonymous
             using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
-                await OperationGate.WaitAsync(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (ReadingFileNames.Add(fileName) == false)
+                    throw new InvalidOperationException($"An anonymous storage read is already in progress for '{fileName}'.");
+
                 try
                 {
                     return await Task.Run(() => ReadAsync(fileName, cancellationToken), cancellationToken);
                 }
                 finally
                 {
-                    OperationGate.Release();
+                    ReadingFileNames.Remove(fileName);
                 }
             }
         }
@@ -111,15 +90,7 @@ namespace oojjrs.oplat.anonymous
             using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
-                await OperationGate.WaitAsync(cancellationToken);
-                try
-                {
-                    await Task.Run(() => WriteAsync(fileName, snapshot, cancellationToken), cancellationToken);
-                }
-                finally
-                {
-                    OperationGate.Release();
-                }
+                await Task.Run(() => WriteAsync(fileName, snapshot, cancellationToken), cancellationToken);
             }
         }
 
