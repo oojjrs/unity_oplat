@@ -8,17 +8,62 @@ namespace oojjrs.oplat
     {
         public interface CallbackInterface
         {
-            string AnonymousInstanceId { get; }
+            string AnonymousInstanceId => null;
             uint AppId { get; }
-            MyNetChatResultInterface ChatResult { get; }
-            MyNetHostResultInterface HostResult { get; }
+            MyNetChatResultInterface ChatResult => EmptyResult;
+            MyNetHostResultInterface HostResult => EmptyResult;
             MyPlatformTypeEnum InitialType { get; }
-            MyNetMemberResultInterface MemberResult { get; }
-            MyNetPlayerServiceInterface.UpdateResultInterface PlayerResult { get; }
-            MyNetRoomServiceInterface.UpdateResultInterface RoomResult { get; }
+            MyNetMemberResultInterface MemberResult => EmptyResult;
+            MyNetPlayerServiceInterface.UpdateResultInterface PlayerResult => EmptyResult;
+            MyNetRoomServiceInterface.UpdateResultInterface RoomResult => EmptyResult;
 
             void OnResult(MyPlatformServiceInterface service);
         }
+
+        private sealed class EmptyNetResult : MyNetChatResultInterface, MyNetHostResultInterface, MyNetMemberResultInterface, MyNetPlayerServiceInterface.UpdateResultInterface, MyNetRoomServiceInterface.UpdateResultInterface
+        {
+            void MyNetInterface.CatchInterface.OnBusy()
+            {
+            }
+
+            void MyNetInterface.CatchInterface.OnException(MyNetSessionException e)
+            {
+            }
+
+            void MyNetInterface.CatchInterface.OnFailed(MyNetInterface.CatchInterface.FailureEnum e)
+            {
+            }
+
+            void MyNetChatResultInterface.OnReceived(string message, string playerId, string roomId)
+            {
+            }
+
+            void MyNetHostResultInterface.OnFinishThisHandling()
+            {
+            }
+
+            void MyNetHostResultInterface.OnReceived(MyNetRequest request)
+            {
+            }
+
+            void MyNetMemberResultInterface.OnFinishThisHandling()
+            {
+            }
+
+            void MyNetMemberResultInterface.OnReceived(MyNetResponse response)
+            {
+            }
+
+            void MyNetPlayerServiceInterface.UpdateResultInterface.OnOk(MyNetPlayerInterface player)
+            {
+            }
+
+            void MyNetRoomServiceInterface.UpdateResultInterface.OnOk(MyNetRoomInterface room)
+            {
+            }
+        }
+
+        private static readonly EmptyNetResult EmptyResult = new();
 
         private CallbackInterface _callback;
 

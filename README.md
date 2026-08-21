@@ -17,12 +17,28 @@ Unity `6000.0` 이상 프로젝트의 `Packages/manifest.json`에 다음 의존�
 
 ## 초기화
 
-1. GameObject에 `MyPlatformInitializer`를 추가한다.
-2. 같은 GameObject의 컴포넌트에서 `MyPlatformInitializer.CallbackInterface`를 구현한다.
-3. `AppId`, `InitialType`, `AnonymousInstanceId`와 Chat·Host·Member·Player·Room 결과 처리기를 제공한다.
-4. `OnResult(MyPlatformServiceInterface service)`에서 초기화된 서비스를 받는다.
+아래 내용을 `PlatformBootstrap.cs`로 저장하고 GameObject에 추가한다. `MyPlatformInitializer`는 자동으로 함께 추가된다.
 
-플레이어 빌드에서 `service.IsRestartRequired`가 `true`이면 Steam 재실행을 위해 현재 프로세스를 즉시 종료한다.
+```csharp
+using oojjrs.oplat;
+using UnityEngine;
+
+[RequireComponent(typeof(MyPlatformInitializer))]
+public sealed class PlatformBootstrap : MonoBehaviour, MyPlatformInitializer.CallbackInterface
+{
+    public MyPlatformServiceInterface Platform { get; private set; }
+
+    uint MyPlatformInitializer.CallbackInterface.AppId => 1;
+    MyPlatformTypeEnum MyPlatformInitializer.CallbackInterface.InitialType => MyPlatformTypeEnum.Anonymous;
+
+    void MyPlatformInitializer.CallbackInterface.OnResult(MyPlatformServiceInterface service)
+    {
+        Platform = service;
+    }
+}
+```
+
+전체 콜백 구성은 [`MyPlatformInitializer.CallbackInterface`](Packages/src/Documentation~/api/MyPlatformInitializer.CallbackInterface.md)를 참고한다.
 
 ## 주요 기능
 

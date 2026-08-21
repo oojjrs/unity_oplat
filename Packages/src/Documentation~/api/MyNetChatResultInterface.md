@@ -14,4 +14,4 @@ void OnReceived(string message, string playerId, string roomId);
 | `playerId` | 발신 플레이어 ID |
 | `roomId` | 메시지가 속한 방 ID |
 
-이 처리기는 `MyPlatformInitializer.CallbackInterface.ChatResult`로 제공하며 플랫폼 서비스가 살아 있는 동안 유효해야 한다.
+채팅을 수신하려면 이 처리기를 `MyPlatformInitializer.CallbackInterface.ChatResult`로 제공한다. 생략하면 수신 채팅을 버린다.
