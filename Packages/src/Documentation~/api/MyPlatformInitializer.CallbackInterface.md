@@ -15,9 +15,9 @@
 
 | 멤버 | 설명 |
 | --- | --- |
-| `string AnonymousInstanceId` | 선택 사항. 같은 기기의 Anonymous 실행 인스턴스를 구분하며 기본값은 `null`이다. Steam에서는 사용하지 않는다. |
+| `string AnonymousInstanceId` | 선택 사항. Anonymous 실행 인스턴스를 구분한다. Ugsymous에서는 UGS 인증 profile을 결정한다. 기본값은 `null`이다. Steam에서는 사용하지 않는다. |
 | `uint AppId` | 앱 식별자. Steam은 0보다 큰 게임 App ID를 사용한다. |
-| `MyPlatformTypeEnum InitialType` | 초기화할 플랫폼. 현재 지원 값은 `Anonymous`, `Steam`이다. |
+| `MyPlatformTypeEnum InitialType` | 초기화할 플랫폼. 현재 지원 값은 `Anonymous`, `Steam`, `Ugsymous`다. |
 | `MyNetChatResultInterface ChatResult` | 선택 사항. 수신 채팅 처리기 |
 | `MyNetHostResultInterface HostResult` | 선택 사항. 호스트가 받을 요청 처리기 |
 | `MyNetMemberResultInterface MemberResult` | 선택 사항. 멤버가 받을 응답 처리기 |
@@ -29,4 +29,4 @@
 
 Steam 플레이어 빌드에서 `service.IsRestartRequired`가 `true`이면 `Account`, `Net`, `Storage` 등에 접근하지 말고 `Application.Quit()` 등으로 현재 프로세스를 종료한다.
 
-플랫폼별 설정은 [Anonymous](../platforms/anonymous.md)와 [Steam](../platforms/steam.md)을 참고한다.
+플랫폼별 설정은 [Anonymous](../platforms/anonymous.md), [Steam](../platforms/steam.md), [Ugsymous](../platforms/ugsymous.md)를 참고한다.

@@ -20,6 +20,8 @@ namespace oojjrs.oplat
         Stove,
         // 유니티 개발자 계정이 아니고 구글/애플 계정 같은 유저용 유니티 계정이다. 구글 페북처럼 UPA UI가 뜬다고 함.
         Unity,
+        // Unity Gaming Services의 익명 인증을 사용하는 모드.
+        Ugsymous,
         // 니가 제공하는 유저와 패스워드 시스템. 이게 진짜 제3자 커스터마이징이다.
         Yours,
     }

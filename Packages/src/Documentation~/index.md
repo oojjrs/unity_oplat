@@ -39,3 +39,4 @@
 | --- | --- |
 | [Anonymous](platforms/anonymous.md) | 로컬 계정, 저장소와 개발용 네트워크 |
 | [Steam](platforms/steam.md) | 초기화, Steam Cloud, Lobby/P2P 제약 |
+| [Ugsymous](platforms/ugsymous.md) | UGS 익명 인증, Cloud Save, Session·Relay·Vivox |

@@ -2,7 +2,14 @@
     "name": "oojjrs.oplat",
     "rootNamespace": "",
     "references": [
-        "GUID:68bd7fdb68ef2684e982e8a9825b18a5"
+        "GUID:68bd7fdb68ef2684e982e8a9825b18a5",
+        "Unity.Collections",
+        "Unity.Networking.Transport",
+        "Unity.Services.Authentication",
+        "Unity.Services.CloudSave",
+        "Unity.Services.Core",
+        "Unity.Services.Multiplayer",
+        "Unity.Services.Vivox"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

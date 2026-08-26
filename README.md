@@ -1,6 +1,6 @@
 # UnityOplat
 
-Unity 프로젝트에서 `Anonymous`·`Steam` 플랫폼 초기화, 사용자 파일 저장소, Lobby/P2P 네트워크를 하나의 서비스로 제공하는 Unity 6 패키지다.
+Unity 프로젝트에서 `Anonymous`·`Steam`·`Ugsymous` 플랫폼 초기화, 사용자 파일 저장소, Lobby/P2P 네트워크를 하나의 서비스로 제공하는 Unity 6 패키지다.
 
 ## 설치
 

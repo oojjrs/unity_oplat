@@ -21,6 +21,6 @@
 | `ExitConfigInterface` | `CancellationToken`, `RoomId` |
 | `SendConfigInterface` | `CancellationToken`, `RoomId`, `Message` |
 
-메시지는 비어 있거나 공백일 수 없으며 `MessageByteCountMax`를 넘을 수 없다. 한계는 Anonymous 4096 bytes, Steam 4089 bytes이므로 값을 하드코딩하지 말고 속성에서 조회한다.
+메시지는 비어 있거나 공백일 수 없으며 `MessageByteCountMax`를 넘을 수 없다. 플랫폼마다 한계가 다르므로 값을 하드코딩하지 말고 속성에서 조회한다.
 
 수신 메시지는 초기화 때 등록한 [`MyNetChatResultInterface`](MyNetChatResultInterface.md)로 전달된다. Steam의 Chat 작업은 Unity 메인 스레드에서 호출한다.

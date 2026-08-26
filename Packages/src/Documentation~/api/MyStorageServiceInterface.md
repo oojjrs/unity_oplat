@@ -42,4 +42,4 @@ if (read.IsFound)
 - 절대 경로, `\`, 빈 구간, `.`과 `..`, 끝의 공백·마침표, 지원 플랫폼에서 금지된 문자와 예약 이름은 사용할 수 없다.
 - `data`는 `null`일 수 없고 `FileByteCountMax`를 넘을 수 없다.
 
-저장 위치, Cloud 동기화와 스레드 제약은 [Anonymous](../platforms/anonymous.md)와 [Steam](../platforms/steam.md)을 참고한다.
+저장 위치, Cloud 동기화와 스레드 제약은 [Anonymous](../platforms/anonymous.md), [Steam](../platforms/steam.md), [Ugsymous](../platforms/ugsymous.md)를 참고한다.
