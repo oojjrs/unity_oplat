@@ -18,10 +18,10 @@ namespace oojjrs.oplat
         Steam,
         // UGS가 지원 안 해주는 녀석이라서, 내부적으로는 Custom ID를 쓰고 스토브네 verify API까지 호출하라는데 ㅡㅡ 아오 씨
         Stove,
-        // 유니티 개발자 계정이 아니고 구글/애플 계정 같은 유저용 유니티 계정이다. 구글 페북처럼 UPA UI가 뜬다고 함.
-        Unity,
         // Unity Gaming Services의 익명 인증을 사용하는 모드.
         Ugsymous,
+        // 유니티 개발자 계정이 아니고 구글/애플 계정 같은 유저용 유니티 계정이다. 구글 페북처럼 UPA UI가 뜬다고 함.
+        Unity,
         // 니가 제공하는 유저와 패스워드 시스템. 이게 진짜 제3자 커스터마이징이다.
         Yours,
     }
