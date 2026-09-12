@@ -29,7 +29,7 @@ namespace oojjrs.oplat
 
         private static bool IsItem(Type propertyType)
         {
-            return propertyType.IsPrimitive || propertyType.IsEnum || (propertyType == typeof(string)) || (propertyType == typeof(DateTime));
+            return propertyType.IsPrimitive || propertyType.IsEnum || (propertyType == typeof(string)) || (propertyType == typeof(DateTime)) || (propertyType == typeof(TimeSpan));
         }
 
         private static bool IsTuple(Type type)
@@ -147,6 +147,9 @@ namespace oojjrs.oplat
                     break;
                 case char value:
                     bw.Write(value);
+                    break;
+                case TimeSpan value:
+                    bw.Write(value.Ticks);
                     break;
                 case DateTime value:
                     bw.Write(value.ToBinary());

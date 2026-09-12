@@ -41,7 +41,7 @@ namespace oojjrs.oplat
 
         private static bool IsItem(Type propertyType)
         {
-            return propertyType.IsPrimitive || (propertyType == typeof(string)) || (propertyType == typeof(DateTime));
+            return propertyType.IsPrimitive || (propertyType == typeof(string)) || (propertyType == typeof(DateTime)) || (propertyType == typeof(TimeSpan));
         }
 
         private static bool IsTuple(Type type)
@@ -149,6 +149,8 @@ namespace oojjrs.oplat
                 return br.ReadDouble();
             else if (type == typeof(char))
                 return br.ReadChar();
+            else if (type == typeof(TimeSpan))
+                return TimeSpan.FromTicks(br.ReadInt64());
             else if (type == typeof(DateTime))
                 return DateTime.FromBinary(br.ReadInt64());
             else

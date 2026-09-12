@@ -25,8 +25,10 @@ service.Net.Host.Send(new MoveResponse { Accepted = true });
 `MyNetSerializer`와 `MyNetDeserializer`는 다음 데이터를 지원한다.
 
 - public instance getter와 setter가 모두 있는 속성
-- `string`, `float`, `long`, `int`, `short`, `byte`, `bool`, `double`, `char`, `DateTime`, enum
+- `string`, `float`, `long`, `int`, `short`, `byte`, `bool`, `double`, `char`, `DateTime`, `TimeSpan`, enum
 - 위 타입의 배열, 중첩 객체와 `ValueTuple`
+
+`TimeSpan`은 ticks를 부호 있는 64비트 정수로 기록하여 정밀도와 음수 값을 보존한다. `TimeSpan`을 포함하는 페이로드는 송수신 양쪽에 해당 타입을 지원하는 직렬화기가 필요하다.
 
 속성은 이름순으로 기록되고 field는 무시된다. 객체는 매개변수 없는 생성자로 만들 수 있어야 하며 송수신 양쪽에 같은 assembly-qualified 타입이 로드되어야 한다. 타입명이나 속성 구조를 바꾸면 기존 wire data와 호환되지 않을 수 있다.
 
