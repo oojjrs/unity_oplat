@@ -378,7 +378,11 @@ namespace oojjrs.oplat.steam
 
             private static Assembly ResolveLoadedAssembly(AssemblyName name)
             {
+#if UNITY_6000_4_OR_NEWER
+                return UnityEngine.Assemblies.CurrentAssemblies.GetLoadedAssemblies().FirstOrDefault(assembly => string.Equals(assembly.FullName, name.FullName, StringComparison.Ordinal));
+#else
                 return AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(assembly => string.Equals(assembly.FullName, name.FullName, StringComparison.Ordinal));
+#endif
             }
 
             private static Type ResolveTypeFromLoadedAssembly(Assembly assembly, string name, bool ignoreCase)
@@ -1549,6 +1553,7 @@ namespace oojjrs.oplat.steam
                 BroadcastRoster();
                 SendLobbyControl(MessageKind.PlayerKicked, targetId);
                 SendMessage(targetId, MessageKind.PlayerKicked, EncodeUInt64(targetId));
+                NotifyRoomChanged();
                 return;
             }
 
@@ -2020,6 +2025,18 @@ namespace oojjrs.oplat.steam
             }
         }
 
+        private void NotifyRoomChanged()
+        {
+            try
+            {
+                _roomResult.OnOk(BuildCurrentRoom());
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
+        }
+
         private void OnLobbyDataUpdate(LobbyDataUpdate_t callback)
         {
             try
@@ -2084,6 +2101,8 @@ namespace oojjrs.oplat.steam
                     }
 
                     ClosePeer(playerId);
+                    if (wasAccepted)
+                        NotifyRoomChanged();
                 }
 
                 if ((_currentLobby.m_SteamID != 0) && (SteamMatchmaking.GetLobbyOwner(_currentLobby).m_SteamID != _originalHostId))
@@ -2404,6 +2423,7 @@ namespace oojjrs.oplat.steam
                     throw new InvalidOperationException("Steam rejected the room admission response.");
 
                 BroadcastRoster();
+                NotifyRoomChanged();
             }
             catch (Exception exception)
             {
