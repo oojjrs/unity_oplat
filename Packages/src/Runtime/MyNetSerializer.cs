@@ -15,13 +15,16 @@ namespace oojjrs.oplat
 
         private static PropertyInfo[] GetProperties(Type type)
         {
-            if (_cache.TryGetValue(type, out var value) == false)
+            lock (_cache)
             {
-                value = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.GetProperty | BindingFlags.SetProperty).Where(t => t.CanRead && t.CanWrite).OrderBy(t => t.Name).ToArray();
-                _cache[type] = value;
-            }
+                if (_cache.TryGetValue(type, out var value) == false)
+                {
+                    value = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.GetProperty | BindingFlags.SetProperty).Where(t => t.CanRead && t.CanWrite).OrderBy(t => t.Name).ToArray();
+                    _cache[type] = value;
+                }
 
-            return value;
+                return value;
+            }
         }
 
         private static bool IsItem(Type propertyType)

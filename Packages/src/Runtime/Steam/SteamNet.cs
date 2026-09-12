@@ -169,13 +169,16 @@ namespace oojjrs.oplat.steam
 
             private static PropertyInfo[] GetProperties(Type type)
             {
-                if (PropertyCache.TryGetValue(type, out var value) == false)
+                lock (PropertyCache)
                 {
-                    value = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.GetProperty | BindingFlags.SetProperty).Where(t => t.CanRead && t.CanWrite).OrderBy(t => t.Name).ToArray();
-                    PropertyCache[type] = value;
-                }
+                    if (PropertyCache.TryGetValue(type, out var value) == false)
+                    {
+                        value = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.GetProperty | BindingFlags.SetProperty).Where(t => t.CanRead && t.CanWrite).OrderBy(t => t.Name).ToArray();
+                        PropertyCache[type] = value;
+                    }
 
-                return value;
+                    return value;
+                }
             }
 
             private static Type GetLoadedType(string name)
@@ -408,6 +411,20 @@ namespace oojjrs.oplat.steam
             }
         }
 
+        private sealed class PendingBroadcast
+        {
+            public MessageKind Kind { get; }
+            public byte[] Payload { get; }
+            public HashSet<ulong> PlayerIds { get; }
+
+            public PendingBroadcast(MessageKind kind, byte[] payload, IEnumerable<ulong> playerIds)
+            {
+                Kind = kind;
+                Payload = payload;
+                PlayerIds = new(playerIds);
+            }
+        }
+
         private sealed class RosterPlayerData
         {
             internal MyNetInterface.Field[] Fields;
@@ -439,7 +456,7 @@ namespace oojjrs.oplat.steam
         private const int MetadataValueByteCountMax = Constants.k_cubChatMetadataMax - 1;
         private const int MinimumPollingDelaySeconds = 1;
         private const int PlayerCountMax = 250;
-        private const int ProtocolVersion = 1;
+        private const int ProtocolVersion = 2;
         private const int RosterChunkCharacterCount = 7000;
         private const int RosterChunkCountMax = 16;
         private const uint ChatMagic = 0x4f504c48;
@@ -464,22 +481,24 @@ namespace oojjrs.oplat.steam
 
         private readonly HashSet<ulong> AcceptedPlayerIds = new();
         private readonly HashSet<ulong> BlockedPlayerIds = new();
+        private readonly HashSet<ulong> _failedSendPlayerIds = new();
         private readonly Queue<MyNetRequest> IncomingRequests = new();
         private readonly Queue<MyNetResponse> IncomingResponses = new();
         private readonly Dictionary<ulong, RosterPlayerData> LogicalPlayers = new();
         private readonly object OutgoingRequestLock = new();
-        private readonly Queue<MyNetRequest> OutgoingRequests = new();
+        private readonly Queue<(byte[] payload, MyNetRequest value)> OutgoingRequests = new();
         private readonly object OutgoingResponseLock = new();
-        private readonly Queue<MyNetResponse> OutgoingResponses = new();
+        private readonly Queue<(byte[] payload, MyNetResponse value)> OutgoingResponses = new();
         private readonly SemaphoreSlim OperationGate = new(1, 1);
+        private readonly Queue<PendingBroadcast> _pendingBroadcasts = new();
         private readonly Dictionary<ulong, TaskCompletionSource<bool>> PendingLobbyData = new();
-        private readonly HashSet<ulong> PendingRosterPlayerIds = new();
 
         private TaskCompletionSource<bool> _admissionSource;
         private MyNetChatResultInterface _chatResult;
         private string _chatRoomId;
         private CSteamID _currentLobby;
         private string _epoch;
+        private bool _hasPassword;
         private MyNetHostResultInterface _hostResult;
         private bool _isInitialized;
         private bool _isLobbyPolling;
@@ -506,15 +525,13 @@ namespace oojjrs.oplat.steam
         private ulong _originalHostId;
         private string _password;
         private ulong _pendingPlayerUpdateId;
-        private MessageKind _pendingRosterKind;
-        private byte[] _pendingRosterPayload;
         private MyNetPlayerServiceInterface.UpdateResultInterface _playerResult;
         private TaskCompletionSource<PlayerUpdateOutcomeEnum> _playerUpdateSource;
         private MyNetInterface.Field[] _roomFields = Array.Empty<MyNetInterface.Field>();
         private MyNetRoomServiceInterface.UpdateResultInterface _roomResult;
         private volatile StateEnum _state;
         private string _title;
-        private bool _useLocal;
+        private volatile bool _useLocal;
 
         internal SteamNet()
         {
@@ -639,8 +656,8 @@ namespace oojjrs.oplat.steam
 
             EnsureMainThread();
             ReceiveMessages();
-            FlushPendingRoster();
             FlushResponses();
+            FlushPendingBroadcasts();
             HandleResponses();
             FlushRequests();
             HandleRequests();
@@ -1102,6 +1119,7 @@ namespace oojjrs.oplat.steam
                     if (_state != StateEnum.Host)
                         throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
 
+                    var previousLobbyId = _currentLobby.m_SteamID;
                     var previousRoomFields = _roomFields;
                     var previousIsPrivate = _isPrivate;
                     try
@@ -1116,6 +1134,9 @@ namespace oojjrs.oplat.steam
                     }
                     catch
                     {
+                        if (_currentLobby.m_SteamID != previousLobbyId)
+                            throw;
+
                         _roomFields = previousRoomFields;
                         _isPrivate = previousIsPrivate;
                         try
@@ -1290,20 +1311,18 @@ namespace oojjrs.oplat.steam
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
 
-            var state = _state;
-            if ((_useLocal == false) && (state != StateEnum.Host) && (state != StateEnum.Member))
-                return;
-
             lock (OutgoingRequestLock)
             {
-                state = _state;
-                if ((_useLocal == false) && (state != StateEnum.Host) && (state != StateEnum.Member))
-                    return;
+                if ((_state == StateEnum.Created) || (_state == StateEnum.Disposed))
+                    throw new InvalidOperationException("Steam networking is not initialized.");
+
+                if ((_useLocal == false) && (_state != StateEnum.Host) && (_state != StateEnum.Member))
+                    throw new InvalidOperationException("A Steam room is required to send a request.");
 
                 if (OutgoingRequests.Count >= MessageQueueCountMax)
-                    return;
+                    throw new InvalidOperationException("The Steam request queue is full. Retry after pending requests have been sent.");
 
-                OutgoingRequests.Enqueue(request);
+                OutgoingRequests.Enqueue(CapturePayload(request));
             }
         }
 
@@ -1312,18 +1331,18 @@ namespace oojjrs.oplat.steam
             if (response == null)
                 throw new ArgumentNullException(nameof(response));
 
-            if ((_useLocal == false) && (_state != StateEnum.Host))
-                return;
-
             lock (OutgoingResponseLock)
             {
+                if ((_state == StateEnum.Created) || (_state == StateEnum.Disposed))
+                    throw new InvalidOperationException("Steam networking is not initialized.");
+
                 if ((_useLocal == false) && (_state != StateEnum.Host))
-                    return;
+                    throw new InvalidOperationException("Only the Steam host can send a response.");
 
                 if (OutgoingResponses.Count >= MessageQueueCountMax)
-                    return;
+                    throw new InvalidOperationException("The Steam response queue is full. Retry after pending responses have been sent.");
 
-                OutgoingResponses.Enqueue(response);
+                OutgoingResponses.Enqueue(CapturePayload(response));
             }
         }
 
@@ -1422,6 +1441,7 @@ namespace oojjrs.oplat.steam
             _originalHostId = _localSteamId;
             _epoch = Guid.NewGuid().ToString("N");
             _password = password;
+            _hasPassword = string.IsNullOrEmpty(password) == false;
             _title = title;
             _isLocked = config.IsLocked;
             _isPrivate = config.IsPrivate;
@@ -1448,6 +1468,7 @@ namespace oojjrs.oplat.steam
 
                 cancellationToken.ThrowIfCancellationRequested();
                 _state = StateEnum.Host;
+                EncodeMemberSnapshot();
                 return BuildCurrentRoom();
             }
             catch
@@ -1549,6 +1570,7 @@ namespace oojjrs.oplat.steam
                 AcceptedPlayerIds.Remove(targetId);
                 BlockedPlayerIds.Add(targetId);
                 LogicalPlayers.Remove(targetId);
+                RemovePendingPlayer(targetId);
                 PublishRoster();
                 BroadcastRoster();
                 SendLobbyControl(MessageKind.PlayerKicked, targetId);
@@ -1710,6 +1732,7 @@ namespace oojjrs.oplat.steam
             _isPrivate = ReadBooleanLobbyData(_currentLobby, MetadataIsPrivate);
             _maxPlayers = ParseBoundedInt(SteamMatchmaking.GetLobbyData(_currentLobby, MetadataMaxPlayers), 1, PlayerCountMax);
             _password = null;
+            _hasPassword = ReadBooleanLobbyData(_currentLobby, MetadataHasPassword);
             _roomFields = Array.Empty<MyNetInterface.Field>();
             _memberRoomFields = Array.Empty<MyNetInterface.Field>();
         }
@@ -1779,8 +1802,7 @@ namespace oojjrs.oplat.steam
             }
             else
             {
-                var publicFields = DecodeFields(SteamMatchmaking.GetLobbyData(_currentLobby, MetadataRoomFields));
-                roomFields = MergeFields(publicFields, _memberRoomFields);
+                roomFields = CloneFields(_memberRoomFields);
             }
 
             var players = new List<MyNetPlayerInterface>();
@@ -1806,7 +1828,7 @@ namespace oojjrs.oplat.steam
                 players.Add(new SteamNetPlayer(fields, playerId.ToString(), playerId == _originalHostId, nickname));
             }
 
-            return new SteamNetRoom(EncodeCode(_currentLobby.m_SteamID), roomFields, ReadBooleanLobbyData(_currentLobby, MetadataHasPassword), _originalHostId.ToString(), _currentLobby.m_SteamID.ToString(), _isLocked, _isPrivate, _maxPlayers, players.ToArray(), _title);
+            return new SteamNetRoom(EncodeCode(_currentLobby.m_SteamID), roomFields, _hasPassword, _originalHostId.ToString(), _currentLobby.m_SteamID.ToString(), _isLocked, _isPrivate, _maxPlayers, players.ToArray(), _title);
         }
 
         private static MyNetRoomInterface BuildSearchRoom(CSteamID lobby)
@@ -1840,36 +1862,82 @@ namespace oojjrs.oplat.steam
 
         private void BroadcastRoster(MessageKind kind = MessageKind.RosterChanged, ulong updatedPlayerId = 0, ulong excludedPlayerId = 0)
         {
+            var playerIds = AcceptedPlayerIds.Where(playerId => (playerId != _localSteamId) && (playerId != excludedPlayerId)).ToArray();
+            if (playerIds.Length == 0)
+                return;
+
             var payload = EncodeMemberSnapshot();
             if (kind == MessageKind.PlayerUpdated)
                 payload = EncodePlayerUpdated(updatedPlayerId, payload);
 
-            PendingRosterPlayerIds.Clear();
-            _pendingRosterKind = kind;
-            _pendingRosterPayload = payload;
-            foreach (var playerId in AcceptedPlayerIds)
+            if (_pendingBroadcasts.Count >= MessageQueueCountMax)
             {
-                if ((playerId != _localSteamId) && (playerId != excludedPlayerId) && (SendMessage(playerId, kind, payload) == false))
-                    PendingRosterPlayerIds.Add(playerId);
+                FailSession(new InvalidOperationException("The Steam synchronization queue is full."));
+                throw new InvalidOperationException("The Steam room was closed because synchronization could not keep up.");
             }
 
-            if (PendingRosterPlayerIds.Count == 0)
-                _pendingRosterPayload = null;
+            _pendingBroadcasts.Enqueue(new(kind, payload, playerIds));
         }
 
-        private void FlushPendingRoster()
+        private void FailSession(Exception exception)
         {
-            if ((_state != StateEnum.Host) || (_pendingRosterPayload == null) || (PendingRosterPlayerIds.Count == 0))
-                return;
-
-            foreach (var playerId in new List<ulong>(PendingRosterPlayerIds))
+            try
             {
-                if ((AcceptedPlayerIds.Contains(playerId) == false) || SendMessage(playerId, _pendingRosterKind, _pendingRosterPayload))
-                    PendingRosterPlayerIds.Remove(playerId);
+                if (_state == StateEnum.Host)
+                    CloseHostedRoom();
+                else
+                    ResetSession(true, StateEnum.Ready);
+            }
+            catch (Exception cleanupException)
+            {
+                Debug.LogException(cleanupException);
             }
 
-            if (PendingRosterPlayerIds.Count == 0)
-                _pendingRosterPayload = null;
+            try
+            {
+                _roomResult.OnException(new MyNetSessionException("Steam synchronization failed and the room was left.", exception));
+            }
+            catch (Exception callbackException)
+            {
+                Debug.LogException(callbackException);
+            }
+        }
+
+        private void FlushPendingBroadcasts()
+        {
+            if (_state != StateEnum.Host)
+                return;
+
+            var blockedPlayerIds = new HashSet<ulong>();
+            var sentCounts = new Dictionary<ulong, int>();
+            var count = _pendingBroadcasts.Count;
+            for (var index = 0; index < count; ++index)
+            {
+                var pending = _pendingBroadcasts.Dequeue();
+                foreach (var playerId in new List<ulong>(pending.PlayerIds))
+                {
+                    if (AcceptedPlayerIds.Contains(playerId) == false)
+                    {
+                        pending.PlayerIds.Remove(playerId);
+                    }
+                    else if (blockedPlayerIds.Contains(playerId) == false)
+                    {
+                        sentCounts.TryGetValue(playerId, out var sentCount);
+                        if ((sentCount < MessagesPerFrameMax) && SendMessage(playerId, pending.Kind, pending.Payload))
+                        {
+                            pending.PlayerIds.Remove(playerId);
+                            sentCounts[playerId] = sentCount + 1;
+                        }
+                        else
+                        {
+                            blockedPlayerIds.Add(playerId);
+                        }
+                    }
+                }
+
+                if (pending.PlayerIds.Count > 0)
+                    _pendingBroadcasts.Enqueue(pending);
+            }
         }
 
         private void CloseHostedRoom()
@@ -1892,6 +1960,14 @@ namespace oojjrs.oplat.steam
             }
         }
 
+        private void RemovePendingPlayer(ulong playerId)
+        {
+            foreach (var pending in _pendingBroadcasts)
+                pending.PlayerIds.Remove(playerId);
+
+            _failedSendPlayerIds.Remove(playerId);
+        }
+
         private void ResetSession(bool leaveLobby, StateEnum nextState)
         {
             _state = nextState;
@@ -1911,6 +1987,7 @@ namespace oojjrs.oplat.steam
             _originalHostId = 0;
             _epoch = null;
             _password = null;
+            _hasPassword = false;
             _title = null;
             _isLocked = false;
             _isPrivate = false;
@@ -1922,8 +1999,8 @@ namespace oojjrs.oplat.steam
             AcceptedPlayerIds.Clear();
             BlockedPlayerIds.Clear();
             LogicalPlayers.Clear();
-            PendingRosterPlayerIds.Clear();
-            _pendingRosterPayload = null;
+            _failedSendPlayerIds.Clear();
+            _pendingBroadcasts.Clear();
             IncomingRequests.Clear();
             IncomingResponses.Clear();
             lock (OutgoingRequestLock)
@@ -2055,11 +2132,6 @@ namespace oojjrs.oplat.steam
                         return;
                     }
 
-                    _isPrivate = ReadBooleanLobbyData(_currentLobby, MetadataIsPrivate);
-                    _isLocked = ReadBooleanLobbyData(_currentLobby, MetadataIsLocked);
-                    _title = SteamMatchmaking.GetLobbyData(_currentLobby, MetadataTitle) ?? string.Empty;
-                    _maxPlayers = ParseBoundedInt(SteamMatchmaking.GetLobbyData(_currentLobby, MetadataMaxPlayers), 1, PlayerCountMax);
-
                     return;
                 }
 
@@ -2086,6 +2158,7 @@ namespace oojjrs.oplat.steam
                 BlockedPlayerIds.Remove(playerId);
                 var wasAccepted = AcceptedPlayerIds.Remove(playerId);
                 LogicalPlayers.Remove(playerId);
+                RemovePendingPlayer(playerId);
                 if (playerId == _localSteamId)
                 {
                     ResetSession(false, StateEnum.Ready);
@@ -2241,15 +2314,15 @@ namespace oojjrs.oplat.steam
             if ((_state == StateEnum.AwaitingAdmission) && (playerId == _originalHostId))
                 _admissionSource?.TrySetResult(false);
 
-            if ((_state == StateEnum.Member) && (playerId == _originalHostId))
-                _playerUpdateSource?.TrySetResult(PlayerUpdateOutcomeEnum.Unknown);
+            if (((_state == StateEnum.Member) && (playerId == _originalHostId)) || ((_state == StateEnum.Host) && AcceptedPlayerIds.Contains(playerId)))
+                FailSession(new InvalidOperationException("The Steam peer session failed and delivery of accepted messages is uncertain."));
         }
 
         private void ReceiveMessages()
         {
             var pointers = new IntPtr[MessagesPerFrameMax];
             var count = SteamNetworkingMessages.ReceiveMessagesOnChannel(MessageChannel, pointers, pointers.Length);
-            var totalByteCount = 0;
+
             for (var index = 0; index < count; ++index)
             {
                 var pointer = pointers[index];
@@ -2257,10 +2330,6 @@ namespace oojjrs.oplat.steam
                 {
                     var message = SteamNetworkingMessage_t.FromIntPtr(pointer);
                     if ((message.m_cbSize <= 0) || (message.m_cbSize > MessageByteCountMax) || (message.m_pData == IntPtr.Zero))
-                        continue;
-
-                    totalByteCount += message.m_cbSize;
-                    if (totalByteCount > MessageByteCountMax * 4)
                         continue;
 
                     var data = new byte[message.m_cbSize];
@@ -2323,14 +2392,16 @@ namespace oojjrs.oplat.steam
                     {
                         var updateId = 0ul;
                         var hadPreviousPlayer = LogicalPlayers.TryGetValue(senderId, out var previousPlayer);
+                        var isAccepted = false;
                         try
                         {
                             LogicalPlayers[senderId] = DecodePlayerUpdate(senderId, payload, out updateId);
                             EncodeMemberSnapshot();
                             PublishRoster();
-                            BroadcastRoster(MessageKind.PlayerUpdated, senderId, senderId);
                             if (SendMessage(senderId, MessageKind.PlayerDataAccepted, EncodeUInt64(updateId)) == false)
                                 throw new InvalidOperationException("Steam rejected the player update acknowledgement.");
+
+                            isAccepted = true;
                         }
                         catch (Exception exception)
                         {
@@ -2354,6 +2425,12 @@ namespace oojjrs.oplat.steam
 
                             Debug.LogWarning($"Rejected Steam player data update: {exception.Message}");
                         }
+
+                        if (isAccepted)
+                        {
+                            BroadcastRoster(MessageKind.PlayerUpdated, senderId, senderId);
+                            _playerResult.OnOk(BuildCurrentRoom().Players.First(value => value.Id == senderId.ToString()));
+                        }
                     }
                     break;
                 case MessageKind.PlayerUpdated:
@@ -2373,12 +2450,22 @@ namespace oojjrs.oplat.steam
                         _playerUpdateSource?.TrySetResult(kind == MessageKind.PlayerDataAccepted ? PlayerUpdateOutcomeEnum.Accepted : PlayerUpdateOutcomeEnum.Rejected);
                     break;
                 case MessageKind.Request:
-                    if ((_state == StateEnum.Host) && AcceptedPlayerIds.Contains(senderId) && IsRawLobbyMember(senderId) && (IncomingRequests.Count < MessageQueueCountMax))
-                        IncomingRequests.Enqueue(DeserializePayload<MyNetRequest>(payload));
+                    if ((_state == StateEnum.Host) && AcceptedPlayerIds.Contains(senderId) && IsRawLobbyMember(senderId))
+                    {
+                        if (IncomingRequests.Count >= MessageQueueCountMax)
+                            FailSession(new InvalidOperationException("The Steam incoming request queue is full."));
+                        else
+                            IncomingRequests.Enqueue(DeserializePayload<MyNetRequest>(payload));
+                    }
                     break;
                 case MessageKind.Response:
-                    if ((_state == StateEnum.Member) && (senderId == _originalHostId) && (IncomingResponses.Count < MessageQueueCountMax))
-                        IncomingResponses.Enqueue(DeserializePayload<MyNetResponse>(payload));
+                    if ((_state == StateEnum.Member) && (senderId == _originalHostId))
+                    {
+                        if (IncomingResponses.Count >= MessageQueueCountMax)
+                            FailSession(new InvalidOperationException("The Steam incoming response queue is full."));
+                        else
+                            IncomingResponses.Enqueue(DeserializePayload<MyNetResponse>(payload));
+                    }
                     break;
                 case MessageKind.RoomClosed:
                     if (senderId == _originalHostId)
@@ -2427,6 +2514,9 @@ namespace oojjrs.oplat.steam
             }
             catch (Exception exception)
             {
+                if (_state != StateEnum.Host)
+                    throw;
+
                 AcceptedPlayerIds.Remove(senderId);
                 LogicalPlayers.Remove(senderId);
                 SendMessage(senderId, MessageKind.AdmissionRejected, Array.Empty<byte>());
@@ -2452,7 +2542,10 @@ namespace oojjrs.oplat.steam
 
             for (var index = 0; index < MessagesPerFrameMax; ++index)
             {
-                MyNetResponse response;
+                if ((IncomingResponses.Count >= MessageQueueCountMax) || ((useLocal == false) && (_pendingBroadcasts.Count >= MessageQueueCountMax)))
+                    return;
+
+                (byte[] payload, MyNetResponse value) response;
                 lock (OutgoingResponseLock)
                 {
                     if (OutgoingResponses.Count == 0)
@@ -2461,33 +2554,9 @@ namespace oojjrs.oplat.steam
                     response = OutgoingResponses.Dequeue();
                 }
 
-                if (useLocal)
-                {
-                    if (IncomingResponses.Count < MessageQueueCountMax)
-                        IncomingResponses.Enqueue(response);
-
-                    continue;
-                }
-
-                try
-                {
-                    var payload = MyNetSerializer.Serialize(response);
-                    if (payload.Length > MessageByteCountMax)
-                        throw new FormatException("Steam response exceeds the message size limit.");
-
-                    if (IncomingResponses.Count < MessageQueueCountMax)
-                        IncomingResponses.Enqueue(response);
-
-                    foreach (var playerId in AcceptedPlayerIds)
-                    {
-                        if (playerId != _localSteamId)
-                            SendMessage(playerId, MessageKind.Response, payload);
-                    }
-                }
-                catch (Exception exception)
-                {
-                    Debug.LogWarning($"Dropped Steam response: {exception.Message}");
-                }
+                IncomingResponses.Enqueue(response.value);
+                if ((useLocal == false) && (AcceptedPlayerIds.Count > 1))
+                    _pendingBroadcasts.Enqueue(new(MessageKind.Response, response.payload, AcceptedPlayerIds.Where(playerId => playerId != _localSteamId)));
             }
         }
 
@@ -2527,7 +2596,7 @@ namespace oojjrs.oplat.steam
 
             for (var index = 0; index < MessagesPerFrameMax; ++index)
             {
-                MyNetRequest request;
+                (byte[] payload, MyNetRequest value) request;
                 lock (OutgoingRequestLock)
                 {
                     if (OutgoingRequests.Count == 0)
@@ -2536,45 +2605,20 @@ namespace oojjrs.oplat.steam
                     request = OutgoingRequests.Peek();
                 }
 
-                var removeRequest = false;
-                try
+                if (useLocal || (state == StateEnum.Host))
                 {
-                    if (useLocal || (state == StateEnum.Host))
-                    {
-                        if (IncomingRequests.Count >= MessageQueueCountMax)
-                            return;
+                    if (IncomingRequests.Count >= MessageQueueCountMax)
+                        return;
 
-                        IncomingRequests.Enqueue(request);
-                        removeRequest = true;
-                    }
-                    else
-                    {
-                        var payload = MyNetSerializer.Serialize(request);
-                        if (payload.Length > MessageByteCountMax)
-                            throw new FormatException("Steam request exceeds the message size limit.");
-
-                        if (SendMessage(_originalHostId, MessageKind.Request, payload) == false)
-                            return;
-
-                        removeRequest = true;
-                    }
+                    IncomingRequests.Enqueue(request.value);
                 }
-                catch (Exception exception)
+                else if (SendMessage(_originalHostId, MessageKind.Request, request.payload) == false)
                 {
-                    removeRequest = true;
-                    Debug.LogWarning($"Dropped Steam request: {exception.Message}");
+                    return;
                 }
-                finally
-                {
-                    if (removeRequest)
-                    {
-                        lock (OutgoingRequestLock)
-                        {
-                            if ((OutgoingRequests.Count > 0) && ReferenceEquals(OutgoingRequests.Peek(), request))
-                                OutgoingRequests.Dequeue();
-                        }
-                    }
-                }
+
+                lock (OutgoingRequestLock)
+                    OutgoingRequests.Dequeue();
             }
         }
 
@@ -2621,10 +2665,13 @@ namespace oojjrs.oplat.steam
 
                 if (result != EResult.k_EResultOK)
                 {
-                    Debug.LogWarning($"Steam rejected an Oplat P2P message ({result}).");
+                    if (_failedSendPlayerIds.Add(playerId))
+                        Debug.LogWarning($"{GetType().Name}> SEND FAILED : {result}");
+
                     return false;
                 }
 
+                _failedSendPlayerIds.Remove(playerId);
                 return true;
             }
             finally
@@ -2674,7 +2721,7 @@ namespace oojjrs.oplat.steam
                         return false;
 
                     kind = (MessageKind)reader.ReadByte();
-                    if ((kind < MessageKind.AdmissionRequest) || (kind > MessageKind.PlayerDataRejected))
+                    if ((kind < MessageKind.AdmissionRequest) || (kind > MessageKind.PlayerUpdated))
                         return false;
 
                     lobbyId = reader.ReadUInt64();
@@ -2694,6 +2741,15 @@ namespace oojjrs.oplat.steam
             {
                 return false;
             }
+        }
+
+        private static (byte[] payload, T value) CapturePayload<T>(T value) where T : class
+        {
+            var payload = MyNetSerializer.Serialize(value);
+            if (payload.Length > MessageByteCountMax - 128)
+                throw new FormatException("Steam payload exceeds the message size limit.");
+
+            return (payload, DeserializePayload<T>(payload));
         }
 
         private static T DeserializePayload<T>(byte[] payload) where T : class
@@ -2741,8 +2797,14 @@ namespace oojjrs.oplat.steam
             {
                 using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
                 {
-                    var memberRoomFields = _state == StateEnum.Host ? SelectFields(_roomFields, MyNetInterface.Field.VisibilityEnum.Member) : _memberRoomFields;
-                    writer.Write(EncodeFields(memberRoomFields));
+                    writer.Write(_hasPassword);
+                    writer.Write(_isLocked);
+                    writer.Write(_isPrivate);
+                    writer.Write(_maxPlayers);
+                    writer.Write(_title ?? string.Empty);
+                    var roomFields = _state == StateEnum.Host ? _roomFields : _memberRoomFields;
+                    writer.Write(EncodeFields(SelectFields(roomFields, MyNetInterface.Field.VisibilityEnum.Public)));
+                    writer.Write(EncodeFields(SelectFields(roomFields, MyNetInterface.Field.VisibilityEnum.Member)));
                     writer.Write(EncodeRoster(BuildLogicalRoster(true)));
                 }
 
@@ -2755,19 +2817,36 @@ namespace oojjrs.oplat.steam
 
         private void ApplyMemberSnapshot(byte[] payload)
         {
+            bool hasPassword;
+            bool isLocked;
+            bool isPrivate;
+            int maxPlayers;
+            string title;
             MyNetInterface.Field[] memberRoomFields;
             List<RosterPlayerData> roster;
             using (var stream = new MemoryStream(payload, false))
             using (var reader = new BinaryReader(stream, Encoding.UTF8))
             {
-                memberRoomFields = DecodeFields(reader.ReadString());
+                hasPassword = reader.ReadBoolean();
+                isLocked = reader.ReadBoolean();
+                isPrivate = reader.ReadBoolean();
+                maxPlayers = reader.ReadInt32();
+                if ((maxPlayers < 1) || (maxPlayers > PlayerCountMax))
+                    throw new FormatException("Steam member snapshot has an invalid player limit.");
+
+                title = reader.ReadString();
+                EnsureStringByteCount(title, MetadataValueByteCountMax, "room title");
+                memberRoomFields = MergeFields(DecodeFields(reader.ReadString()), DecodeFields(reader.ReadString()));
                 roster = DecodeRoster(reader.ReadString());
+                if (roster.Count > maxPlayers)
+                    throw new FormatException("Steam member snapshot exceeds the player limit.");
+
                 if (stream.Position != stream.Length)
                     throw new FormatException("Steam member snapshot has trailing data.");
             }
 
             EnsureNoPrivateFields(memberRoomFields);
-            memberRoomFields = SelectFields(memberRoomFields, MyNetInterface.Field.VisibilityEnum.Member);
+            memberRoomFields = SelectNonPrivateFields(memberRoomFields);
             var playerIds = new HashSet<ulong>();
             var logicalPlayers = new Dictionary<ulong, RosterPlayerData>();
             foreach (var player in roster)
@@ -2784,6 +2863,11 @@ namespace oojjrs.oplat.steam
             if ((playerIds.Contains(_originalHostId) == false) || (playerIds.Contains(_localSteamId) == false))
                 throw new FormatException("Steam member snapshot is missing a required player.");
 
+            _hasPassword = hasPassword;
+            _isLocked = isLocked;
+            _isPrivate = isPrivate;
+            _maxPlayers = maxPlayers;
+            _title = title;
             _memberRoomFields = memberRoomFields;
             AcceptedPlayerIds.Clear();
             foreach (var playerId in playerIds)

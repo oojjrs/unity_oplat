@@ -10,6 +10,8 @@ void Send(MyNetRequest request);
 
 요청은 전송 큐에 들어가며 호출별 성공 결과를 반환하지 않는다. 대상 지정도 지원하지 않는다. 중요한 메시지는 페이로드에 correlation ID를 넣고 [`MyNetHostServiceInterface`](MyNetHostServiceInterface.md)의 응답으로 애플리케이션 수준 확인 절차를 만든다.
 
+Steam은 호출 시 내용을 직렬화해 고정하고 로컬 호스트도 독립 사본을 받는다. 큐 초과·잘못된 상태·직렬화 실패는 `Send`에서 예외를 던진다. 원격 전송 실패 시 요청은 큐에 남아 재시도한다.
+
 Steam 구현은 다른 스레드에서도 큐에 넣을 수 있지만 Anonymous 구현은 같은 보장을 제공하지 않는다. 플랫폼 공통 코드는 Unity 메인 스레드에서 호출한다.
 
 페이로드 정의와 지원 타입은 [네트워크 페이로드](network-payloads.md)를 참고한다.

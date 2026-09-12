@@ -34,4 +34,6 @@ service.Net.Host.Send(new MoveResponse { Accepted = true });
 
 직렬화 또는 플랫폼 메시지 크기 제한을 넘은 요청·응답은 전달되지 않을 수 있다. `Send`에는 개별 결과 콜백이 없으므로 중요한 프로토콜은 correlation ID, 응답과 timeout을 직접 정의한다.
 
-네트워크 작업 중 예외는 Result 인터페이스의 `OnException(MyNetSessionException)`으로 전달된다.
+Steam은 `Send` 호출 중 직렬화·역직렬화 가능 여부와 페이로드 크기를 검사하고 내용을 고정한다. 검사 실패, 전송할 방·호스트 상태 불일치, 송신 큐 초과는 호출자에게 동기 예외로 전달한다. 원본 객체를 나중에 변경해도 이미 적재한 내용에는 반영되지 않는다. 호스트와 `UseLocal` 수신도 직렬화 결과에서 만든 독립 객체를 사용한다. 다른 플랫폼까지 같은 시점의 사본 생성을 보장한다고 가정하지 않는다.
+
+Result를 받는 비동기 네트워크 작업의 예외는 해당 Result 인터페이스의 `OnException(MyNetSessionException)`으로 전달된다.
