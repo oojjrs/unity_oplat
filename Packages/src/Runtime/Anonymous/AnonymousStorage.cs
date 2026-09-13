@@ -194,7 +194,7 @@ namespace oojjrs.oplat.anonymous
 
         private static string GetAccountRootPath(string storageBasePath, uint appId, string projectKey, string account)
         {
-            return Path.GetFullPath(Path.Combine(storageBasePath, "oojjrs", "Oplat", "AnonymousStorage", "v1", GetStorageKeyHash(projectKey), appId.ToString(CultureInfo.InvariantCulture), "users", GetStorageKeyHash(account)));
+            return Path.GetFullPath(Path.Combine(GetStorageRootPath(storageBasePath), GetStorageKeyHash(projectKey), appId.ToString(CultureInfo.InvariantCulture), "users", GetStorageKeyHash(account)));
         }
 
         private static string GetStorageBasePath()
@@ -205,6 +205,21 @@ namespace oojjrs.oplat.anonymous
 
             return Path.GetFullPath(localApplicationDataPath);
         }
+
+        private static string GetStorageRootPath(string storageBasePath)
+        {
+            return Path.Combine(storageBasePath, "oojjrs", "Oplat", "AnonymousStorage", "v1");
+        }
+
+#if UNITY_EDITOR
+        [UnityEditor.MenuItem("Tools/Oplat/Open Anonymous Storage Folder")]
+        private static void OpenStorageFolder()
+        {
+            var storageRootPath = GetStorageRootPath(GetStorageBasePath());
+            Directory.CreateDirectory(storageRootPath);
+            UnityEditor.EditorUtility.OpenWithDefaultApp(storageRootPath);
+        }
+#endif
 
         private IReadOnlyList<MyStorageServiceInterface.FileInfo> GetFiles(CancellationToken cancellationToken)
         {

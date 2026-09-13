@@ -21,6 +21,8 @@ Anonymous 저장소는 현재 Windows 계정의 다음 경로 아래에 파일�
 
 Project Key는 `Application.identifier`이며, 값이 없으면 company/product 이름으로 대체한다. 프로젝트, App ID와 Account별로 격리되는 로컬 개발 저장소이며 신뢰할 수 있는 원격 데이터베이스가 아니다.
 
+Unity 에디터의 `Tools > Oplat > Open Anonymous Storage Folder` 메뉴로 위 경로의 `v1` 폴더를 탐색기에서 연다. 플레이 모드나 로컬 서버 실행 여부와 관계없이 사용할 수 있으며, 폴더가 없으면 생성한다.
+
 ## 네트워크
 
 Anonymous 네트워크는 `127.0.0.1:45831`의 로컬 서버를 사용한다. 채팅 메시지 한계는 `service.Net.Chat.MessageByteCountMax`에서 조회한다.
