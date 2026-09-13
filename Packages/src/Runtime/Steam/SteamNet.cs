@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -49,352 +48,6 @@ namespace oojjrs.oplat.steam
             Accepted,
             Rejected,
             Unknown,
-        }
-
-        private static class SteamPayloadDeserializer
-        {
-            private sealed class BoundedReadState
-            {
-                private readonly int MaxArrayLength;
-                private readonly int MaxDepth;
-                private readonly int MaxElementCount;
-                private readonly int MaxObjectCount;
-                private readonly int MaxStringBytes;
-
-                private int _elementCount;
-                private int _objectCount;
-                private int _stringBytes;
-
-                internal BoundedReadState(int maxArrayLength, int maxDepth, int maxElementCount, int maxObjectCount, int maxStringBytes)
-                {
-                    MaxArrayLength = maxArrayLength;
-                    MaxDepth = maxDepth;
-                    MaxElementCount = maxElementCount;
-                    MaxObjectCount = maxObjectCount;
-                    MaxStringBytes = maxStringBytes;
-                }
-
-                internal void AddArray(int length)
-                {
-                    if (length < 0)
-                        throw new FormatException("Array length cannot be negative.");
-
-                    if (length > MaxArrayLength)
-                        throw new FormatException($"Array length {length} exceeds the configured limit {MaxArrayLength}.");
-
-                    if (length > (MaxElementCount - _elementCount))
-                        throw new FormatException($"Array elements exceed the configured total limit {MaxElementCount}.");
-
-                    _elementCount += length;
-                    AddObject();
-                }
-
-                internal void AddObject()
-                {
-                    if (_objectCount >= MaxObjectCount)
-                        throw new FormatException($"Objects exceed the configured total limit {MaxObjectCount}.");
-
-                    ++_objectCount;
-                }
-
-                internal void AddStringBytes(int byteCount)
-                {
-                    if (byteCount < 0)
-                        throw new FormatException("String byte length cannot be negative.");
-
-                    if (byteCount > (MaxStringBytes - _stringBytes))
-                        throw new FormatException($"String data exceeds the configured total byte limit {MaxStringBytes}.");
-
-                    _stringBytes += byteCount;
-                }
-
-                internal void EnsureDepth(int depth)
-                {
-                    if (depth > MaxDepth)
-                        throw new FormatException($"Object depth {depth} exceeds the configured limit {MaxDepth}.");
-                }
-            }
-
-            private static readonly Dictionary<Type, PropertyInfo[]> PropertyCache = new();
-            private static readonly UTF8Encoding StringEncoding = new(false, true);
-
-            internal static T Deserialize<T>(Stream stream, int maxArrayLength, int maxDepth, int maxElementCount, int maxObjectCount, int maxStringBytes) where T : class
-            {
-                if (stream is null)
-                    throw new ArgumentNullException(nameof(stream));
-
-                if (stream.CanRead == false)
-                    throw new ArgumentException("The stream must be readable.", nameof(stream));
-
-                if (stream.CanSeek == false)
-                    throw new ArgumentException("The bounded deserializer requires a seekable stream.", nameof(stream));
-
-                if (maxArrayLength < 0)
-                    throw new ArgumentOutOfRangeException(nameof(maxArrayLength));
-
-                if (maxDepth <= 0)
-                    throw new ArgumentOutOfRangeException(nameof(maxDepth));
-
-                if (maxElementCount < 0)
-                    throw new ArgumentOutOfRangeException(nameof(maxElementCount));
-
-                if (maxObjectCount <= 0)
-                    throw new ArgumentOutOfRangeException(nameof(maxObjectCount));
-
-                if (maxStringBytes <= 0)
-                    throw new ArgumentOutOfRangeException(nameof(maxStringBytes));
-
-                var state = new BoundedReadState(maxArrayLength, maxDepth, maxElementCount, maxObjectCount, maxStringBytes);
-                var reader = new BinaryReader(stream);
-                var name = ReadBoundedString(reader, state);
-                if (string.IsNullOrWhiteSpace(name))
-                    throw new FormatException("The serialized type name is empty.");
-
-                var type = GetLoadedType(name);
-                if (type is null)
-                    throw new FormatException($"The serialized type '{name}' is not available in an already loaded assembly.");
-
-                if (typeof(T).IsAssignableFrom(type) == false)
-                    throw new FormatException($"The serialized type '{type.FullName}' is not assignable to {typeof(T).FullName}.");
-
-                if (type.IsAbstract || type.IsInterface || type.ContainsGenericParameters)
-                    throw new FormatException($"The serialized type '{type.FullName}' must be concrete and closed.");
-
-                var value = ReadBoundedClass(reader, type, GetProperties(type), state, 1);
-                if (stream.Position != stream.Length)
-                    throw new FormatException("The serialized payload contains trailing data.");
-
-                return (T)value;
-            }
-
-            private static PropertyInfo[] GetProperties(Type type)
-            {
-                lock (PropertyCache)
-                {
-                    if (PropertyCache.TryGetValue(type, out var value) == false)
-                    {
-                        value = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.GetProperty | BindingFlags.SetProperty).Where(t => t.CanRead && t.CanWrite).OrderBy(t => t.Name).ToArray();
-                        PropertyCache[type] = value;
-                    }
-
-                    return value;
-                }
-            }
-
-            private static Type GetLoadedType(string name)
-            {
-                try
-                {
-                    return Type.GetType(name, ResolveLoadedAssembly, ResolveTypeFromLoadedAssembly, false);
-                }
-                catch (Exception exception) when ((exception is ArgumentException) || (exception is BadImageFormatException) || (exception is FileLoadException) || (exception is FileNotFoundException) || (exception is TargetInvocationException) || (exception is TypeLoadException))
-                {
-                    throw new FormatException($"The serialized type name '{name}' is invalid.", exception);
-                }
-            }
-
-            private static bool IsItem(Type propertyType)
-            {
-                return propertyType.IsPrimitive || (propertyType == typeof(string)) || (propertyType == typeof(DateTime));
-            }
-
-            private static bool IsTuple(Type type)
-            {
-                if (type.IsGenericType == false)
-                    return false;
-
-                var openType = type.GetGenericTypeDefinition();
-                return openType == typeof(ValueTuple<>)
-                    || openType == typeof(ValueTuple<,>)
-                    || openType == typeof(ValueTuple<,,>)
-                    || openType == typeof(ValueTuple<,,,>)
-                    || openType == typeof(ValueTuple<,,,,>)
-                    || openType == typeof(ValueTuple<,,,,,>)
-                    || openType == typeof(ValueTuple<,,,,,,>)
-                    || (openType == typeof(ValueTuple<,,,,,,,>) && IsTuple(type.GetGenericArguments()[7]));
-            }
-
-            private static object ReadBoundedClass(BinaryReader reader, Type type, PropertyInfo[] properties, BoundedReadState state, int depth)
-            {
-                state.EnsureDepth(depth);
-                state.AddObject();
-                var value = Activator.CreateInstance(type);
-                foreach (var property in properties)
-                {
-                    var exists = reader.ReadBoolean();
-                    if (exists == false)
-                        continue;
-
-                    if (property.PropertyType.IsArray)
-                    {
-                        var elementType = property.PropertyType.GetElementType();
-                        var length = reader.ReadInt32();
-                        state.AddArray(length);
-                        var array = Array.CreateInstance(elementType, length);
-                        if (elementType.IsEnum)
-                        {
-                            for (var index = 0; index < length; ++index)
-                                array.SetValue(ReadBoundedEnum(reader, elementType, state), index);
-                        }
-                        else if (IsItem(elementType))
-                        {
-                            for (var index = 0; index < length; ++index)
-                                array.SetValue(ReadBoundedItem(reader, elementType, state), index);
-                        }
-                        else if (IsTuple(elementType))
-                        {
-                            for (var index = 0; index < length; ++index)
-                                array.SetValue(ReadBoundedTuple(reader, elementType, state, depth + 1), index);
-                        }
-                        else
-                        {
-                            var elementProperties = GetProperties(elementType);
-                            for (var index = 0; index < length; ++index)
-                                array.SetValue(ReadBoundedClass(reader, elementType, elementProperties, state, depth + 1), index);
-                        }
-
-                        property.SetValue(value, array);
-                    }
-                    else if (property.PropertyType.IsEnum)
-                    {
-                        property.SetValue(value, ReadBoundedEnum(reader, property.PropertyType, state));
-                    }
-                    else if (IsItem(property.PropertyType))
-                    {
-                        property.SetValue(value, ReadBoundedItem(reader, property.PropertyType, state));
-                    }
-                    else if (IsTuple(property.PropertyType))
-                    {
-                        property.SetValue(value, ReadBoundedTuple(reader, property.PropertyType, state, depth + 1));
-                    }
-                    else
-                    {
-                        property.SetValue(value, ReadBoundedClass(reader, property.PropertyType, GetProperties(property.PropertyType), state, depth + 1));
-                    }
-                }
-
-                return value;
-            }
-
-            private static object ReadBoundedEnum(BinaryReader reader, Type enumType, BoundedReadState state)
-            {
-                var value = ReadBoundedString(reader, state);
-                try
-                {
-                    return Enum.Parse(enumType, value);
-                }
-                catch (ArgumentException exception)
-                {
-                    throw new FormatException($"The value '{value}' is invalid for enum {enumType.FullName}.", exception);
-                }
-            }
-
-            private static int ReadBounded7BitEncodedInt(BinaryReader reader)
-            {
-                var result = 0u;
-                for (var shift = 0; shift < 35; shift += 7)
-                {
-                    var value = reader.ReadByte();
-                    if ((shift == 28) && ((value & 0xf0) != 0))
-                        throw new FormatException("The serialized string length is invalid.");
-
-                    result |= (uint)(value & 0x7f) << shift;
-                    if ((value & 0x80) == 0)
-                    {
-                        if (result > int.MaxValue)
-                            throw new FormatException("The serialized string length is invalid.");
-
-                        return (int)result;
-                    }
-                }
-
-                throw new FormatException("The serialized string length is invalid.");
-            }
-
-            private static object ReadBoundedItem(BinaryReader reader, Type type, BoundedReadState state)
-            {
-                if (type == typeof(string))
-                    return ReadBoundedString(reader, state);
-
-                if (type == typeof(float))
-                    return reader.ReadSingle();
-                if (type == typeof(long))
-                    return reader.ReadInt64();
-                if (type == typeof(int))
-                    return reader.ReadInt32();
-                if (type == typeof(short))
-                    return reader.ReadInt16();
-                if (type == typeof(byte))
-                    return reader.ReadByte();
-                if (type == typeof(bool))
-                    return reader.ReadBoolean();
-                if (type == typeof(double))
-                    return reader.ReadDouble();
-                if (type == typeof(char))
-                    return reader.ReadChar();
-                if (type == typeof(DateTime))
-                    return DateTime.FromBinary(reader.ReadInt64());
-
-                throw new NotImplementedException();
-            }
-
-            private static string ReadBoundedString(BinaryReader reader, BoundedReadState state)
-            {
-                var byteCount = ReadBounded7BitEncodedInt(reader);
-                state.AddStringBytes(byteCount);
-                if (byteCount > (reader.BaseStream.Length - reader.BaseStream.Position))
-                    throw new EndOfStreamException("The serialized string is truncated.");
-
-                var bytes = reader.ReadBytes(byteCount);
-                if (bytes.Length != byteCount)
-                    throw new EndOfStreamException("The serialized string is truncated.");
-
-                try
-                {
-                    return StringEncoding.GetString(bytes);
-                }
-                catch (DecoderFallbackException exception)
-                {
-                    throw new FormatException("The serialized string contains invalid UTF-8 data.", exception);
-                }
-            }
-
-            private static object ReadBoundedTuple(BinaryReader reader, Type type, BoundedReadState state, int depth)
-            {
-                state.EnsureDepth(depth);
-                state.AddObject();
-                var value = Activator.CreateInstance(type);
-                foreach (var field in type.GetFields())
-                {
-                    if (field.FieldType.IsEnum)
-                        field.SetValue(value, ReadBoundedEnum(reader, field.FieldType, state));
-                    else if (IsItem(field.FieldType))
-                        field.SetValue(value, ReadBoundedItem(reader, field.FieldType, state));
-                    else if (IsTuple(field.FieldType))
-                        field.SetValue(value, ReadBoundedTuple(reader, field.FieldType, state, depth + 1));
-                    else
-                        field.SetValue(value, ReadBoundedClass(reader, field.FieldType, GetProperties(field.FieldType), state, depth + 1));
-                }
-
-                return value;
-            }
-
-            private static Assembly ResolveLoadedAssembly(AssemblyName name)
-            {
-#if UNITY_6000_4_OR_NEWER
-                return UnityEngine.Assemblies.CurrentAssemblies.GetLoadedAssemblies().FirstOrDefault(assembly => string.Equals(assembly.FullName, name.FullName, StringComparison.Ordinal));
-#else
-                return AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(assembly => string.Equals(assembly.FullName, name.FullName, StringComparison.Ordinal));
-#endif
-            }
-
-            private static Type ResolveTypeFromLoadedAssembly(Assembly assembly, string name, bool ignoreCase)
-            {
-                if (assembly is null)
-                    return null;
-
-                return assembly.GetType(name, false, ignoreCase);
-            }
         }
 
         private sealed class BusyException : Exception
@@ -486,9 +139,9 @@ namespace oojjrs.oplat.steam
         private readonly Queue<MyNetResponse> IncomingResponses = new();
         private readonly Dictionary<ulong, RosterPlayerData> LogicalPlayers = new();
         private readonly object OutgoingRequestLock = new();
-        private readonly Queue<(byte[] payload, MyNetRequest value)> OutgoingRequests = new();
+        private readonly Queue<MyNetRequest> OutgoingRequests = new();
         private readonly object OutgoingResponseLock = new();
-        private readonly Queue<(byte[] payload, MyNetResponse value)> OutgoingResponses = new();
+        private readonly Queue<MyNetResponse> OutgoingResponses = new();
         private readonly SemaphoreSlim OperationGate = new(1, 1);
         private readonly Queue<PendingBroadcast> _pendingBroadcasts = new();
         private readonly Dictionary<ulong, TaskCompletionSource<bool>> PendingLobbyData = new();
@@ -1322,7 +975,7 @@ namespace oojjrs.oplat.steam
                 if (OutgoingRequests.Count >= MessageQueueCountMax)
                     throw new InvalidOperationException("The Steam request queue is full. Retry after pending requests have been sent.");
 
-                OutgoingRequests.Enqueue(CapturePayload(request));
+                OutgoingRequests.Enqueue(request);
             }
         }
 
@@ -1342,7 +995,7 @@ namespace oojjrs.oplat.steam
                 if (OutgoingResponses.Count >= MessageQueueCountMax)
                     throw new InvalidOperationException("The Steam response queue is full. Retry after pending responses have been sent.");
 
-                OutgoingResponses.Enqueue(CapturePayload(response));
+                OutgoingResponses.Enqueue(response);
             }
         }
 
@@ -2545,7 +2198,7 @@ namespace oojjrs.oplat.steam
                 if ((IncomingResponses.Count >= MessageQueueCountMax) || ((useLocal == false) && (_pendingBroadcasts.Count >= MessageQueueCountMax)))
                     return;
 
-                (byte[] payload, MyNetResponse value) response;
+                MyNetResponse response;
                 lock (OutgoingResponseLock)
                 {
                     if (OutgoingResponses.Count == 0)
@@ -2554,9 +2207,9 @@ namespace oojjrs.oplat.steam
                     response = OutgoingResponses.Dequeue();
                 }
 
-                IncomingResponses.Enqueue(response.value);
+                IncomingResponses.Enqueue(response);
                 if ((useLocal == false) && (AcceptedPlayerIds.Count > 1))
-                    _pendingBroadcasts.Enqueue(new(MessageKind.Response, response.payload, AcceptedPlayerIds.Where(playerId => playerId != _localSteamId)));
+                    _pendingBroadcasts.Enqueue(new(MessageKind.Response, SerializePayload(response), AcceptedPlayerIds.Where(playerId => playerId != _localSteamId)));
             }
         }
 
@@ -2596,7 +2249,7 @@ namespace oojjrs.oplat.steam
 
             for (var index = 0; index < MessagesPerFrameMax; ++index)
             {
-                (byte[] payload, MyNetRequest value) request;
+                MyNetRequest request;
                 lock (OutgoingRequestLock)
                 {
                     if (OutgoingRequests.Count == 0)
@@ -2610,9 +2263,9 @@ namespace oojjrs.oplat.steam
                     if (IncomingRequests.Count >= MessageQueueCountMax)
                         return;
 
-                    IncomingRequests.Enqueue(request.value);
+                    IncomingRequests.Enqueue(request);
                 }
-                else if (SendMessage(_originalHostId, MessageKind.Request, request.payload) == false)
+                else if (SendMessage(_originalHostId, MessageKind.Request, SerializePayload(request)) == false)
                 {
                     return;
                 }
@@ -2743,19 +2396,19 @@ namespace oojjrs.oplat.steam
             }
         }
 
-        private static (byte[] payload, T value) CapturePayload<T>(T value) where T : class
+        private static byte[] SerializePayload(object value)
         {
             var payload = MyNetSerializer.Serialize(value);
             if (payload.Length > MessageByteCountMax - 128)
                 throw new FormatException("Steam payload exceeds the message size limit.");
 
-            return (payload, DeserializePayload<T>(payload));
+            return payload;
         }
 
         private static T DeserializePayload<T>(byte[] payload) where T : class
         {
             using (var stream = new MemoryStream(payload, false))
-                return SteamPayloadDeserializer.Deserialize<T>(stream, 256, 16, 1024, 1024, 32 * 1024);
+                return (T)MyNetDeserializer.Deserialize(stream);
         }
 
         private List<RosterPlayerData> BuildLogicalRoster(bool includeMemberFields)

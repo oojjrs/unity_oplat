@@ -37,7 +37,7 @@ Steamworks App Admin에서 사용자별 byte quota와 file count를 설정하고
 
 Chat·Lobby·Room·Player 작업은 Unity 메인 스레드에서 호출한다. `Member.Send`와 `Host.Send`는 Steam에서 다른 스레드에서도 큐에 넣을 수 있지만, 플랫폼 간 이식성을 위해 공통 코드는 메인 스레드에서 호출하는 편이 안전하다.
 
-Steam의 `Send`는 호출 스레드에서 페이로드를 직렬화하고 역직렬화한 독립 사본을 만든다. 이후 원본을 변경해도 적재한 내용은 바뀌지 않는다. 호스트 자신의 처리와 `UseLocal`도 원본 객체 대신 이 사본을 받는다. 페이로드의 생성자와 getter/setter에는 Unity API 호출이나 시각 재계산 같은 부수 효과를 넣지 않는다.
+Steam의 `Send`는 패킷 객체를 큐에 적재한다. 원격 전송에는 Anonymous와 같은 `MyNetSerializer`와 `MyNetDeserializer`를 사용하며, Steam은 바이트 전송을 담당한다. 호스트 자신의 처리와 `UseLocal`은 직렬화 없이 원본 객체를 전달한다. 전송과 처리가 끝날 때까지 적재한 객체를 변경하지 않는다.
 
 전송과 수신 결과 적용은 플랫폼의 `Update`에서 진행한다. 메인 스레드 정지나 백그라운드 실행 중단은 적용을 지연시킬 수 있다. Unix time 전달은 PC 시계를 자동 보정하지 않으며, 시간 동기화 프로토콜은 게임에서 왕복 시간과 시계 차이를 별도로 처리해야 한다.
 
