@@ -47,9 +47,15 @@ namespace oojjrs.oplat.anonymous
 
         private sealed class AnonymousNetFriendService : MyNetFriendServiceInterface
         {
-            private readonly AnonymousNet _net;
+            private const int MinimumPollingDelaySeconds = 1;
 
-            private bool _isRefreshing;
+            private readonly AnonymousNet _net;
+            private readonly SemaphoreSlim _refreshGate = new(1, 1);
+
+            private MyNetFriendServiceInterface.ConfigInterface _config;
+            private float _nextUpdateTimeSeconds;
+            private int _pollingGeneration;
+            private MyNetFriendServiceInterface.ResultInterface _result;
 
             public AnonymousNetFriendService(AnonymousNet net)
             {
@@ -61,52 +67,9 @@ namespace oojjrs.oplat.anonymous
                 throw new NotSupportedException("Anonymous friend invitations are not implemented.");
             }
 
-            async Task MyNetFriendServiceInterface.RefreshAsync(MyNetFriendServiceInterface.ResultInterface result)
+            Task MyNetFriendServiceInterface.RefreshAsync(MyNetFriendServiceInterface.ResultInterface result)
             {
-                using (var cancellationSource = _net.CreateCancellationSource(CancellationToken.None))
-                {
-                    var cancellationToken = cancellationSource.Token;
-                    if (_isRefreshing)
-                    {
-                        result.OnBusy();
-                        return;
-                    }
-
-                    _isRefreshing = true;
-                    MyNetFriendInterface[] friends;
-                    try
-                    {
-                        await _net.SendAsync(OperationEnum.GetFriends, null, cancellationToken);
-                        var response = await _net.ReceiveAsync(OperationEnum.GetFriends, cancellationToken);
-                        response.EnsureSuccess();
-                        var responseArgument = await response.GetContentAsync<AnonymousServer.FriendsResponseArgument>();
-                        if ((responseArgument == null) || (responseArgument.Friends == null))
-                            throw new FormatException("Invalid anonymous friends response.");
-
-                        friends = new MyNetFriendInterface[responseArgument.Friends.Length];
-                        for (var index = 0; index < friends.Length; ++index)
-                        {
-                            var data = responseArgument.Friends[index];
-                            if ((data == null) || string.IsNullOrEmpty(data.Id) || (data.Nickname == null) || (data.RoomId == null) || ((data.State != MyNetFriendInterface.StateEnum.Online) && (data.State != MyNetFriendInterface.StateEnum.Offline)))
-                                throw new FormatException("Invalid anonymous friend response.");
-
-                            friends[index] = new AnonymousNetFriend(data);
-                        }
-                    }
-                    catch (Exception exception)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        result.OnException(new MyNetSessionException("Failed to get anonymous friends.", exception));
-                        return;
-                    }
-                    finally
-                    {
-                        _isRefreshing = false;
-                    }
-
-                    cancellationToken.ThrowIfCancellationRequested();
-                    result.OnOk(friends);
-                }
+                return RefreshAsync(CancellationToken.None, result, null);
             }
 
             Task MyNetFriendServiceInterface.RequestAddAsync(MyNetFriendServiceInterface.RequestAddConfigInterface config, MyNetFriendServiceInterface.RequestAddResultInterface result)
@@ -116,11 +79,138 @@ namespace oojjrs.oplat.anonymous
 
             Task MyNetFriendServiceInterface.StartAsync(MyNetFriendServiceInterface.ConfigInterface config, MyNetFriendServiceInterface.ResultInterface result)
             {
-                throw new NotSupportedException("Anonymous friend polling is not implemented.");
+                config.CancellationToken.ThrowIfCancellationRequested();
+                _net.LifetimeCancellationToken.ThrowIfCancellationRequested();
+                ++_pollingGeneration;
+                _config = config;
+                _result = result;
+                _nextUpdateTimeSeconds = float.PositiveInfinity;
+                return RefreshPollingAsync(config, result, _pollingGeneration);
             }
 
             void MyNetFriendServiceInterface.Stop()
             {
+                StopPolling();
+            }
+
+            private async Task<MyNetFriendInterface[]> ReadFriendsAsync()
+            {
+                var cancellationToken = _net.LifetimeCancellationToken;
+                await _net.SendAsync(OperationEnum.GetFriends, null, cancellationToken);
+                var response = await _net.ReceiveAsync(OperationEnum.GetFriends, cancellationToken);
+                response.EnsureSuccess();
+                var responseArgument = await response.GetContentAsync<AnonymousServer.FriendsResponseArgument>();
+                if ((responseArgument == null) || (responseArgument.Friends == null))
+                    throw new FormatException("Invalid anonymous friends response.");
+
+                var friends = new MyNetFriendInterface[responseArgument.Friends.Length];
+                for (var index = 0; index < friends.Length; ++index)
+                {
+                    var data = responseArgument.Friends[index];
+                    if ((data == null) || string.IsNullOrEmpty(data.Id) || (data.Nickname == null) || (data.RoomId == null) || ((data.State != MyNetFriendInterface.StateEnum.Online) && (data.State != MyNetFriendInterface.StateEnum.Offline)))
+                        throw new FormatException("Invalid anonymous friend response.");
+
+                    friends[index] = new AnonymousNetFriend(data);
+                }
+
+                return friends;
+            }
+
+            private async Task RefreshAsync(CancellationToken callerCancellationToken, MyNetFriendServiceInterface.ResultInterface result, int? pollingGeneration)
+            {
+                using (var cancellationSource = _net.CreateCancellationSource(callerCancellationToken))
+                {
+                    var cancellationToken = cancellationSource.Token;
+                    if (pollingGeneration.HasValue)
+                    {
+                        await _refreshGate.WaitAsync(cancellationToken);
+                    }
+                    else if (await _refreshGate.WaitAsync(0, cancellationToken) == false)
+                    {
+                        result.OnBusy();
+                        return;
+                    }
+
+                    MyNetFriendInterface[] friends = null;
+                    Exception caughtException = null;
+                    try
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (pollingGeneration.HasValue && (pollingGeneration.Value != _pollingGeneration))
+                            return;
+
+                        friends = await ReadFriendsAsync();
+                    }
+                    catch (Exception exception)
+                    {
+                        caughtException = exception;
+                    }
+                    finally
+                    {
+                        _refreshGate.Release();
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (pollingGeneration.HasValue && (pollingGeneration.Value != _pollingGeneration))
+                        return;
+
+                    if (caughtException == null)
+                        result.OnOk(friends);
+                    else
+                        result.OnException(new MyNetSessionException("Failed to get anonymous friends.", caughtException));
+                }
+            }
+
+            private async Task RefreshPollingAsync(MyNetFriendServiceInterface.ConfigInterface config, MyNetFriendServiceInterface.ResultInterface result, int pollingGeneration)
+            {
+                try
+                {
+                    await RefreshAsync(config.CancellationToken, result, pollingGeneration);
+                }
+                finally
+                {
+                    if (pollingGeneration == _pollingGeneration)
+                    {
+                        if (config.CancellationToken.IsCancellationRequested || _net.LifetimeCancellationToken.IsCancellationRequested)
+                            StopPolling();
+                        else
+                            _nextUpdateTimeSeconds = UnityEngine.Time.realtimeSinceStartup + Math.Max(MinimumPollingDelaySeconds, config.PollingDelaySeconds);
+                    }
+                }
+            }
+
+            public void StopPolling()
+            {
+                ++_pollingGeneration;
+                _config = null;
+                _result = null;
+            }
+
+            public async void Update()
+            {
+                var config = _config;
+                if (config == null)
+                    return;
+
+                if (config.CancellationToken.IsCancellationRequested || _net.LifetimeCancellationToken.IsCancellationRequested)
+                {
+                    StopPolling();
+                    return;
+                }
+
+                if (UnityEngine.Time.realtimeSinceStartup < _nextUpdateTimeSeconds)
+                    return;
+
+                var result = _result;
+                var pollingGeneration = _pollingGeneration;
+                _nextUpdateTimeSeconds = float.PositiveInfinity;
+                try
+                {
+                    await RefreshPollingAsync(config, result, pollingGeneration);
+                }
+                catch (OperationCanceledException) when (config.CancellationToken.IsCancellationRequested || _net.LifetimeCancellationToken.IsCancellationRequested)
+                {
+                }
             }
         }
 
@@ -284,6 +374,7 @@ namespace oojjrs.oplat.anonymous
             {
                 if (_isInitialized)
                 {
+                    _friendService.Update();
                     while (Client.TryReceiveChat(out var chatContent))
                     {
                         var chat = await AnonymousServer.DeserializeAsync<AnonymousServerChat.MessageData>(chatContent);
@@ -392,6 +483,7 @@ namespace oojjrs.oplat.anonymous
 
         internal void Shutdown()
         {
+            _friendService.StopPolling();
             LifetimeCancellationSource.Cancel();
             Client.Shutdown();
             Server.Shutdown();
