@@ -9,6 +9,7 @@ namespace oojjrs.oplat.anonymous
     {
         internal enum OperationEnum : byte
         {
+            AddFriend = 13,
             Authenticate = 1,
             CreateRoom = 2,
             ExitChat = 9,
@@ -49,6 +50,7 @@ namespace oojjrs.oplat.anonymous
         {
             private const int MinimumPollingDelaySeconds = 1;
 
+            private readonly SemaphoreSlim _addGate = new(1, 1);
             private readonly AnonymousNet _net;
             private readonly SemaphoreSlim _refreshGate = new(1, 1);
 
@@ -72,9 +74,47 @@ namespace oojjrs.oplat.anonymous
                 return RefreshAsync(CancellationToken.None, result, null);
             }
 
-            Task MyNetFriendServiceInterface.RequestAddAsync(MyNetFriendServiceInterface.RequestAddConfigInterface config, MyNetFriendServiceInterface.RequestAddResultInterface result)
+            async Task MyNetFriendServiceInterface.RequestAddAsync(MyNetFriendServiceInterface.RequestAddConfigInterface config, MyNetFriendServiceInterface.RequestAddResultInterface result)
             {
-                throw new NotSupportedException("Anonymous friend registration is not implemented.");
+                using (var cancellationSource = _net.CreateCancellationSource(config.CancellationToken))
+                {
+                    var cancellationToken = cancellationSource.Token;
+                    var playerId = config.PlayerId;
+                    if (string.IsNullOrWhiteSpace(playerId))
+                    {
+                        result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyPlayerId);
+                        return;
+                    }
+
+                    if (await _addGate.WaitAsync(0, cancellationToken) == false)
+                    {
+                        result.OnBusy();
+                        return;
+                    }
+
+                    Exception caughtException = null;
+                    try
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await _net.SendAsync(OperationEnum.AddFriend, new AnonymousServer.AddFriendRequestArgument() { PlayerId = playerId }, _net.LifetimeCancellationToken);
+                        var response = await _net.ReceiveAsync(OperationEnum.AddFriend, _net.LifetimeCancellationToken);
+                        response.EnsureSuccess();
+                    }
+                    catch (Exception exception)
+                    {
+                        caughtException = exception;
+                    }
+                    finally
+                    {
+                        _addGate.Release();
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (caughtException == null)
+                        result.OnOk(playerId);
+                    else
+                        result.OnException(new MyNetSessionException("Failed to add anonymous friend.", caughtException));
+                }
             }
 
             Task MyNetFriendServiceInterface.StartAsync(MyNetFriendServiceInterface.ConfigInterface config, MyNetFriendServiceInterface.ResultInterface result)

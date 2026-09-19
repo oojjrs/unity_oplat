@@ -16,6 +16,11 @@ namespace oojjrs.oplat.anonymous
 {
     internal sealed class AnonymousServer
     {
+        public record AddFriendRequestArgument
+        {
+            public string PlayerId { get; set; }
+        }
+
         public record FriendData
         {
             public string Id { get; set; }
@@ -30,10 +35,40 @@ namespace oojjrs.oplat.anonymous
         }
 
         private readonly AnonymousServerChat.State ChatState = new();
+        private readonly object _friendStorageLock = new();
         private readonly CancellationTokenSource LifetimeCancellationSource = new();
         private readonly TcpListener Listener = new(IPAddress.Loopback, AnonymousNet.Port);
         private readonly AnonymousServerRoom.State RoomState = new();
         private readonly Dictionary<string, AnonymousServerSession> Sessions = new();
+
+        private static void AddFriendAccount(AnonymousServerSession session, string playerId)
+        {
+            var accounts = ReadFriendAccounts(session);
+            if (accounts.Contains(playerId, StringComparer.Ordinal))
+                return;
+
+            var path = GetFriendStoragePath(session);
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            var temporaryPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                using (var stream = File.Create(temporaryPath))
+                {
+                    new DataContractJsonSerializer(typeof(string[])).WriteObject(stream, accounts.Append(playerId).ToArray());
+                    stream.Flush(true);
+                }
+
+                if (File.Exists(path))
+                    File.Replace(temporaryPath, path, null);
+                else
+                    File.Move(temporaryPath, path);
+            }
+            finally
+            {
+                if (File.Exists(temporaryPath))
+                    File.Delete(temporaryPath);
+            }
+        }
 
         internal static Task<T> DeserializeAsync<T>(byte[] content)
         {
@@ -50,16 +85,20 @@ namespace oojjrs.oplat.anonymous
                 return BitConverter.ToString(algorithm.ComputeHash(Encoding.UTF8.GetBytes(value))).Replace("-", string.Empty).ToLowerInvariant();
         }
 
-        private static string[] ReadFriendAccounts(AnonymousServerSession session)
+        private static string GetFriendStoragePath(AnonymousServerSession session)
         {
             var localApplicationDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (string.IsNullOrEmpty(localApplicationDataPath))
                 throw new InvalidOperationException("The local application data path is unavailable.");
 
-            var path = Path.Combine(localApplicationDataPath, "oojjrs", "Oplat", "AnonymousServer", "v1", GetFriendStorageKey(session.ProjectKey), session.AppId.ToString(CultureInfo.InvariantCulture), "users", GetFriendStorageKey(session.Account), "friends.json");
+            return Path.Combine(localApplicationDataPath, "oojjrs", "Oplat", "AnonymousServer", "v1", GetFriendStorageKey(session.ProjectKey), session.AppId.ToString(CultureInfo.InvariantCulture), "users", GetFriendStorageKey(session.Account), "friends.json");
+        }
+
+        private static string[] ReadFriendAccounts(AnonymousServerSession session)
+        {
             try
             {
-                using (var stream = File.OpenRead(path))
+                using (var stream = File.OpenRead(GetFriendStoragePath(session)))
                 {
                     var accounts = (string[])new DataContractJsonSerializer(typeof(string[])).ReadObject(stream);
                     if ((accounts == null) || accounts.Any(string.IsNullOrEmpty))
@@ -88,6 +127,30 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
+        private async Task<AnonymousServerResponse> AddFriendAsync(byte[] content, AnonymousServerSession session)
+        {
+            var cancellationToken = LifetimeCancellationSource.Token;
+            try
+            {
+                var argument = await DeserializeAsync<AddFriendRequestArgument>(content);
+                if ((argument == null) || string.IsNullOrWhiteSpace(argument.PlayerId))
+                    return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
+
+                await Task.Run(() =>
+                {
+                    lock (_friendStorageLock)
+                        AddFriendAccount(session, argument.PlayerId);
+                }, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Success);
+            }
+            catch (Exception)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.ServerError);
+            }
+        }
+
         private async Task<(AnonymousServerResponse Response, AnonymousServerSession Session)> CreateResponseAsync(AnonymousNet.OperationEnum operation, byte[] content, AnonymousServerSession session, AnonymousTransport.MessageQueue messages)
         {
             if (operation == AnonymousNet.OperationEnum.Authenticate)
@@ -109,6 +172,7 @@ namespace oojjrs.oplat.anonymous
 
             var response = operation switch
             {
+                AnonymousNet.OperationEnum.AddFriend => await AddFriendAsync(content, session),
                 AnonymousNet.OperationEnum.CreateRoom => await AnonymousServerCreateRoom.RunAsync(content, RoomState, session),
                 AnonymousNet.OperationEnum.ExitChat => await AnonymousServerExitChat.RunAsync(content, ChatState, session),
                 AnonymousNet.OperationEnum.ExitRoom => await AnonymousServerExitRoom.RunAsync(content, ChatState, RoomState, Sessions, session),
@@ -130,7 +194,11 @@ namespace oojjrs.oplat.anonymous
             var cancellationToken = LifetimeCancellationSource.Token;
             try
             {
-                var accounts = await Task.Run(() => ReadFriendAccounts(session), cancellationToken);
+                var accounts = await Task.Run(() =>
+                {
+                    lock (_friendStorageLock)
+                        return ReadFriendAccounts(session);
+                }, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 var friends = new List<FriendData>();
                 foreach (var account in accounts.Distinct(StringComparer.Ordinal))

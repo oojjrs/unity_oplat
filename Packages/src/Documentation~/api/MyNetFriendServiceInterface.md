@@ -2,7 +2,7 @@
 
 `MyNetFriendServiceInterface`, `MyNetFriendInterface`, `MyNetFriendResultInterface`는 친구 목록과 게임 초대의 플랫폼 공통 계약이다.
 
-현재 Anonymous에서 `service.Net.Friend.RefreshAsync(result)`로 한 번 조회하거나 `StartAsync(config, result)`와 `Stop()`으로 반복 조회를 시작·중지할 수 있다. 친구 추가·초대는 아직 구현하지 않았으며 `RequestAddAsync`, `InviteAsync`는 `NotSupportedException`을 발생시킨다. Steam·Ugsymous는 `Friend` 접근 시 `NotSupportedException`을 발생시킨다. 초대 결과 처리기 연결도 아직 제공하지 않는다. 아래에서 미구현 기능의 설명은 이후 구현이 따라야 할 계약이다.
+현재 Anonymous에서 `service.Net.Friend.RefreshAsync(result)`로 한 번 조회하거나 `StartAsync(config, result)`와 `Stop()`으로 반복 조회를 시작·중지할 수 있다. 친구 추가는 `RequestAddAsync(config, result)`로 지원한다. 초대는 아직 구현하지 않았으며 `InviteAsync`는 `NotSupportedException`을 발생시킨다. Steam·Ugsymous는 `Friend` 접근 시 `NotSupportedException`을 발생시킨다. 초대 결과 처리기 연결도 아직 제공하지 않는다. 아래에서 미구현 기능의 설명은 이후 구현이 따라야 할 계약이다.
 
 ## 친구 스냅샷
 
@@ -54,9 +54,11 @@ Anonymous는 기존 조회가 진행 중이면 새 Start의 첫 조회를 기다
 
 `OnOk(playerId)`는 플랫폼이 추가 절차를 시작했다는 뜻이다. 실제 친구 관계 성립은 이후 목록 결과로 확인한다. Steam에서는 사용자가 추가 화면을 닫거나 상대가 수락하지 않을 수도 있다.
 
-Anonymous는 요청자의 친구 목록에 대상 ID를 즉시 저장한다. 계정 실존·본인 확인·상대 승인 없이 미접속 ID도 등록하며 중복 등록은 성공으로 처리한다. 상대 목록을 자동 수정하지 않는다.
+Anonymous는 요청자의 친구 목록에 대상 ID를 즉시 저장한다. 계정 실존·본인 확인·상대 승인 없이 미접속 ID도 등록하며 중복 등록은 성공으로 처리한다. 상대 목록을 자동 수정하지 않는다. 추가된 친구는 다음 Refresh 또는 반복 조회에서 확인한다.
 
 Anonymous의 친구 목록은 접속 세션과 별개인 서버 측 저장 공간에 Project Key·App ID·계정별로 영속 저장한다. 저장을 완료한 뒤 성공을 반환하며, 같은 계정으로 재접속하거나 서버를 재시작해도 복원한다. 접속 상태와 방 ID는 저장하지 않고 조회 시점의 서버 상태에서 계산한다. 파일 경로와 직렬화 형식은 공개 API에 노출하지 않는다.
+
+Anonymous에서 추가 요청이 진행 중이면 다음 추가 호출은 `OnBusy`로 완료한다. 전송 전 취소는 저장하지 않으며, 전송 후 취소는 이미 시작한 저장을 되돌리지 않는다. 응답을 수신한 뒤 취소로 완료하고 성공·오류 콜백은 보내지 않는다. 저장 실패는 `OnException`으로 전달한다.
 
 ## 초대 발송
 
