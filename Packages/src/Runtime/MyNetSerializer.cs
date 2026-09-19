@@ -130,13 +130,25 @@ namespace oojjrs.oplat
                 case long value:
                     bw.Write(value);
                     break;
+                case ulong value:
+                    bw.Write(value);
+                    break;
                 case int value:
+                    bw.Write(value);
+                    break;
+                case uint value:
                     bw.Write(value);
                     break;
                 case short value:
                     bw.Write(value);
                     break;
+                case ushort value:
+                    bw.Write(value);
+                    break;
                 case byte value:
+                    bw.Write(value);
+                    break;
+                case sbyte value:
                     bw.Write(value);
                     break;
                 case bool value:

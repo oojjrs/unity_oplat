@@ -137,12 +137,20 @@ namespace oojjrs.oplat
                 return br.ReadSingle();
             else if (type == typeof(long))
                 return br.ReadInt64();
+            else if (type == typeof(ulong))
+                return br.ReadUInt64();
             else if (type == typeof(int))
                 return br.ReadInt32();
+            else if (type == typeof(uint))
+                return br.ReadUInt32();
             else if (type == typeof(short))
                 return br.ReadInt16();
+            else if (type == typeof(ushort))
+                return br.ReadUInt16();
             else if (type == typeof(byte))
                 return br.ReadByte();
+            else if (type == typeof(sbyte))
+                return br.ReadSByte();
             else if (type == typeof(bool))
                 return br.ReadBoolean();
             else if (type == typeof(double))
