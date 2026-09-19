@@ -15,6 +15,7 @@ namespace oojjrs.oplat.anonymous
             internal enum TypeEnum : byte
             {
                 ChatReceived = 8,
+                FriendInvited = 9,
                 HostResponse = 4,
                 MemberRequest = 3,
                 Operation = 1,
@@ -40,6 +41,11 @@ namespace oojjrs.oplat.anonymous
             internal static Message CreateChatReceived(byte[] content)
             {
                 return new Message(TypeEnum.ChatReceived, default, default, content);
+            }
+
+            internal static Message CreateFriendInvited(byte[] content)
+            {
+                return new Message(TypeEnum.FriendInvited, default, default, content);
             }
 
             internal static Message CreateHostResponse(byte[] content)
@@ -89,6 +95,7 @@ namespace oojjrs.oplat.anonymous
                 return type switch
                 {
                     TypeEnum.ChatReceived => new Message(type, default, default, data[1..]),
+                    TypeEnum.FriendInvited => new Message(type, default, default, data[1..]),
                     TypeEnum.HostResponse => new Message(type, default, default, data[1..]),
                     TypeEnum.MemberRequest => new Message(type, default, default, data[1..]),
                     TypeEnum.Operation when data.Length >= 2 => new Message(type, (AnonymousNet.OperationEnum)data[1], default, data[2..]),
@@ -105,6 +112,7 @@ namespace oojjrs.oplat.anonymous
                 var headerLength = Type switch
                 {
                     TypeEnum.ChatReceived => 1,
+                    TypeEnum.FriendInvited => 1,
                     TypeEnum.HostResponse => 1,
                     TypeEnum.MemberRequest => 1,
                     TypeEnum.Operation => 2,

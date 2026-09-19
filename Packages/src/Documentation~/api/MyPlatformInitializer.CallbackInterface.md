@@ -19,6 +19,7 @@
 | `uint AppId` | 앱 식별자. Steam은 0보다 큰 게임 App ID를 사용한다. |
 | `MyPlatformTypeEnum InitialType` | 초기화할 플랫폼. 현재 지원 값은 `Anonymous`, `Steam`, `Ugsymous`다. |
 | `MyNetChatResultInterface ChatResult` | 선택 사항. 수신 채팅 처리기 |
+| `MyNetFriendResultInterface FriendResult` | 선택 사항. 친구 초대와 참여 요청 처리기 |
 | `MyNetHostResultInterface HostResult` | 선택 사항. 호스트가 받을 요청 처리기 |
 | `MyNetMemberResultInterface MemberResult` | 선택 사항. 멤버가 받을 응답 처리기 |
 | `MyNetPlayerServiceInterface.UpdateResultInterface PlayerResult` | 선택 사항. 다른 구성원의 플레이어 갱신 알림 처리기 |

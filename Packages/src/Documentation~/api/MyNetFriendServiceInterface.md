@@ -2,7 +2,7 @@
 
 `MyNetFriendServiceInterface`, `MyNetFriendInterface`, `MyNetFriendResultInterface`는 친구 목록과 게임 초대의 플랫폼 공통 계약이다.
 
-현재 Anonymous에서 `service.Net.Friend.RefreshAsync(result)`로 한 번 조회하거나 `StartAsync(config, result)`와 `Stop()`으로 반복 조회를 시작·중지할 수 있다. 친구 추가는 `RequestAddAsync(config, result)`로 지원한다. 초대는 아직 구현하지 않았으며 `InviteAsync`는 `NotSupportedException`을 발생시킨다. Steam·Ugsymous는 `Friend` 접근 시 `NotSupportedException`을 발생시킨다. 초대 결과 처리기 연결도 아직 제공하지 않는다. 아래에서 미구현 기능의 설명은 이후 구현이 따라야 할 계약이다.
+현재 Anonymous에서 친구 목록 조회·반복 조회·추가·초대 발송과 수신을 지원한다. Steam·Ugsymous는 `Friend` 접근 시 `NotSupportedException`을 발생시킨다. 아래에서 Steam·Ugsymous 미구현 기능의 설명은 이후 구현이 따라야 할 계약이다.
 
 ## 친구 스냅샷
 
@@ -66,9 +66,13 @@ Anonymous에서 추가 요청이 진행 중이면 다음 추가 호출은 `OnBus
 
 `OnOk(roomId, playerId)`는 플랫폼으로 발송 요청을 넘겼다는 뜻이며 상대에게 도착했거나 상대가 수락했다는 보장은 없다. Anonymous는 접속한 대상에게 즉시 전달하고 오프라인 초대를 보관하지 않는다. Steam의 발송 결과 역시 전달 확인으로 해석하지 않는다.
 
+Anonymous는 같은 Project Key·App ID로 접속한 대상에게만 초대를 전달한다. 호출자가 해당 방의 구성원이 아니거나 대상이 미접속이면 `NotPermitted`, 방이 없으면 `NotFoundRoom`으로 완료한다. 초대 요청이 진행 중이면 다음 초대 호출은 `OnBusy`로 완료한다. 전송 후 취소는 이미 전달된 초대를 되돌리지 않는다.
+
 ## 초대 수신과 참여 요청
 
 `MyNetFriendResultInterface`는 목록 조회와 독립적으로 플랫폼 수명 동안 연결할 결과 처리기다. 목록 Stop으로 초대 수신을 중지하지 않는다.
+
+`MyPlatformInitializer.CallbackInterface.FriendResult`로 처리기를 제공한다. 생략하면 수신 초대를 버린다.
 
 | 콜백 | 의미 |
 | --- | --- |
@@ -78,6 +82,8 @@ Anonymous에서 추가 요청이 진행 중이면 다음 추가 호출은 `OnBus
 콜백의 `roomId`는 비어 있지 않다. `OnInvited`의 `playerId`는 초대한 계정이다. 시작 인자로 받은 참여 요청처럼 보낸 사람을 알 수 없는 경우 `OnJoinRequested`의 `playerId`는 빈 문자열이다. 수신 콜백은 Unity 메인 스레드에서 전달한다.
 
 참여 요청 전에 반드시 초대 수신 콜백이 발생하는 것은 아니다. 게임 시작 인자로 들어온 요청은 플랫폼과 결과 처리기가 준비된 뒤 전달한다. 플랫폼 UI와 게임 UI가 같은 방의 참여를 중복 요청할 수 있으므로 게임은 이미 참여 중인 대상과 진행 중인 참여 작업을 구분한다.
+
+Anonymous는 플랫폼 UI가 없으므로 `OnJoinRequested`를 발생시키지 않는다. 게임 UI는 `OnInvited`로 받은 방 ID를 보관하고 사용자가 수락하면 기존 Join을 호출한다.
 
 게임 내 초대 수락 버튼과 친구의 게임 참여 버튼은 방 ID를 기존 `MyNetRoomServiceInterface.JoinAsync`에 전달한다. 플랫폼 UI의 `OnJoinRequested`도 같은 게임 측 참여 처리로 연결한다. 별도의 친구 전용 입장 API는 두지 않는다. 현재 방에서 나갈지, 비밀번호를 입력받을지는 게임이 결정하며 최종 성공은 Join 결과로 판단한다.
 

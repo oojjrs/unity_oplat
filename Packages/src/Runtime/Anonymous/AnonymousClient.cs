@@ -89,6 +89,18 @@ namespace oojjrs.oplat.anonymous
             return false;
         }
 
+        internal bool TryReceiveFriendInvite(out byte[] content)
+        {
+            if ((_messages != null) && _messages.TryReceive(message => message.Type == AnonymousTransport.Message.TypeEnum.FriendInvited, out var message))
+            {
+                content = message.Content;
+                return true;
+            }
+
+            content = null;
+            return false;
+        }
+
         internal bool TryReceiveHostResponse(out byte[] content)
         {
             if ((_messages != null) && _messages.TryReceive(message => message.Type == AnonymousTransport.Message.TypeEnum.HostResponse, out var message))

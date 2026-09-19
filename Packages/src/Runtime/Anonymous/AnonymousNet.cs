@@ -17,6 +17,7 @@ namespace oojjrs.oplat.anonymous
             GetCurrentRoom = 8,
             GetFriends = 12,
             GetRooms = 4,
+            InviteFriend = 14,
             JoinChat = 10,
             JoinRoom = 5,
             SendChat = 11,
@@ -51,6 +52,7 @@ namespace oojjrs.oplat.anonymous
             private const int MinimumPollingDelaySeconds = 1;
 
             private readonly SemaphoreSlim _addGate = new(1, 1);
+            private readonly SemaphoreSlim _inviteGate = new(1, 1);
             private readonly AnonymousNet _net;
             private readonly SemaphoreSlim _refreshGate = new(1, 1);
 
@@ -64,9 +66,68 @@ namespace oojjrs.oplat.anonymous
                 _net = net;
             }
 
-            Task MyNetFriendServiceInterface.InviteAsync(MyNetFriendServiceInterface.InviteConfigInterface config, MyNetFriendServiceInterface.InviteResultInterface result)
+            async Task MyNetFriendServiceInterface.InviteAsync(MyNetFriendServiceInterface.InviteConfigInterface config, MyNetFriendServiceInterface.InviteResultInterface result)
             {
-                throw new NotSupportedException("Anonymous friend invitations are not implemented.");
+                using (var cancellationSource = _net.CreateCancellationSource(config.CancellationToken))
+                {
+                    var cancellationToken = cancellationSource.Token;
+                    var playerId = config.PlayerId;
+                    var roomId = config.RoomId;
+                    if (string.IsNullOrWhiteSpace(playerId))
+                    {
+                        result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyPlayerId);
+                        return;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(roomId))
+                    {
+                        result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyRoomId);
+                        return;
+                    }
+
+                    if (await _inviteGate.WaitAsync(0, cancellationToken) == false)
+                    {
+                        result.OnBusy();
+                        return;
+                    }
+
+                    MyNetInterface.CatchInterface.FailureEnum? failure = null;
+                    Exception caughtException = null;
+                    try
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await _net.SendAsync(OperationEnum.InviteFriend, new AnonymousServer.InviteFriendRequestArgument() { PlayerId = playerId, RoomId = roomId }, _net.LifetimeCancellationToken);
+                        var response = await _net.ReceiveAsync(OperationEnum.InviteFriend, _net.LifetimeCancellationToken);
+                        switch (response.ResultCode)
+                        {
+                            case AnonymousServerResponse.ResultCodeEnum.NotFound:
+                                failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
+                                break;
+                            case AnonymousServerResponse.ResultCodeEnum.Forbidden:
+                                failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
+                                break;
+                            default:
+                                response.EnsureSuccess();
+                                break;
+                        }
+                    }
+                    catch (Exception exception)
+                    {
+                        caughtException = exception;
+                    }
+                    finally
+                    {
+                        _inviteGate.Release();
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (caughtException != null)
+                        result.OnException(new MyNetSessionException("Failed to send anonymous friend invitation.", caughtException));
+                    else if (failure.HasValue)
+                        result.OnFailed(failure.Value);
+                    else
+                        result.OnOk(roomId, playerId);
+                }
             }
 
             Task MyNetFriendServiceInterface.RefreshAsync(MyNetFriendServiceInterface.ResultInterface result)
@@ -290,6 +351,7 @@ namespace oojjrs.oplat.anonymous
 
         internal string Account => _account;
         internal MyNetChatResultInterface ChatResult { get; private set; }
+        internal MyNetFriendResultInterface FriendResult { get; private set; }
         internal bool HasCurrentRoom => _roomRole != RoomRoleEnum.None;
         internal MyNetHostResultInterface HostResult { get; private set; }
         internal MyNetMemberResultInterface MemberResult { get; private set; }
@@ -392,10 +454,11 @@ namespace oojjrs.oplat.anonymous
             HostService.HandleRequests();
         }
 
-        internal void Initialize(string account, MyNetChatResultInterface chatResult, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
+        internal void Initialize(string account, MyNetChatResultInterface chatResult, MyNetFriendResultInterface friendResult, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
         {
             _account = account;
             ChatResult = chatResult ?? throw new ArgumentNullException(nameof(chatResult));
+            FriendResult = friendResult ?? throw new ArgumentNullException(nameof(friendResult));
             HostResult = hostResult;
             MemberResult = memberResult;
             PlayerResult = playerResult;
@@ -415,6 +478,15 @@ namespace oojjrs.oplat.anonymous
                 if (_isInitialized)
                 {
                     _friendService.Update();
+                    while (Client.TryReceiveFriendInvite(out var friendInviteContent))
+                    {
+                        var friendInvite = await AnonymousServer.DeserializeAsync<AnonymousServer.FriendInviteData>(friendInviteContent);
+                        if ((friendInvite == null) || string.IsNullOrWhiteSpace(friendInvite.PlayerId) || string.IsNullOrWhiteSpace(friendInvite.RoomId))
+                            throw new FormatException("Invalid anonymous friend invitation.");
+
+                        FriendResult.OnInvited(friendInvite.PlayerId, friendInvite.RoomId);
+                    }
+
                     while (Client.TryReceiveChat(out var chatContent))
                     {
                         var chat = await AnonymousServer.DeserializeAsync<AnonymousServerChat.MessageData>(chatContent);

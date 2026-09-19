@@ -29,7 +29,7 @@ Anonymous 네트워크는 `127.0.0.1:45831`의 로컬 서버를 사용한다. �
 
 플랫폼 공통 API는 [인터페이스 문서](../index.md)를 참고한다.
 
-## 친구 목록 조회
+## 친구
 
 `service.Net.Friend.RefreshAsync(result)`는 기존 로컬 서버에 친구 목록을 요청한다. 서버가 다음 계정별 파일을 읽고 현재 접속 세션과 방 정보를 합쳐 스냅샷을 반환한다.
 
@@ -47,4 +47,8 @@ Anonymous 네트워크는 `127.0.0.1:45831`의 로컬 서버를 사용한다. �
 
 반복 조회는 `service.Net.Friend.StartAsync(config, result)`로 시작하고 `Stop()`으로 중지한다. 최소 1초 간격이며 방 참가 중에도 계속 조회한다. 재시작·중지·취소 이후 이전 반복 조회의 결과는 전달하지 않는다.
 
-`service.Net.Friend.RequestAddAsync(config, result)`는 요청자의 목록에 대상 ID를 저장한다. 미접속 ID도 등록할 수 있고 중복 등록은 성공으로 처리한다. 상대 목록은 변경하지 않는다. 저장 완료 후 `OnOk(playerId)`가 호출되며 다음 Refresh 또는 반복 조회에서 추가된 친구를 확인한다. 초대는 아직 구현하지 않았다. 실행 인스턴스는 같은 버전을 사용해야 하며, 이번에 계정 연결 메시지에 Project Key·App ID가 추가되었으므로 이전 버전의 로컬 서버는 종료한 뒤 다시 실행한다.
+`service.Net.Friend.RequestAddAsync(config, result)`는 요청자의 목록에 대상 ID를 저장한다. 미접속 ID도 등록할 수 있고 중복 등록은 성공으로 처리한다. 상대 목록은 변경하지 않는다. 저장 완료 후 `OnOk(playerId)`가 호출되며 다음 Refresh 또는 반복 조회에서 추가된 친구를 확인한다.
+
+`service.Net.Friend.InviteAsync(config, result)`는 호출자가 참가한 방으로 같은 Project Key·App ID의 접속 대상을 초대한다. 대상의 `MyPlatformInitializer.CallbackInterface.FriendResult`에 `OnInvited(playerId, roomId)`를 전달하며 오프라인 초대는 저장하지 않는다. Anonymous에는 플랫폼 참여 UI가 없으므로 `OnJoinRequested`는 발생하지 않는다. 게임 UI에서 초대를 수락하면 받은 방 ID로 기존 Join을 호출한다.
+
+실행 인스턴스는 같은 버전을 사용해야 하며, 친구 메시지 형식이 추가되었으므로 이전 버전의 로컬 서버는 종료한 뒤 다시 실행한다.

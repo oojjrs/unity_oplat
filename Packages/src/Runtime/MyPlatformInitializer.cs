@@ -11,6 +11,7 @@ namespace oojjrs.oplat
             string AnonymousInstanceId => null;
             uint AppId { get; }
             MyNetChatResultInterface ChatResult => EmptyResult;
+            MyNetFriendResultInterface FriendResult => EmptyResult;
             MyNetHostResultInterface HostResult => EmptyResult;
             MyPlatformTypeEnum InitialType { get; }
             MyNetMemberResultInterface MemberResult => EmptyResult;
@@ -20,7 +21,7 @@ namespace oojjrs.oplat
             void OnResult(MyPlatformServiceInterface service);
         }
 
-        private sealed class EmptyNetResult : MyNetChatResultInterface, MyNetHostResultInterface, MyNetMemberResultInterface, MyNetPlayerServiceInterface.UpdateResultInterface, MyNetRoomServiceInterface.UpdateResultInterface
+        private sealed class EmptyNetResult : MyNetChatResultInterface, MyNetFriendResultInterface, MyNetHostResultInterface, MyNetMemberResultInterface, MyNetPlayerServiceInterface.UpdateResultInterface, MyNetRoomServiceInterface.UpdateResultInterface
         {
             void MyNetInterface.CatchInterface.OnBusy()
             {
@@ -35,6 +36,14 @@ namespace oojjrs.oplat
             }
 
             void MyNetChatResultInterface.OnReceived(string message, string playerId, string roomId)
+            {
+            }
+
+            void MyNetFriendResultInterface.OnInvited(string playerId, string roomId)
+            {
+            }
+
+            void MyNetFriendResultInterface.OnJoinRequested(string playerId, string roomId)
             {
             }
 

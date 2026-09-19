@@ -122,7 +122,7 @@ namespace oojjrs.oplat.anonymous
             await Net.AuthenticateAsync(_account, _nickname, callback.AppId, projectKey, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
-            Net.Initialize(_account, callback.ChatResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomResult);
+            Net.Initialize(_account, callback.ChatResult, callback.FriendResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomResult);
             _storage.Initialize(callback.AppId, projectKey, _account);
 
             _isInitialized = true;

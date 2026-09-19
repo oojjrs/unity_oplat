@@ -29,9 +29,21 @@ namespace oojjrs.oplat.anonymous
             public MyNetFriendInterface.StateEnum State { get; set; }
         }
 
+        public record FriendInviteData
+        {
+            public string PlayerId { get; set; }
+            public string RoomId { get; set; }
+        }
+
         public record FriendsResponseArgument
         {
             public FriendData[] Friends { get; set; }
+        }
+
+        public record InviteFriendRequestArgument
+        {
+            public string PlayerId { get; set; }
+            public string RoomId { get; set; }
         }
 
         private readonly AnonymousServerChat.State ChatState = new();
@@ -179,6 +191,7 @@ namespace oojjrs.oplat.anonymous
                 AnonymousNet.OperationEnum.GetCurrentRoom => await AnonymousServerGetCurrentRoom.RunAsync(RoomState, session),
                 AnonymousNet.OperationEnum.GetFriends => await GetFriendsAsync(session),
                 AnonymousNet.OperationEnum.GetRooms => await AnonymousServerGetRooms.RunAsync(RoomState),
+                AnonymousNet.OperationEnum.InviteFriend => await InviteFriendAsync(content, session),
                 AnonymousNet.OperationEnum.JoinChat => await AnonymousServerJoinChat.RunAsync(content, ChatState, RoomState, session),
                 AnonymousNet.OperationEnum.JoinRoom => await AnonymousServerJoinRoom.RunAsync(content, RoomState, Sessions, session),
                 AnonymousNet.OperationEnum.SendChat => await AnonymousServerSendChat.RunAsync(content, ChatState, RoomState, Sessions, session),
@@ -226,6 +239,33 @@ namespace oojjrs.oplat.anonymous
             catch (Exception)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.ServerError);
+            }
+        }
+
+        private async Task<AnonymousServerResponse> InviteFriendAsync(byte[] content, AnonymousServerSession session)
+        {
+            try
+            {
+                var argument = await DeserializeAsync<InviteFriendRequestArgument>(content);
+                if ((argument == null) || string.IsNullOrWhiteSpace(argument.PlayerId) || string.IsNullOrWhiteSpace(argument.RoomId))
+                    return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
+
+                var room = RoomState.Rooms.Find(value => value.Room.Id == argument.RoomId);
+                if (room == null)
+                    return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.NotFound);
+
+                if ((room.Room.Players ?? Array.Empty<AnonymousServerRoom.PlayerData>()).Any(player => player.Id == session.Account) == false)
+                    return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
+
+                if ((Sessions.TryGetValue(argument.PlayerId, out var targetSession) == false) || (targetSession.AppId != session.AppId) || (targetSession.ProjectKey != session.ProjectKey))
+                    return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
+
+                targetSession.Messages.Send(AnonymousTransport.Message.CreateFriendInvited(MyNetSerializer.Serialize(new FriendInviteData() { PlayerId = session.Account, RoomId = argument.RoomId })));
+                return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Success);
+            }
+            catch (Exception)
+            {
                 return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.ServerError);
             }
         }
