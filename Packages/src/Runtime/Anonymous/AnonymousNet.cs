@@ -1,6 +1,5 @@
 ﻿using oojjrs.oplat.anonymous.controllers;
 using System;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,6 +14,7 @@ namespace oojjrs.oplat.anonymous
             ExitChat = 9,
             ExitRoom = 3,
             GetCurrentRoom = 8,
+            GetFriends = 12,
             GetRooms = 4,
             JoinChat = 10,
             JoinRoom = 5,
@@ -30,10 +30,105 @@ namespace oojjrs.oplat.anonymous
             None = 0,
         }
 
+        private sealed class AnonymousNetFriend : MyNetFriendInterface
+        {
+            private readonly AnonymousServer.FriendData _data;
+
+            public AnonymousNetFriend(AnonymousServer.FriendData data)
+            {
+                _data = data;
+            }
+
+            string MyNetFriendInterface.Id => _data.Id;
+            string MyNetFriendInterface.Nickname => _data.Nickname;
+            string MyNetFriendInterface.RoomId => _data.RoomId;
+            MyNetFriendInterface.StateEnum MyNetFriendInterface.State => _data.State;
+        }
+
+        private sealed class AnonymousNetFriendService : MyNetFriendServiceInterface
+        {
+            private readonly AnonymousNet _net;
+
+            private bool _isRefreshing;
+
+            public AnonymousNetFriendService(AnonymousNet net)
+            {
+                _net = net;
+            }
+
+            Task MyNetFriendServiceInterface.InviteAsync(MyNetFriendServiceInterface.InviteConfigInterface config, MyNetFriendServiceInterface.InviteResultInterface result)
+            {
+                throw new NotSupportedException("Anonymous friend invitations are not implemented.");
+            }
+
+            async Task MyNetFriendServiceInterface.RefreshAsync(MyNetFriendServiceInterface.ResultInterface result)
+            {
+                using (var cancellationSource = _net.CreateCancellationSource(CancellationToken.None))
+                {
+                    var cancellationToken = cancellationSource.Token;
+                    if (_isRefreshing)
+                    {
+                        result.OnBusy();
+                        return;
+                    }
+
+                    _isRefreshing = true;
+                    MyNetFriendInterface[] friends;
+                    try
+                    {
+                        await _net.SendAsync(OperationEnum.GetFriends, null, cancellationToken);
+                        var response = await _net.ReceiveAsync(OperationEnum.GetFriends, cancellationToken);
+                        response.EnsureSuccess();
+                        var responseArgument = await response.GetContentAsync<AnonymousServer.FriendsResponseArgument>();
+                        if ((responseArgument == null) || (responseArgument.Friends == null))
+                            throw new FormatException("Invalid anonymous friends response.");
+
+                        friends = new MyNetFriendInterface[responseArgument.Friends.Length];
+                        for (var index = 0; index < friends.Length; ++index)
+                        {
+                            var data = responseArgument.Friends[index];
+                            if ((data == null) || string.IsNullOrEmpty(data.Id) || (data.Nickname == null) || (data.RoomId == null) || ((data.State != MyNetFriendInterface.StateEnum.Online) && (data.State != MyNetFriendInterface.StateEnum.Offline)))
+                                throw new FormatException("Invalid anonymous friend response.");
+
+                            friends[index] = new AnonymousNetFriend(data);
+                        }
+                    }
+                    catch (Exception exception)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        result.OnException(new MyNetSessionException("Failed to get anonymous friends.", exception));
+                        return;
+                    }
+                    finally
+                    {
+                        _isRefreshing = false;
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    result.OnOk(friends);
+                }
+            }
+
+            Task MyNetFriendServiceInterface.RequestAddAsync(MyNetFriendServiceInterface.RequestAddConfigInterface config, MyNetFriendServiceInterface.RequestAddResultInterface result)
+            {
+                throw new NotSupportedException("Anonymous friend registration is not implemented.");
+            }
+
+            Task MyNetFriendServiceInterface.StartAsync(MyNetFriendServiceInterface.ConfigInterface config, MyNetFriendServiceInterface.ResultInterface result)
+            {
+                throw new NotSupportedException("Anonymous friend polling is not implemented.");
+            }
+
+            void MyNetFriendServiceInterface.Stop()
+            {
+            }
+        }
+
         internal const int Port = 45831;
 
         private readonly AnonymousClient Client;
         private readonly AnonymousNetChatService ChatService;
+        private readonly AnonymousNetFriendService _friendService;
         private readonly AnonymousNetHostService HostService;
         private readonly CancellationTokenSource LifetimeCancellationSource = new();
         private readonly CancellationToken LifetimeCancellationToken;
@@ -51,6 +146,7 @@ namespace oojjrs.oplat.anonymous
         private bool _useLocal;
 
         MyNetChatServiceInterface MyNetInterface.Chat => ChatService;
+        MyNetFriendServiceInterface MyNetInterface.Friend => _friendService;
         MyNetHostServiceInterface MyNetInterface.Host => HostService;
         MyNetLobbyServiceInterface MyNetInterface.Lobby => LobbyService;
         MyNetMemberServiceInterface MyNetInterface.Member => MemberService;
@@ -76,6 +172,7 @@ namespace oojjrs.oplat.anonymous
             LifetimeCancellationToken = LifetimeCancellationSource.Token;
             Client = new AnonymousClient(LifetimeCancellationToken);
             ChatService = new(this);
+            _friendService = new(this);
             HostService = new(this);
             LobbyService = new AnonymousNetLobbyService(this);
             MemberService = new(this);
@@ -83,7 +180,7 @@ namespace oojjrs.oplat.anonymous
             RoomService = new AnonymousNetRoomService(this);
         }
 
-        internal async Task AuthenticateAsync(string account, string nickname, CancellationToken callerCancellationToken)
+        internal async Task AuthenticateAsync(string account, string nickname, uint appId, string projectKey, CancellationToken callerCancellationToken)
         {
             using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
@@ -94,7 +191,9 @@ namespace oojjrs.oplat.anonymous
                 await SendAsync(OperationEnum.Authenticate, new AnonymousServerAuthenticate.RequestArgument()
                 {
                     Account = account,
+                    AppId = appId,
                     Nickname = nickname,
+                    ProjectKey = projectKey,
                 }, cancellationToken);
                 var response = await ReceiveAsync(OperationEnum.Authenticate, cancellationToken);
                 response.EnsureSuccess();

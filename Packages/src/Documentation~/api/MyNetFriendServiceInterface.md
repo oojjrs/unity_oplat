@@ -2,7 +2,7 @@
 
 `MyNetFriendServiceInterface`, `MyNetFriendInterface`, `MyNetFriendResultInterface`는 친구 목록과 게임 초대의 플랫폼 공통 계약이다.
 
-현재는 인터페이스만 정의되어 있다. 서비스 구현, `MyNetInterface`의 서비스 프로퍼티, 초기화 시 결과 처리기 연결은 아직 제공하지 않는다. 아래 동작은 구현이 따라야 할 계약이다.
+현재 Anonymous에서 `service.Net.Friend.RefreshAsync(result)`로 한 번 조회할 수 있다. 친구 추가·초대·반복 조회는 아직 구현하지 않았으며 `RequestAddAsync`, `InviteAsync`, `StartAsync`는 `NotSupportedException`을 발생시킨다. `Stop`은 진행 중인 반복 조회가 없어 아무 작업도 하지 않는다. Steam·Ugsymous는 `Friend` 접근 시 `NotSupportedException`을 발생시킨다. 초대 결과 처리기 연결도 아직 제공하지 않는다. 아래에서 미구현 기능의 설명은 이후 구현이 따라야 할 계약이다.
 
 ## 친구 스냅샷
 
@@ -44,7 +44,7 @@ Anonymous는 서버에 접속 세션이 있으면 `Online`, 없으면 `Offline`�
 
 `ConfigInterface`는 `CancellationToken`과 `PollingDelaySeconds`를 제공한다. 간격은 최소 1초다. 새 Start는 기존 반복 조회를 교체하며 교체된 처리기로 추가 결과를 보내지 않는다. 취소 또는 Stop 이후에는 해당 반복 조회 결과를 전달하지 않는다. 방에 참여한 동안에도 친구 목록 갱신은 계속된다.
 
-`ResultInterface.OnOk(IEnumerable<MyNetFriendInterface> friends)`는 전체 스냅샷을 반환한다. 친구가 없으면 빈 목록이다.
+`ResultInterface.OnOk(IEnumerable<MyNetFriendInterface> friends)`는 전체 스냅샷을 반환한다. 친구가 없으면 빈 목록이다. Anonymous에서 Refresh가 진행 중인 동안 다시 호출하면 `OnBusy`로 완료한다. `UseLocal` 값과 관계없이 기존 로컬 서버에 요청한다. 서버의 친구 파일 읽기 실패는 `OnException`으로 전달하며 빈 목록으로 숨기지 않는다.
 
 ## 친구 추가 요청
 

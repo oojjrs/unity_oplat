@@ -35,6 +35,7 @@
         }
 
         MyNetChatServiceInterface Chat { get; }
+        MyNetFriendServiceInterface Friend { get; }
         MyNetHostServiceInterface Host { get; }
         MyNetLobbyServiceInterface Lobby { get; }
         MyNetMemberServiceInterface Member { get; }

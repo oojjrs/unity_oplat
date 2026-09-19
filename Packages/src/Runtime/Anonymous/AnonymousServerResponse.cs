@@ -14,6 +14,7 @@ namespace oojjrs.oplat.anonymous
             Forbidden = 4,
             Conflict = 5,
             UnsupportedOperation = 6,
+            ServerError = 7,
         }
 
         internal AnonymousServerResponse(ResultCodeEnum resultCode, byte[] content)

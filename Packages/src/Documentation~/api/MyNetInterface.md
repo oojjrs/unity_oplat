@@ -1,11 +1,12 @@
 # `MyNetInterface`
 
-Lobby, 방, 플레이어, 채팅과 요청·응답 메시지 서비스의 진입점이다.
+친구, Lobby, 방, 플레이어, 채팅과 요청·응답 메시지 서비스의 진입점이다.
 
 ## 서비스
 
 | 멤버 | 설명 |
 | --- | --- |
+| `Friend` | 친구 서비스. 현재 Anonymous의 일회 조회만 지원하며 다른 플랫폼은 접근 시 `NotSupportedException` 발생 |
 | `Lobby` | 공개 방 목록 조회와 polling |
 | `Room` | 방 생성·참가·수정·퇴장 |
 | `Player` | 현재 플레이어의 필드 갱신 |

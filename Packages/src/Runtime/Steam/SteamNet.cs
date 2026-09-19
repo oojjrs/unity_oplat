@@ -204,6 +204,7 @@ namespace oojjrs.oplat.steam
         private MyNetRoomServiceInterface Room { get; }
 
         MyNetChatServiceInterface MyNetInterface.Chat => Chat;
+        MyNetFriendServiceInterface MyNetInterface.Friend => throw new NotSupportedException("Friends are not implemented for this platform.");
         MyNetHostServiceInterface MyNetInterface.Host => Host;
         MyNetLobbyServiceInterface MyNetInterface.Lobby => Lobby;
         MyNetMemberServiceInterface MyNetInterface.Member => Member;

@@ -118,11 +118,12 @@ namespace oojjrs.oplat.anonymous
 
             _profileSprite = profileSpriteRequest.asset as Sprite;
 
-            await Net.AuthenticateAsync(_account, _nickname, cancellationToken);
+            var projectKey = GetStorageProjectKey();
+            await Net.AuthenticateAsync(_account, _nickname, callback.AppId, projectKey, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
             Net.Initialize(_account, callback.ChatResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomResult);
-            _storage.Initialize(callback.AppId, GetStorageProjectKey(), _account);
+            _storage.Initialize(callback.AppId, projectKey, _account);
 
             _isInitialized = true;
         }

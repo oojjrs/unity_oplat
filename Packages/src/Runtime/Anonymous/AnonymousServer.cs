@@ -1,10 +1,14 @@
 ﻿using oojjrs.oplat.anonymous.controllers;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.Serialization.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,6 +16,19 @@ namespace oojjrs.oplat.anonymous
 {
     internal sealed class AnonymousServer
     {
+        public record FriendData
+        {
+            public string Id { get; set; }
+            public string Nickname { get; set; }
+            public string RoomId { get; set; }
+            public MyNetFriendInterface.StateEnum State { get; set; }
+        }
+
+        public record FriendsResponseArgument
+        {
+            public FriendData[] Friends { get; set; }
+        }
+
         private readonly AnonymousServerChat.State ChatState = new();
         private readonly CancellationTokenSource LifetimeCancellationSource = new();
         private readonly TcpListener Listener = new(IPAddress.Loopback, AnonymousNet.Port);
@@ -25,6 +42,40 @@ namespace oojjrs.oplat.anonymous
                 using (var stream = new MemoryStream(content))
                     return (T)MyNetDeserializer.Deserialize(stream);
             });
+        }
+
+        private static string GetFriendStorageKey(string value)
+        {
+            using (var algorithm = SHA256.Create())
+                return BitConverter.ToString(algorithm.ComputeHash(Encoding.UTF8.GetBytes(value))).Replace("-", string.Empty).ToLowerInvariant();
+        }
+
+        private static string[] ReadFriendAccounts(AnonymousServerSession session)
+        {
+            var localApplicationDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrEmpty(localApplicationDataPath))
+                throw new InvalidOperationException("The local application data path is unavailable.");
+
+            var path = Path.Combine(localApplicationDataPath, "oojjrs", "Oplat", "AnonymousServer", "v1", GetFriendStorageKey(session.ProjectKey), session.AppId.ToString(CultureInfo.InvariantCulture), "users", GetFriendStorageKey(session.Account), "friends.json");
+            try
+            {
+                using (var stream = File.OpenRead(path))
+                {
+                    var accounts = (string[])new DataContractJsonSerializer(typeof(string[])).ReadObject(stream);
+                    if ((accounts == null) || accounts.Any(string.IsNullOrEmpty))
+                        throw new FormatException("Invalid anonymous friend accounts.");
+
+                    return accounts;
+                }
+            }
+            catch (FileNotFoundException)
+            {
+                return Array.Empty<string>();
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return Array.Empty<string>();
+            }
         }
 
         private async Task AcceptAsync()
@@ -62,6 +113,7 @@ namespace oojjrs.oplat.anonymous
                 AnonymousNet.OperationEnum.ExitChat => await AnonymousServerExitChat.RunAsync(content, ChatState, session),
                 AnonymousNet.OperationEnum.ExitRoom => await AnonymousServerExitRoom.RunAsync(content, ChatState, RoomState, Sessions, session),
                 AnonymousNet.OperationEnum.GetCurrentRoom => await AnonymousServerGetCurrentRoom.RunAsync(RoomState, session),
+                AnonymousNet.OperationEnum.GetFriends => await GetFriendsAsync(session),
                 AnonymousNet.OperationEnum.GetRooms => await AnonymousServerGetRooms.RunAsync(RoomState),
                 AnonymousNet.OperationEnum.JoinChat => await AnonymousServerJoinChat.RunAsync(content, ChatState, RoomState, session),
                 AnonymousNet.OperationEnum.JoinRoom => await AnonymousServerJoinRoom.RunAsync(content, RoomState, Sessions, session),
@@ -71,6 +123,43 @@ namespace oojjrs.oplat.anonymous
                 _ => AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.UnsupportedOperation),
             };
             return (response, session);
+        }
+
+        private async Task<AnonymousServerResponse> GetFriendsAsync(AnonymousServerSession session)
+        {
+            var cancellationToken = LifetimeCancellationSource.Token;
+            try
+            {
+                var accounts = await Task.Run(() => ReadFriendAccounts(session), cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                var friends = new List<FriendData>();
+                foreach (var account in accounts.Distinct(StringComparer.Ordinal))
+                {
+                    var friend = new FriendData()
+                    {
+                        Id = account,
+                        Nickname = account,
+                        RoomId = string.Empty,
+                        State = MyNetFriendInterface.StateEnum.Offline,
+                    };
+                    if (Sessions.TryGetValue(account, out var friendSession) && (friendSession.AppId == session.AppId) && (friendSession.ProjectKey == session.ProjectKey))
+                    {
+                        friend.Nickname = friendSession.Nickname;
+                        friend.State = MyNetFriendInterface.StateEnum.Online;
+                        var room = RoomState.Rooms.Find(value => (value.Room.IsPrivate == false) && value.Room.Players.Any(player => player.Id == account));
+                        friend.RoomId = room?.Room.Id ?? string.Empty;
+                    }
+
+                    friends.Add(friend);
+                }
+
+                return await AnonymousServerResponse.CreateAsync(AnonymousServerResponse.ResultCodeEnum.Success, new FriendsResponseArgument() { Friends = friends.ToArray() });
+            }
+            catch (Exception)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.ServerError);
+            }
         }
 
         private async Task RemoveSessionAsync(AnonymousServerSession session)

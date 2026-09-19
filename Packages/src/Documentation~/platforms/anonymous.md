@@ -28,3 +28,21 @@ Unity 에디터의 `Tools > Oplat > Open Anonymous Storage Folder` 메뉴로 위
 Anonymous 네트워크는 `127.0.0.1:45831`의 로컬 서버를 사용한다. 채팅 메시지 한계는 `service.Net.Chat.MessageByteCountMax`에서 조회한다.
 
 플랫폼 공통 API는 [인터페이스 문서](../index.md)를 참고한다.
+
+## 친구 목록 조회
+
+`service.Net.Friend.RefreshAsync(result)`는 기존 로컬 서버에 친구 목록을 요청한다. 서버가 다음 계정별 파일을 읽고 현재 접속 세션과 방 정보를 합쳐 스냅샷을 반환한다.
+
+```text
+%LOCALAPPDATA%\oojjrs\Oplat\AnonymousServer\v1\<project-key SHA-256>\<AppId>\users\<account SHA-256>\friends.json
+```
+
+파일 내용은 계정 ID의 JSON 배열이다. 해시는 UTF-8 문자열의 SHA-256을 소문자 16진수로 표현한다. 파일과 디렉터리가 없으면 빈 목록이며, 잘못된 JSON·읽기 권한 오류 등은 조회 실패로 전달한다. Refresh는 파일을 만들거나 수정하지 않는다.
+
+```json
+["friend-account-a", "friend-account-b"]
+```
+
+같은 ID는 한 번만 반환한다. 같은 Project Key·App ID의 접속 세션이 있으면 `Online`과 현재 닉네임을 반환하고, 없으면 `Offline`과 계정 ID를 표시 이름으로 반환한다. 접속한 친구가 공개 방에 있으면 `RoomId`를 제공하며, 방이 없거나 비공개이면 빈 문자열이다.
+
+친구 추가·초대·반복 조회는 아직 구현하지 않았다. 저장된 파일이 없으면 친구 추가 구현 전까지 목록은 비어 있다. 실행 인스턴스는 같은 버전을 사용해야 하며, 이번에 계정 연결 메시지에 Project Key·App ID가 추가되었으므로 이전 버전의 로컬 서버는 종료한 뒤 다시 실행한다.

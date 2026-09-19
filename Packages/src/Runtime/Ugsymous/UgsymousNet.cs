@@ -18,6 +18,7 @@ namespace oojjrs.oplat.ugsymous
         private bool _useLocal;
 
         MyNetChatServiceInterface MyNetInterface.Chat => _chat;
+        MyNetFriendServiceInterface MyNetInterface.Friend => throw new NotSupportedException("Friends are not implemented for this platform.");
         MyNetHostServiceInterface MyNetInterface.Host => _host;
         MyNetLobbyServiceInterface MyNetInterface.Lobby => _lobby;
         MyNetMemberServiceInterface MyNetInterface.Member => _member;
