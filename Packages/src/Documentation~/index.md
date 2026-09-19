@@ -20,6 +20,7 @@
 | 문서 | 설명 |
 | --- | --- |
 | [`MyNetInterface`](api/MyNetInterface.md) | 네트워크 서비스 진입점, 공통 실패, 필드 공개 범위, 로컬 전송 |
+| [친구와 게임 초대 계약](api/MyNetFriendServiceInterface.md) | 친구 스냅샷, 목록·추가·초대 서비스와 수신 콜백의 인터페이스 정의. 플랫폼 구현은 미연결 |
 | [`MyNetLobbyServiceInterface`](api/MyNetLobbyServiceInterface.md) | 공개 방 목록의 일회 조회와 반복 조회 |
 | [`MyNetRoomServiceInterface`](api/MyNetRoomServiceInterface.md) | 방 생성·참가·수정·퇴장 |
 | [`MyNetRoomInterface`](api/MyNetRoomInterface.md) | 방 스냅샷 조회 |
