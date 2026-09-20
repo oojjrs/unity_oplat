@@ -37,19 +37,19 @@ Anonymous 네트워크는 `127.0.0.1:45831`의 로컬 서버를 사용한다. �
 %LOCALAPPDATA%\oojjrs\Oplat\AnonymousServer\v1\<project-key SHA-256>\<AppId>\users\<account SHA-256>\friends.json
 ```
 
-파일 내용은 계정 ID의 JSON 배열이다. 해시는 UTF-8 문자열의 SHA-256을 소문자 16진수로 표현한다. 파일과 디렉터리가 없으면 빈 목록이며, 잘못된 JSON·읽기 권한 오류 등은 조회 실패로 전달한다. Refresh는 파일을 만들거나 수정하지 않는다.
+파일 내용은 계정 ID 또는 `AnonymousInstanceId`의 JSON 배열이다. `AnonymousInstanceId`만 입력하면 현재 로컬 계정과 App ID를 조합해 전체 계정 ID로 해석한다. 해시는 UTF-8 문자열의 SHA-256을 소문자 16진수로 표현한다. 파일과 디렉터리가 없으면 빈 목록이며, 잘못된 JSON·읽기 권한 오류 등은 조회 실패로 전달한다. Refresh는 파일을 만들거나 수정하지 않는다.
 
 ```json
-["friend-account-a", "friend-account-b"]
+["alice", "bob"]
 ```
 
 Unity 에디터의 `Tools > Oplat > Open Anonymous Friend List` 메뉴로 해당 파일을 기본 앱에서 연다. 플레이 중이면 초기화된 Anonymous 인스턴스를 사용하고, 편집 모드에서는 선택한 `MyPlatformInitializer` 또는 열린 씬의 유일한 Anonymous 초기화기 설정에서 App ID와 인스턴스 ID를 읽는다. 초기화기가 여러 개면 원하는 GameObject를 먼저 선택한다. 파일이나 디렉터리가 없으면 빈 배열 `[]`로 생성한다.
 
-같은 ID는 한 번만 반환한다. 같은 Project Key·App ID의 접속 세션이 있으면 `Online`과 현재 닉네임을 반환하고, 없으면 `Offline`과 계정 ID를 표시 이름으로 반환한다. 접속한 친구가 공개 방에 있으면 `RoomId`를 제공하며, 방이 없거나 비공개이면 빈 문자열이다.
+같은 ID는 한 번만 반환한다. `Id`는 전체 계정 ID이며, 같은 Project Key·App ID의 접속 세션이 있으면 `Online`과 현재 닉네임을 반환한다. 접속 세션이 없으면 `Offline`이며 표시 이름은 파일에 입력한 계정 ID 또는 `AnonymousInstanceId`다. 접속한 친구가 공개 방에 있으면 `RoomId`를 제공하며, 방이 없거나 비공개이면 빈 문자열이다.
 
 반복 조회는 `service.Net.Friend.StartAsync(config, result)`로 시작하고 `Stop()`으로 중지한다. 최소 1초 간격이며 방 참가 중에도 계속 조회한다. 재시작·중지·취소 이후 이전 반복 조회의 결과는 전달하지 않는다.
 
-`service.Net.Friend.RequestAddAsync(config, result)`는 요청자의 목록에 대상 ID를 저장한다. 미접속 ID도 등록할 수 있고 중복 등록은 성공으로 처리한다. 상대 목록은 변경하지 않는다. 저장 완료 후 `OnOk(playerId)`가 호출되며 다음 Refresh 또는 반복 조회에서 추가된 친구를 확인한다.
+`service.Net.Friend.RequestAddAsync(config, result)`는 요청자의 목록에 대상 ID 또는 `AnonymousInstanceId`를 저장한다. 미접속 대상도 등록할 수 있고 같은 전체 계정 ID로 해석되는 값의 중복 등록은 성공으로 처리한다. 상대 목록은 변경하지 않는다. 저장 완료 후 `OnOk(playerId)`가 호출되며 다음 Refresh 또는 반복 조회에서 추가된 친구를 확인한다.
 
 `service.Net.Friend.InviteAsync(config, result)`는 호출자가 참가한 방으로 같은 Project Key·App ID의 접속 대상을 초대한다. 대상의 `MyPlatformInitializer.CallbackInterface.FriendResult`에 `OnInvited(playerId, roomId)`를 전달하며 오프라인 초대는 저장하지 않는다. Anonymous에는 플랫폼 참여 UI가 없으므로 `OnJoinRequested`는 발생하지 않는다. 게임 UI에서 초대를 수락하면 받은 방 ID로 기존 Join을 호출한다.
 

@@ -372,7 +372,7 @@ namespace oojjrs.oplat.anonymous
             RoomService = new AnonymousNetRoomService(this);
         }
 
-        internal async Task AuthenticateAsync(string account, string nickname, uint appId, string projectKey, CancellationToken callerCancellationToken)
+        internal async Task AuthenticateAsync(string account, string baseAccount, string nickname, uint appId, string projectKey, CancellationToken callerCancellationToken)
         {
             using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
@@ -384,6 +384,7 @@ namespace oojjrs.oplat.anonymous
                 {
                     Account = account,
                     AppId = appId,
+                    BaseAccount = baseAccount,
                     Nickname = nickname,
                     ProjectKey = projectKey,
                 }, cancellationToken);

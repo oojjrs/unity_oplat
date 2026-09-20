@@ -96,15 +96,16 @@ namespace oojjrs.oplat.anonymous
         }
 #endif
 
-        private static void GetIdentity(uint appId, string instanceId, out string account, out string nickname)
+        private static void GetIdentity(uint appId, string instanceId, out string account, out string baseAccount, out string nickname)
         {
             nickname = GetNickname();
-            account = GetAccount(nickname);
+            baseAccount = GetAccount(nickname);
+            account = baseAccount;
             instanceId = instanceId?.Trim();
             if (string.IsNullOrEmpty(instanceId))
                 return;
 
-            account = $"{account}:{appId}:{instanceId}";
+            account = $"{baseAccount}:{appId}:{instanceId}";
             nickname = $"{nickname} [{instanceId}]";
         }
 
@@ -163,7 +164,7 @@ namespace oojjrs.oplat.anonymous
                 }
 
                 appId = callback.AppId;
-                GetIdentity(appId, callback.AnonymousInstanceId, out account, out _);
+                GetIdentity(appId, callback.AnonymousInstanceId, out account, out _, out _);
             }
 
             var path = AnonymousServer.GetFriendStoragePath(appId, GetStorageProjectKey(), account);
@@ -182,7 +183,7 @@ namespace oojjrs.oplat.anonymous
                 return;
 
             var appId = callback.AppId;
-            GetIdentity(appId, callback.AnonymousInstanceId, out var account, out var nickname);
+            GetIdentity(appId, callback.AnonymousInstanceId, out var account, out var baseAccount, out var nickname);
 
             _account = account;
             _appId = appId;
@@ -195,7 +196,7 @@ namespace oojjrs.oplat.anonymous
             _profileSprite = profileSpriteRequest.asset as Sprite;
 
             var projectKey = GetStorageProjectKey();
-            await Net.AuthenticateAsync(_account, _nickname, appId, projectKey, cancellationToken);
+            await Net.AuthenticateAsync(_account, baseAccount, _nickname, appId, projectKey, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
             Net.Initialize(_account, callback.ChatResult, callback.FriendResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomResult);
