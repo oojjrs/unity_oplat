@@ -269,8 +269,7 @@ namespace oojjrs.oplat.anonymous
                 if (TryGetFriendSession(session, argument.PlayerId, out var targetSession) == false)
                     return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
 
-                var playerId = string.IsNullOrEmpty(session.InstanceId) ? session.Account : session.InstanceId;
-                targetSession.Messages.Send(AnonymousTransport.Message.CreateFriendInvited(MyNetSerializer.Serialize(new FriendInviteData() { PlayerId = playerId, RoomId = argument.RoomId })));
+                targetSession.Messages.Send(AnonymousTransport.Message.CreateFriendInvited(MyNetSerializer.Serialize(new FriendInviteData() { PlayerId = session.Account, RoomId = argument.RoomId })));
                 return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Success);
             }
             catch (Exception)
@@ -374,11 +373,7 @@ namespace oojjrs.oplat.anonymous
 
         private bool TryGetFriendSession(AnonymousServerSession session, string playerId, out AnonymousServerSession friendSession)
         {
-            if (Sessions.TryGetValue(playerId, out friendSession) && (friendSession.AppId == session.AppId) && (friendSession.ProjectKey == session.ProjectKey))
-                return true;
-
-            friendSession = Sessions.Values.FirstOrDefault(value => (value.AppId == session.AppId) && (value.ProjectKey == session.ProjectKey) && (value.InstanceId == playerId));
-            return friendSession != null;
+            return Sessions.TryGetValue(playerId, out friendSession) && (friendSession.AppId == session.AppId) && (friendSession.ProjectKey == session.ProjectKey);
         }
     }
 }

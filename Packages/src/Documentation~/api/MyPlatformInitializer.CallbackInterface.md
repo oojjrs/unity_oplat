@@ -15,7 +15,7 @@
 
 | 멤버 | 설명 |
 | --- | --- |
-| `string AnonymousInstanceId` | 선택 사항. Anonymous 실행 인스턴스를 구분한다. Ugsymous에서는 UGS 인증 profile을 결정한다. 기본값은 `null`이다. Steam에서는 사용하지 않는다. |
+| `string AnonymousInstanceId` | 선택 사항. Anonymous에서는 공백을 제거한 값을 계정 ID와 닉네임으로 사용하고, Ugsymous에서는 UGS 인증 profile을 결정한다. 기본값은 `null`이다. Steam에서는 사용하지 않는다. |
 | `uint AppId` | 앱 식별자. Steam은 0보다 큰 게임 App ID를 사용한다. |
 | `MyPlatformTypeEnum InitialType` | 초기화할 플랫폼. 현재 지원 값은 `Anonymous`, `Steam`, `Ugsymous`다. |
 | `MyNetChatResultInterface ChatResult` | 선택 사항. 수신 채팅 처리기 |
