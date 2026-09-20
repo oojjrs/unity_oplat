@@ -51,6 +51,8 @@ namespace oojjrs.oplat.anonymous
         private readonly AnonymousServerRoom.State RoomState = new();
         private readonly Dictionary<string, AnonymousServerSession> Sessions = new();
 
+        private bool _isStarted;
+
         private static void AddFriendAccount(AnonymousServerSession session, string playerId)
         {
             var accounts = ReadFriendAccounts(session);
@@ -355,11 +357,15 @@ namespace oojjrs.oplat.anonymous
         {
             LifetimeCancellationSource.Cancel();
             Listener.Stop();
+            _isStarted = false;
         }
 
         internal void Start(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (_isStarted)
+                return;
+
             try
             {
                 Listener.Start();
@@ -369,6 +375,7 @@ namespace oojjrs.oplat.anonymous
                 return;
             }
 
+            _isStarted = true;
             _ = AcceptAsync();
         }
 

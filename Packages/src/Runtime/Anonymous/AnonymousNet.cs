@@ -319,6 +319,7 @@ namespace oojjrs.oplat.anonymous
 
         private readonly AnonymousClient Client;
         private readonly AnonymousNetChatService ChatService;
+        private readonly SemaphoreSlim AuthenticationGate = new(1, 1);
         private readonly AnonymousNetFriendService _friendService;
         private readonly AnonymousNetHostService HostService;
         private readonly CancellationTokenSource LifetimeCancellationSource = new();
@@ -330,9 +331,12 @@ namespace oojjrs.oplat.anonymous
         private readonly AnonymousServer Server = new();
 
         private string _account;
+        private uint _appId;
         private string _currentRoomId;
         private bool _hasRemoteMember;
+        private bool _isAuthenticated;
         private bool _isInitialized;
+        private string _nickname;
         private RoomRoleEnum _roomRole;
         private bool _useLocal;
 
@@ -374,20 +378,48 @@ namespace oojjrs.oplat.anonymous
 
         internal async Task AuthenticateAsync(string account, string nickname, uint appId, CancellationToken callerCancellationToken)
         {
+            _account = account;
+            _appId = appId;
+            _nickname = nickname;
+            await EnsureAuthenticatedAsync(callerCancellationToken);
+        }
+
+        private async Task EnsureAuthenticatedAsync(CancellationToken callerCancellationToken)
+        {
             using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
-                Server.Start(cancellationToken);
-                await Client.ConnectAsync(cancellationToken);
-
-                await SendAsync(OperationEnum.Authenticate, new AnonymousServerAuthenticate.RequestArgument()
+                await AuthenticationGate.WaitAsync(cancellationToken);
+                try
                 {
-                    Account = account,
-                    AppId = appId,
-                    Nickname = nickname,
-                }, cancellationToken);
-                var response = await ReceiveAsync(OperationEnum.Authenticate, cancellationToken);
-                response.EnsureSuccess();
+                    if (_isAuthenticated)
+                        return;
+
+                    Client.Shutdown();
+                    Server.Start(cancellationToken);
+                    await Client.ConnectAsync(cancellationToken);
+
+                    var content = await Task.Run(() => MyNetSerializer.Serialize(new AnonymousServerAuthenticate.RequestArgument()
+                    {
+                        Account = _account,
+                        AppId = _appId,
+                        Nickname = _nickname,
+                    }));
+                    cancellationToken.ThrowIfCancellationRequested();
+                    Client.Send(OperationEnum.Authenticate, content);
+                    var response = await Client.ReceiveAsync(OperationEnum.Authenticate, cancellationToken);
+                    response.EnsureSuccess();
+                    _isAuthenticated = true;
+                }
+                catch
+                {
+                    Client.Shutdown();
+                    throw;
+                }
+                finally
+                {
+                    AuthenticationGate.Release();
+                }
             }
         }
 
@@ -412,6 +444,13 @@ namespace oojjrs.oplat.anonymous
             cancellationToken.ThrowIfCancellationRequested();
             LifetimeCancellationToken.ThrowIfCancellationRequested();
             return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, LifetimeCancellationToken);
+        }
+
+        internal void HandleDisconnected()
+        {
+            _isAuthenticated = false;
+            Client.Shutdown();
+            ClearCurrentRoom();
         }
 
         internal async Task<MyNetRoomInterface> GetCurrentRoomAsync(CancellationToken callerCancellationToken)
@@ -588,6 +627,7 @@ namespace oojjrs.oplat.anonymous
         internal async Task SendAsync(OperationEnum operation, object argument, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            await EnsureAuthenticatedAsync(cancellationToken);
             var content = argument == null ? Array.Empty<byte>() : await Task.Run(() => MyNetSerializer.Serialize(argument));
             cancellationToken.ThrowIfCancellationRequested();
             Client.Send(operation, content);
@@ -604,6 +644,7 @@ namespace oojjrs.oplat.anonymous
         {
             _friendService.StopPolling();
             LifetimeCancellationSource.Cancel();
+            _isAuthenticated = false;
             Client.Shutdown();
             Server.Shutdown();
         }

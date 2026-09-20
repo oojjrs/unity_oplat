@@ -81,6 +81,7 @@ namespace oojjrs.oplat.anonymous
                     cancellationToken.ThrowIfCancellationRequested();
                     if (IsDisconnected(exception))
                     {
+                        Net.HandleDisconnected();
                         Stop();
                         result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.Disconnected);
                     }

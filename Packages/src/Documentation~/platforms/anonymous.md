@@ -27,7 +27,7 @@ Unity 에디터의 `Tools > Oplat > Open Anonymous Storage Folder` 메뉴로 위
 
 Anonymous 네트워크는 `127.0.0.1:45831`의 로컬 서버를 사용한다. 채팅 메시지 한계는 `service.Net.Chat.MessageByteCountMax`에서 조회한다.
 
-Lobby 조회 중 로컬 서버의 스트림 또는 소켓 연결이 종료되면 반복 조회를 중지하고 `OnFailed(Disconnected)`를 호출한다.
+Lobby 조회 중 로컬 서버의 스트림 또는 소켓 연결이 종료되면 반복 조회를 중지하고 `OnFailed(Disconnected)`를 호출한다. 종료된 연결과 현재 방 상태를 버리며, 이후 네트워크 요청에서 로컬 서버 시작을 다시 시도하고 새 연결로 재인증한다.
 
 방장이 나가거나 연결이 끊기면 로컬 서버가 방을 삭제하고 남은 멤버를 모두 내보낸다. 멤버는 `RoomResult.OnFailed(NotFoundRoom)`을 받아 로비 전환을 처리할 수 있으며, `UseLocal` 사용 여부와 관계없이 이 방 수명주기 알림을 받는다.
 
