@@ -559,6 +559,7 @@ namespace oojjrs.oplat.steam
 
                 MyNetRoomInterface[] rooms = null;
                 var isBusy = false;
+                MyNetInterface.CatchInterface.FailureEnum? failure = null;
                 Exception caughtException = null;
                 try
                 {
@@ -567,6 +568,10 @@ namespace oojjrs.oplat.steam
                 catch (BusyException)
                 {
                     isBusy = true;
+                }
+                catch (FailureException exception)
+                {
+                    failure = exception.Failure;
                 }
                 catch (Exception exception)
                 {
@@ -581,6 +586,13 @@ namespace oojjrs.oplat.steam
 
                 if (isBusy)
                     result.OnBusy();
+                else if (failure.HasValue)
+                {
+                    if (failure.Value == MyNetInterface.CatchInterface.FailureEnum.Disconnected)
+                        StopLobby();
+
+                    result.OnFailed(failure.Value);
+                }
                 else if (caughtException != null)
                     result.OnException(new MyNetSessionException("Failed to get Steam rooms.", caughtException));
                 else
@@ -1246,6 +1258,9 @@ namespace oojjrs.oplat.steam
 
         private async Task<MyNetRoomInterface[]> RefreshLobbyCoreAsync(CancellationToken cancellationToken)
         {
+            if (SteamUser.BLoggedOn() == false)
+                throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.Disconnected);
+
             SteamMatchmaking.AddRequestLobbyListStringFilter(MetadataSchema, ProtocolVersion.ToString(), ELobbyComparison.k_ELobbyComparisonEqual);
             SteamMatchmaking.AddRequestLobbyListStringFilter(MetadataIsPrivate, "0", ELobbyComparison.k_ELobbyComparisonEqual);
             SteamMatchmaking.AddRequestLobbyListStringFilter(MetadataClosed, "0", ELobbyComparison.k_ELobbyComparisonEqual);
@@ -1253,7 +1268,7 @@ namespace oojjrs.oplat.steam
             SteamMatchmaking.AddRequestLobbyListResultCountFilter(LobbySearchResultCountMax);
             var outcome = await WaitForCallAsync<LobbyMatchList_t>(SteamMatchmaking.RequestLobbyList(), cancellationToken);
             if (outcome.IOFailure)
-                throw new InvalidOperationException("Steam failed to return the lobby list.");
+                throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.Disconnected);
 
             var roomCount = (int)Math.Min((long)outcome.Value.m_nLobbiesMatching, LobbySearchResultCountMax);
             var rooms = new List<MyNetRoomInterface>(roomCount);
@@ -2085,6 +2100,21 @@ namespace oojjrs.oplat.steam
             }
             catch (OperationCanceledException)
             {
+            }
+            catch (FailureException exception)
+            {
+                if ((_lobbyPollingGeneration == generation) && (_lobbyPollingConfig == config))
+                {
+                    StopLobby();
+                    try
+                    {
+                        result.OnFailed(exception.Failure);
+                    }
+                    catch (Exception callbackException)
+                    {
+                        Debug.LogException(callbackException);
+                    }
+                }
             }
             catch (Exception exception)
             {

@@ -21,7 +21,9 @@ Unity Dashboard에서 프로젝트를 연결하고 Authentication, Cloud Save, F
 
 패키지는 `com.unity.services.friends` 1.2.0에 의존한다. 초기화는 Core, Authentication 로그인, Friends, Vivox 순서로 진행하며 Friends 관계에는 presence와 profile을 포함한다.
 
-Session 목록 정보인 `ISessionInfo`에는 참가 코드, private 여부와 플레이어 목록이 없으므로 Lobby 결과의 `Code`는 빈 문자열, `IsPrivate`는 `false`, `Players`는 빈 목록이다. 방에 참가하거나 생성한 뒤 얻는 Room 결과에는 전체 Session 정보가 제공된다.
+Lobby 목록 조회는 공개 Lobby만 반환한다. 목록 결과의 `Code`는 빈 문자열, `IsPrivate`는 `false`, `Players`는 빈 목록이다. 방에 참가하거나 생성한 뒤 얻는 Room 결과에는 전체 Session 정보가 제공된다.
+
+Lobby 조회가 네트워크 오류, bad gateway, service unavailable 또는 gateway timeout으로 끝나면 반복 조회를 중지하고 `OnFailed(Disconnected)`를 호출한다.
 
 방장이 자기 퇴장을 요청하면 `LeaveAsync`로 호스트를 이전하지 않고 Session을 삭제해 모든 멤버를 내보낸다. 삭제되거나 강퇴된 멤버는 `RoomResult.OnFailed(NotFoundRoom)`을 받는다.
 

@@ -34,6 +34,7 @@ Steamworks App Admin에서 사용자별 byte quota와 file count를 설정하고
 - 방 `Id`는 Lobby SteamID의 10진수 문자열이고 `Code`는 같은 값을 표현한 13자리 Base32 문자열이다.
 - `IsPrivate` 방은 `Invisible` Lobby로 만들어 일반 목록에서 제외하지만 보안 경계는 아니다.
 - `IsLocked`이거나 정원이 찬 방은 Steam 검색 결과에서 제외된다. 한 번의 목록 조회는 최대 50개다.
+- Steam 클라이언트가 Steam 서버에 로그인되어 있지 않거나 Lobby 목록 요청이 I/O failure로 끝나면 반복 조회를 중지하고 `OnFailed(Disconnected)`를 호출한다.
 - 비밀번호는 참가 후 호스트가 확인하며, 강퇴는 클라이언트가 제어 메시지에 따라 나가는 협조형 동작이다. 변조된 클라이언트를 Lobby 자체에서 강제로 제거하지는 못한다.
 - `Public` 필드는 목록 조회용 Lobby metadata에도 게시한다. 승인된 멤버는 방의 `Public`·`Member` 필드, 공개 여부, 잠금, 정원, 제목과 플레이어 목록을 하나의 P2P 스냅샷으로 적용한다. `Private` 필드는 해당 클라이언트 메모리에만 둔다.
 - 멤버 스냅샷 한 개는 64 KiB 이하여야 한다. 플레이어 갱신 결과를 확인할 수 없으면 상태 불일치를 막기 위해 해당 멤버가 방을 나간다.

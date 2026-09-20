@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.Services.Friends.Models;
+using Unity.Services.Lobbies.Models;
 using Unity.Services.Multiplayer;
 
 namespace oojjrs.oplat.ugsymous
@@ -132,9 +133,9 @@ namespace oojjrs.oplat.ugsymous
         int MyNetRoomInterface.PlayerCountMax => Session.MaxPlayers;
         IEnumerable<MyNetPlayerInterface> MyNetRoomInterface.Players => Enumerable.Empty<MyNetPlayerInterface>();
         string MyNetRoomInterface.Title => Session.Name;
-        internal ISessionInfo Session { get; set; }
+        internal Lobby Session { get; set; }
 
-        internal UgsymousRoomStub(ISessionInfo session) => Session = session;
-        string MyNetRoomInterface.GetData(string key) => Session.Properties != null && Session.Properties.TryGetValue(key, out var value) ? value.Value : string.Empty;
+        internal UgsymousRoomStub(Lobby session) => Session = session;
+        string MyNetRoomInterface.GetData(string key) => Session.Data != null && Session.Data.TryGetValue(key, out var value) ? value.Value : string.Empty;
     }
 }

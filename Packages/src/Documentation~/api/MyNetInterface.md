@@ -24,12 +24,12 @@
 | 콜백 | 의미 |
 | --- | --- |
 | `OnBusy()` | 다른 작업이 진행 중이거나 플랫폼이 요청을 받을 수 없다. |
-| `OnFailed(FailureEnum)` | 예상 가능한 입력·권한·방 상태 오류다. |
+| `OnFailed(FailureEnum)` | 예상 가능한 연결 종료·입력·권한·방 상태 오류다. |
 | `OnException(MyNetSessionException)` | 플랫폼 또는 전송 중 발생한 예외다. |
 
 취소된 작업은 실패 콜백 대신 `OperationCanceledException`으로 완료될 수 있다.
 
-`FailureEnum`은 `EmptyCode`, `EmptyMessage`, `EmptyPlayerId`, `EmptyRoomId`, `MessageTooLong`, `NotFoundRoom`, `NotPermitted`를 제공한다.
+`FailureEnum`은 `Disconnected`, `EmptyCode`, `EmptyMessage`, `EmptyPlayerId`, `EmptyRoomId`, `MessageTooLong`, `NotFoundRoom`, `NotPermitted`를 제공한다. `Disconnected`는 Lobby 백엔드와 통신할 수 없음을 플랫폼이 확인한 경우다.
 
 ## `Field`
 

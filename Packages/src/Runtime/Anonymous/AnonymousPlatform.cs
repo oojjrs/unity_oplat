@@ -80,7 +80,7 @@ namespace oojjrs.oplat.anonymous
             }
 
             var result = default(MyPlatformInitializer.CallbackInterface);
-            foreach (var initializer in UnityEngine.Object.FindObjectsByType<MyPlatformInitializer>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var initializer in UnityEngine.Object.FindObjectsByType<MyPlatformInitializer>(FindObjectsInactive.Include))
             {
                 var callback = initializer.GetComponent<MyPlatformInitializer.CallbackInterface>();
                 if ((callback == null) || (callback.InitialType != MyPlatformTypeEnum.Anonymous))
@@ -127,7 +127,7 @@ namespace oojjrs.oplat.anonymous
         [UnityEditor.MenuItem("Tools/Oplat/Open Anonymous Friend List")]
         private static void OpenFriendList()
         {
-            var platform = UnityEngine.Object.FindFirstObjectByType<AnonymousPlatform>();
+            var platform = UnityEngine.Object.FindAnyObjectByType<AnonymousPlatform>();
             uint appId;
             string account;
             if ((platform != null) && platform._isInitialized)

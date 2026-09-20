@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using Unity.Services.Friends;
 using Unity.Services.Friends.Models;
 using Unity.Services.Friends.Notifications;
+using Unity.Services.Lobbies;
+using Unity.Services.Lobbies.Models;
 using Unity.Services.Multiplayer;
 using Unity.Services.Vivox;
 
@@ -421,22 +423,38 @@ namespace oojjrs.oplat.ugsymous
 
         public void Stop() => _stopSource?.Cancel();
 
+        private static bool IsDisconnected(LobbyExceptionReason reason) => (reason == LobbyExceptionReason.NetworkError) || (reason == LobbyExceptionReason.BadGateway) || (reason == LobbyExceptionReason.ServiceUnavailable) || (reason == LobbyExceptionReason.GatewayTimeout);
+
         private async Task RefreshAsync(MyNetLobbyServiceInterface.ResultInterface result, CancellationToken cancellationToken)
         {
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var response = await MultiplayerService.Instance.QuerySessionsAsync(new());
+                var response = await LobbyService.Instance.QueryLobbiesAsync(new() { Count = 100 });
                 cancellationToken.ThrowIfCancellationRequested();
-                result.OnOk(response.Sessions.Select(GetRoom).ToArray());
+                result.OnOk(response.Results.Select(GetRoom).ToArray());
             }
-            catch (SessionException e)
+            catch (LobbyServiceException e)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (IsDisconnected(e.Reason))
+                {
+                    Stop();
+                    result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.Disconnected);
+                }
+                else
+                {
+                    result.OnException(new(e.Message, e));
+                }
+            }
+            catch (Exception e)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
                 result.OnException(new(e.Message, e));
             }
         }
 
-        private MyNetRoomInterface GetRoom(ISessionInfo session)
+        private MyNetRoomInterface GetRoom(Lobby session)
         {
             if (_rooms.TryGetValue(session.Id, out var room))
                 room.Session = session;

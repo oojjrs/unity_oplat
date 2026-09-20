@@ -12,6 +12,8 @@
 
 Polling 간격은 최소 1초이며 방에 참가한 동안 자동 조회가 멈춘다.
 
+플랫폼이 Lobby 백엔드 연결 종료 또는 서비스 불가를 확인하면 반복 조회를 중지하고 `OnFailed(Disconnected)`를 한 번 호출한다. 일시적인 요청 오류나 해석할 수 없는 플랫폼 오류는 `OnException`으로 전달한다.
+
 ## `ConfigInterface`
 
 | 멤버 | 설명 |

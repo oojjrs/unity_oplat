@@ -1,5 +1,7 @@
 ﻿using oojjrs.oplat.anonymous.controllers;
 using System;
+using System.IO;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -35,8 +37,20 @@ namespace oojjrs.oplat.anonymous
 
         void MyNetLobbyServiceInterface.Stop()
         {
-            _config = null;
-            _result = null;
+            Stop();
+        }
+
+        private static bool IsDisconnected(Exception exception)
+        {
+            while (exception != null)
+            {
+                if ((exception is IOException) || (exception is SocketException))
+                    return true;
+
+                exception = exception.InnerException;
+            }
+
+            return false;
         }
 
         private async Task RefreshAsync(CancellationToken callerCancellationToken, MyNetLobbyServiceInterface.ResultInterface result)
@@ -65,13 +79,28 @@ namespace oojjrs.oplat.anonymous
                 catch (Exception exception)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    result.OnException(new MyNetSessionException("Failed to get anonymous rooms.", exception));
+                    if (IsDisconnected(exception))
+                    {
+                        Stop();
+                        result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.Disconnected);
+                    }
+                    else
+                    {
+                        result.OnException(new MyNetSessionException("Failed to get anonymous rooms.", exception));
+                    }
+
                     return;
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
                 result.OnOk(rooms);
             }
+        }
+
+        private void Stop()
+        {
+            _config = null;
+            _result = null;
         }
 
         internal async void Update()

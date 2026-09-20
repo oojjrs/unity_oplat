@@ -12,7 +12,8 @@
                 EmptyRoomId,
                 MessageTooLong,
                 NotFoundRoom,
-                NotPermitted
+                NotPermitted,
+                Disconnected,
             }
 
             void OnBusy();
