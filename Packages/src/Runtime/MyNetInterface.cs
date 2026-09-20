@@ -6,6 +6,7 @@
         {
             public enum FailureEnum
             {
+                Disconnected,
                 EmptyCode,
                 EmptyMessage,
                 EmptyPlayerId,
@@ -13,7 +14,6 @@
                 MessageTooLong,
                 NotFoundRoom,
                 NotPermitted,
-                Disconnected,
             }
 
             void OnBusy();
