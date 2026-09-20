@@ -5,6 +5,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Unity.Services.Friends;
+using Unity.Services.Friends.Models;
+using Unity.Services.Friends.Notifications;
 using Unity.Services.Multiplayer;
 using Unity.Services.Vivox;
 
@@ -94,6 +97,290 @@ namespace oojjrs.oplat.ugsymous
         }
 
         public void Dispose() => VivoxService.Instance.ChannelMessageReceived -= OnChannelMessageReceived;
+    }
+
+    internal sealed class UgsymousNetFriendService : MyNetFriendServiceInterface, IDisposable
+    {
+        private const int MinimumPollingDelaySeconds = 1;
+
+        private readonly SemaphoreSlim _addGate = new(1, 1);
+        private readonly SemaphoreSlim _inviteGate = new(1, 1);
+        private readonly UgsymousNet _net;
+        private readonly SemaphoreSlim _refreshGate = new(1, 1);
+        private readonly IFriendsService _service;
+
+        private MyNetFriendServiceInterface.ConfigInterface _config;
+        private float _nextUpdateTimeSeconds;
+        private int _pollingGeneration;
+        private MyNetFriendServiceInterface.ResultInterface _result;
+
+        internal UgsymousNetFriendService(UgsymousNet net)
+        {
+            _net = net;
+            _service = FriendsService.Instance;
+            _service.MessageReceived += OnMessageReceived;
+        }
+
+        async Task MyNetFriendServiceInterface.InviteAsync(MyNetFriendServiceInterface.InviteConfigInterface config, MyNetFriendServiceInterface.InviteResultInterface result)
+        {
+            using (var cancellationSource = _net.CreateCancellationSource(config.CancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                var playerId = config.PlayerId;
+                var roomId = config.RoomId;
+                if (string.IsNullOrWhiteSpace(playerId))
+                {
+                    result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyPlayerId);
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(roomId))
+                {
+                    result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyRoomId);
+                    return;
+                }
+
+                if (playerId == _net.Account)
+                {
+                    result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
+                    return;
+                }
+
+                if (await _inviteGate.WaitAsync(0, cancellationToken) == false)
+                {
+                    result.OnBusy();
+                    return;
+                }
+
+                MyNetInterface.CatchInterface.FailureEnum? failure = null;
+                Exception caughtException = null;
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (MultiplayerService.Instance.Sessions.TryGetValue(roomId, out var session) == false)
+                        failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
+                    else if ((session.CurrentPlayer == null) || (session.CurrentPlayer.Id != _net.Account))
+                        failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
+                    else
+                    {
+                        var relationship = _service.Friends.FirstOrDefault(t => t.Member?.Id == playerId);
+                        if ((relationship == null) || (IsAvailable(relationship.Member?.Presence?.Availability ?? Availability.Offline) == false))
+                            failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
+                        else
+                            await _service.MessageAsync(playerId, new UgsymousFriendInvitation { Kind = UgsymousFriendInvitation.KindValue, RoomId = roomId });
+                    }
+                }
+                catch (Exception exception)
+                {
+                    caughtException = exception;
+                }
+                finally
+                {
+                    _inviteGate.Release();
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (caughtException != null)
+                    result.OnException(new MyNetSessionException("Failed to send UGS friend invitation.", caughtException));
+                else if (failure.HasValue)
+                    result.OnFailed(failure.Value);
+                else
+                    result.OnOk(roomId, playerId);
+            }
+        }
+
+        Task MyNetFriendServiceInterface.RefreshAsync(MyNetFriendServiceInterface.ResultInterface result) => RefreshAsync(CancellationToken.None, result, null);
+
+        async Task MyNetFriendServiceInterface.RequestAddAsync(MyNetFriendServiceInterface.RequestAddConfigInterface config, MyNetFriendServiceInterface.RequestAddResultInterface result)
+        {
+            using (var cancellationSource = _net.CreateCancellationSource(config.CancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                var playerId = config.PlayerId;
+                if (string.IsNullOrWhiteSpace(playerId))
+                {
+                    result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyPlayerId);
+                    return;
+                }
+
+                if (playerId == _net.Account)
+                {
+                    result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
+                    return;
+                }
+
+                if (await _addGate.WaitAsync(0, cancellationToken) == false)
+                {
+                    result.OnBusy();
+                    return;
+                }
+
+                Exception caughtException = null;
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if ((_service.Friends.Any(t => t.Member?.Id == playerId) == false) && (_service.OutgoingFriendRequests.Any(t => t.Member?.Id == playerId) == false))
+                        await _service.AddFriendAsync(playerId);
+                }
+                catch (Exception exception)
+                {
+                    caughtException = exception;
+                }
+                finally
+                {
+                    _addGate.Release();
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (caughtException == null)
+                    result.OnOk(playerId);
+                else
+                    result.OnException(new MyNetSessionException("Failed to add UGS friend.", caughtException));
+            }
+        }
+
+        Task MyNetFriendServiceInterface.StartAsync(MyNetFriendServiceInterface.ConfigInterface config, MyNetFriendServiceInterface.ResultInterface result)
+        {
+            config.CancellationToken.ThrowIfCancellationRequested();
+            _net.LifetimeCancellationToken.ThrowIfCancellationRequested();
+            ++_pollingGeneration;
+            _config = config;
+            _result = result;
+            _nextUpdateTimeSeconds = float.PositiveInfinity;
+            return RefreshPollingAsync(config, result, _pollingGeneration);
+        }
+
+        void MyNetFriendServiceInterface.Stop() => StopPolling();
+
+        private async Task<MyNetFriendInterface[]> ReadFriendsAsync(CancellationToken cancellationToken)
+        {
+            var session = MultiplayerService.Instance.Sessions.Values.FirstOrDefault(t => t.CurrentPlayer?.Id == _net.Account);
+            var roomId = (session != null) && (session.IsPrivate == false) ? session.Id : string.Empty;
+            await _service.SetPresenceAsync(Availability.Online, new UgsymousFriendActivity { RoomId = roomId });
+            cancellationToken.ThrowIfCancellationRequested();
+            await _service.ForceRelationshipsRefreshAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            return _service.Friends.Select(t => (MyNetFriendInterface)new UgsymousFriend(t)).ToArray();
+        }
+
+        private async Task RefreshAsync(CancellationToken callerCancellationToken, MyNetFriendServiceInterface.ResultInterface result, int? pollingGeneration)
+        {
+            using (var cancellationSource = _net.CreateCancellationSource(callerCancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                if (pollingGeneration.HasValue)
+                    await _refreshGate.WaitAsync(cancellationToken);
+                else if (await _refreshGate.WaitAsync(0, cancellationToken) == false)
+                {
+                    result.OnBusy();
+                    return;
+                }
+
+                MyNetFriendInterface[] friends = null;
+                Exception caughtException = null;
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (pollingGeneration.HasValue && (pollingGeneration.Value != _pollingGeneration))
+                        return;
+
+                    friends = await ReadFriendsAsync(cancellationToken);
+                }
+                catch (Exception exception)
+                {
+                    caughtException = exception;
+                }
+                finally
+                {
+                    _refreshGate.Release();
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (pollingGeneration.HasValue && (pollingGeneration.Value != _pollingGeneration))
+                    return;
+
+                if (caughtException == null)
+                    result.OnOk(friends);
+                else
+                    result.OnException(new MyNetSessionException("Failed to get UGS friends.", caughtException));
+            }
+        }
+
+        private async Task RefreshPollingAsync(MyNetFriendServiceInterface.ConfigInterface config, MyNetFriendServiceInterface.ResultInterface result, int pollingGeneration)
+        {
+            try
+            {
+                await RefreshAsync(config.CancellationToken, result, pollingGeneration);
+            }
+            finally
+            {
+                if (pollingGeneration == _pollingGeneration)
+                {
+                    if (config.CancellationToken.IsCancellationRequested || _net.LifetimeCancellationToken.IsCancellationRequested)
+                        StopPolling();
+                    else
+                        _nextUpdateTimeSeconds = UnityEngine.Time.realtimeSinceStartup + Math.Max(MinimumPollingDelaySeconds, config.PollingDelaySeconds);
+                }
+            }
+        }
+
+        private void OnMessageReceived(IMessageReceivedEvent message)
+        {
+            UgsymousFriendInvitation invitation;
+            try
+            {
+                invitation = message.GetAs<UgsymousFriendInvitation>();
+            }
+            catch
+            {
+                return;
+            }
+
+            if ((invitation?.Kind == UgsymousFriendInvitation.KindValue) && string.IsNullOrWhiteSpace(message.UserId) == false && string.IsNullOrWhiteSpace(invitation.RoomId) == false)
+                _net.FriendResult.OnInvited(message.UserId, invitation.RoomId);
+        }
+
+        private static bool IsAvailable(Availability availability) => (availability == Availability.Online) || (availability == Availability.Busy) || (availability == Availability.Away);
+
+        private void StopPolling()
+        {
+            ++_pollingGeneration;
+            _config = null;
+            _result = null;
+        }
+
+        internal async void Update()
+        {
+            var config = _config;
+            if (config == null)
+                return;
+
+            if (config.CancellationToken.IsCancellationRequested || _net.LifetimeCancellationToken.IsCancellationRequested)
+            {
+                StopPolling();
+                return;
+            }
+
+            if (UnityEngine.Time.realtimeSinceStartup < _nextUpdateTimeSeconds)
+                return;
+
+            var result = _result;
+            var pollingGeneration = _pollingGeneration;
+            _nextUpdateTimeSeconds = float.PositiveInfinity;
+            try
+            {
+                await RefreshPollingAsync(config, result, pollingGeneration);
+            }
+            catch (OperationCanceledException) when (config.CancellationToken.IsCancellationRequested || _net.LifetimeCancellationToken.IsCancellationRequested)
+            {
+            }
+        }
+
+        public void Dispose()
+        {
+            StopPolling();
+            _service.MessageReceived -= OnMessageReceived;
+        }
     }
 
     internal sealed class UgsymousNetLobbyService : MyNetLobbyServiceInterface

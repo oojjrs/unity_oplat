@@ -6,7 +6,7 @@
 
 | 멤버 | 설명 |
 | --- | --- |
-| `Friend` | 친구 서비스. Anonymous와 Steam의 친구 추가·목록 조회·초대 발송을 지원하며 Ugsymous는 접근 시 `NotSupportedException` 발생 |
+| `Friend` | 친구 서비스. Anonymous, Steam, Ugsymous의 친구 추가·목록 조회·초대 발송 지원 |
 | `Lobby` | 공개 방 목록 조회와 polling |
 | `Room` | 방 생성·참가·수정·퇴장 |
 | `Player` | 현재 플레이어의 필드 갱신 |

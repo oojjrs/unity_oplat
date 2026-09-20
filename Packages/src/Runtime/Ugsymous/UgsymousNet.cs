@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Unity.Services.Multiplayer;
 
 namespace oojjrs.oplat.ugsymous
@@ -9,7 +10,10 @@ namespace oojjrs.oplat.ugsymous
     {
         internal const string PlayerPropertyNickname = "__Nickname__";
         private readonly UgsymousNetChatService _chat;
+        private readonly UgsymousNetFriendService _friend;
         private readonly UgsymousNetHostService _host;
+        private readonly CancellationTokenSource _lifetimeSource = new();
+        private readonly CancellationToken _lifetimeToken;
         private readonly UgsymousNetLobbyService _lobby;
         private readonly UgsymousNetMemberService _member;
         private readonly UgsymousNetPlayerService _player;
@@ -18,7 +22,7 @@ namespace oojjrs.oplat.ugsymous
         private bool _useLocal;
 
         MyNetChatServiceInterface MyNetInterface.Chat => _chat;
-        MyNetFriendServiceInterface MyNetInterface.Friend => throw new NotSupportedException("Friends are not implemented for this platform.");
+        MyNetFriendServiceInterface MyNetInterface.Friend => _friend;
         MyNetHostServiceInterface MyNetInterface.Host => _host;
         MyNetLobbyServiceInterface MyNetInterface.Lobby => _lobby;
         MyNetMemberServiceInterface MyNetInterface.Member => _member;
@@ -27,21 +31,26 @@ namespace oojjrs.oplat.ugsymous
         bool MyNetInterface.UseLocal { get => _useLocal; set => _useLocal = value; }
         internal string Account { get; }
         internal MyNetChatResultInterface ChatResult { get; }
+        internal MyNetFriendResultInterface FriendResult { get; }
         internal MyNetHostResultInterface HostResult { get; }
+        internal CancellationToken LifetimeCancellationToken => _lifetimeToken;
         internal MyNetMemberResultInterface MemberResult { get; }
         internal MyNetPlayerServiceInterface.UpdateResultInterface PlayerResult { get; }
         internal MyNetRoomServiceInterface.UpdateResultInterface RoomResult { get; }
 
         internal UgsymousNet(string account, MyPlatformInitializer.CallbackInterface callback)
         {
+            _lifetimeToken = _lifetimeSource.Token;
             Account = account;
             ChatResult = callback.ChatResult;
+            FriendResult = callback.FriendResult;
             HostResult = callback.HostResult;
             MemberResult = callback.MemberResult;
             PlayerResult = callback.PlayerResult;
             RoomResult = callback.RoomResult;
             _transport = new(account);
             _chat = new(this);
+            _friend = new(this);
             _host = new(this);
             _lobby = new(this);
             _member = new(this);
@@ -58,6 +67,8 @@ namespace oojjrs.oplat.ugsymous
             return result;
         }
 
+        internal CancellationTokenSource CreateCancellationSource(CancellationToken cancellationToken) => CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, LifetimeCancellationToken);
+
         internal static Dictionary<string, SessionProperty> ToSessionProperties(IEnumerable<MyNetInterface.Field> fields) => (fields ?? Enumerable.Empty<MyNetInterface.Field>()).ToDictionary(t => t.key, t => new SessionProperty(t.value, ToVisibility(t.visibility)));
 
         private static VisibilityPropertyOptions ToVisibility(MyNetInterface.Field.VisibilityEnum value) => value switch
@@ -70,6 +81,7 @@ namespace oojjrs.oplat.ugsymous
 
         internal void Update()
         {
+            _friend.Update();
             _transport.Update();
             while (_transport.TryReceiveResponse(out var response))
                 _member.Receive(response);
@@ -99,9 +111,12 @@ namespace oojjrs.oplat.ugsymous
         internal UgsymousTransport Transport => _transport;
         public void Dispose()
         {
+            _lifetimeSource.Cancel();
             _lobby.Stop();
+            _friend.Dispose();
             _chat.Dispose();
             _transport.Dispose();
+            _lifetimeSource.Dispose();
         }
     }
 

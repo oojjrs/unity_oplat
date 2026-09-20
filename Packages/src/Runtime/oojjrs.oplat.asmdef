@@ -8,6 +8,7 @@
         "Unity.Services.Authentication",
         "Unity.Services.CloudSave",
         "Unity.Services.Core",
+        "Unity.Services.Friends",
         "Unity.Services.Multiplayer",
         "Unity.Services.Vivox"
     ],

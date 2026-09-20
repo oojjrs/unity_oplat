@@ -4,6 +4,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Unity.Services.Authentication;
 using Unity.Services.Core;
+using Unity.Services.Friends;
+using Unity.Services.Friends.Models;
+using Unity.Services.Friends.Options;
 using Unity.Services.Vivox;
 using UnityEngine;
 
@@ -54,6 +57,8 @@ namespace oojjrs.oplat.ugsymous
             var authentication = AuthenticationService.Instance;
             _nickname = await authentication.GetPlayerNameAsync();
             _profileSprite = Resources.Load<Sprite>("AnonymousProfile");
+            await FriendsService.Instance.InitializeAsync(new InitializeOptions().WithMemberPresence(true).WithMemberProfile(true));
+            await FriendsService.Instance.SetPresenceAsync(Availability.Online, new UgsymousFriendActivity());
             await VivoxService.Instance.InitializeAsync();
             if (VivoxService.Instance.IsLoggedIn == false)
                 await VivoxService.Instance.LoginAsync();

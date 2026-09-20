@@ -20,7 +20,7 @@
 | 문서 | 설명 |
 | --- | --- |
 | [`MyNetInterface`](api/MyNetInterface.md) | 네트워크 서비스 진입점, 공통 실패, 필드 공개 범위, 로컬 전송 |
-| [친구와 게임 초대 계약](api/MyNetFriendServiceInterface.md) | 친구 스냅샷과 서비스 계약. Anonymous와 Steam의 친구 추가·목록 조회·초대 지원 |
+| [친구와 게임 초대 계약](api/MyNetFriendServiceInterface.md) | 친구 스냅샷과 서비스 계약. Anonymous, Steam, Ugsymous의 친구 추가·목록 조회·초대 지원 |
 | [`MyNetLobbyServiceInterface`](api/MyNetLobbyServiceInterface.md) | 공개 방 목록의 일회 조회와 반복 조회 |
 | [`MyNetRoomServiceInterface`](api/MyNetRoomServiceInterface.md) | 방 생성·참가·수정·퇴장 |
 | [`MyNetRoomInterface`](api/MyNetRoomInterface.md) | 방 스냅샷 조회 |
@@ -40,4 +40,4 @@
 | --- | --- |
 | [Anonymous](platforms/anonymous.md) | 로컬 계정, 저장소와 개발용 네트워크 |
 | [Steam](platforms/steam.md) | 초기화, Steam Cloud, 친구, Lobby/P2P 제약 |
-| [Ugsymous](platforms/ugsymous.md) | UGS 익명 인증, Cloud Save, Session·Relay·Vivox |
+| [Ugsymous](platforms/ugsymous.md) | UGS 익명 인증, Cloud Save, Friends, Session·Relay·Vivox |

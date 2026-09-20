@@ -1,12 +1,13 @@
 {
   "name": "com.oojjrs.oplat",
   "displayName": "OOJJRS' Unity Platform",
-  "version": "1.8.6",
+  "version": "1.8.7",
   "unity": "6000.0",
   "description": "Platform authentication, raw-byte user storage, and multiplayer networking for Unity projects.",
   "dependencies": {
     "com.unity.services.authentication": "3.7.4",
     "com.unity.services.cloudsave": "3.4.1",
+    "com.unity.services.friends": "1.2.0",
     "com.unity.services.multiplayer": "2.3.1",
     "com.unity.services.vivox": "16.11.0",
     "com.unity.transport": "2.7.4"
