@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -11,6 +13,7 @@ namespace oojjrs.oplat.anonymous
         private readonly AnonymousStorage _storage = new();
 
         private string _account;
+        private uint _appId;
         private bool _isInitialized;
         private string _nickname;
         private Sprite _profileSprite;
@@ -94,6 +97,26 @@ namespace oojjrs.oplat.anonymous
             return nameof(AnonymousPlatform);
         }
 
+#if UNITY_EDITOR
+        [UnityEditor.MenuItem("Tools/Oplat/Open Anonymous Friend List")]
+        private static void OpenFriendList()
+        {
+            var platform = UnityEngine.Object.FindFirstObjectByType<AnonymousPlatform>();
+            if ((platform == null) || (platform._isInitialized == false))
+            {
+                UnityEditor.EditorUtility.DisplayDialog("Anonymous Friend List", "Start Play Mode with the Anonymous platform before opening its friend list.", "OK");
+                return;
+            }
+
+            var path = AnonymousServer.GetFriendStoragePath(platform._appId, GetStorageProjectKey(), platform._account);
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            if (File.Exists(path) == false)
+                File.WriteAllText(path, "[]", new UTF8Encoding(false));
+
+            UnityEditor.EditorUtility.OpenWithDefaultApp(path);
+        }
+#endif
+
         async Task MyPlatform.PlatformInterface.RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -102,14 +125,16 @@ namespace oojjrs.oplat.anonymous
 
             var nickname = GetNickname();
             var account = GetAccount(nickname);
+            var appId = callback.AppId;
             var instanceId = callback.AnonymousInstanceId?.Trim();
             if (string.IsNullOrEmpty(instanceId) == false)
             {
-                account = $"{account}:{callback.AppId}:{instanceId}";
+                account = $"{account}:{appId}:{instanceId}";
                 nickname = $"{nickname} [{instanceId}]";
             }
 
             _account = account;
+            _appId = appId;
             _nickname = nickname;
 
             var profileSpriteRequest = Resources.LoadAsync<Sprite>("AnonymousProfile");
@@ -119,11 +144,11 @@ namespace oojjrs.oplat.anonymous
             _profileSprite = profileSpriteRequest.asset as Sprite;
 
             var projectKey = GetStorageProjectKey();
-            await Net.AuthenticateAsync(_account, _nickname, callback.AppId, projectKey, cancellationToken);
+            await Net.AuthenticateAsync(_account, _nickname, appId, projectKey, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
             Net.Initialize(_account, callback.ChatResult, callback.FriendResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomResult);
-            _storage.Initialize(callback.AppId, projectKey, _account);
+            _storage.Initialize(appId, projectKey, _account);
 
             _isInitialized = true;
         }

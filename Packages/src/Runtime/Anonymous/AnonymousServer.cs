@@ -99,11 +99,16 @@ namespace oojjrs.oplat.anonymous
 
         private static string GetFriendStoragePath(AnonymousServerSession session)
         {
+            return GetFriendStoragePath(session.AppId, session.ProjectKey, session.Account);
+        }
+
+        public static string GetFriendStoragePath(uint appId, string projectKey, string account)
+        {
             var localApplicationDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (string.IsNullOrEmpty(localApplicationDataPath))
                 throw new InvalidOperationException("The local application data path is unavailable.");
 
-            return Path.Combine(localApplicationDataPath, "oojjrs", "Oplat", "AnonymousServer", "v1", GetFriendStorageKey(session.ProjectKey), session.AppId.ToString(CultureInfo.InvariantCulture), "users", GetFriendStorageKey(session.Account), "friends.json");
+            return Path.Combine(localApplicationDataPath, "oojjrs", "Oplat", "AnonymousServer", "v1", GetFriendStorageKey(projectKey), appId.ToString(CultureInfo.InvariantCulture), "users", GetFriendStorageKey(account), "friends.json");
         }
 
         private static string[] ReadFriendAccounts(AnonymousServerSession session)
