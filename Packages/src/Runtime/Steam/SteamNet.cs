@@ -223,7 +223,6 @@ namespace oojjrs.oplat.steam
         private Callback<LobbyChatMsg_t> _lobbyChatMessageCallback;
         private Callback<LobbyChatUpdate_t> _lobbyChatUpdateCallback;
         private Callback<LobbyDataUpdate_t> _lobbyDataUpdateCallback;
-        private Callback<LobbyInvite_t> _lobbyInviteCallback;
         private MyNetLobbyServiceInterface.ConfigInterface _lobbyPollingConfig;
         private int _lobbyPollingGeneration;
         private MyNetLobbyServiceInterface.ResultInterface _lobbyPollingResult;
@@ -307,7 +306,6 @@ namespace oojjrs.oplat.steam
                 _lobbyChatMessageCallback = Callback<LobbyChatMsg_t>.Create(OnLobbyChatMessage);
                 _lobbyChatUpdateCallback = Callback<LobbyChatUpdate_t>.Create(OnLobbyChatUpdate);
                 _lobbyDataUpdateCallback = Callback<LobbyDataUpdate_t>.Create(OnLobbyDataUpdate);
-                _lobbyInviteCallback = Callback<LobbyInvite_t>.Create(OnLobbyInvite);
                 _messageSessionFailedCallback = Callback<SteamNetworkingMessagesSessionFailed_t>.Create(OnMessageSessionFailed);
                 _messageSessionRequestCallback = Callback<SteamNetworkingMessagesSessionRequest_t>.Create(OnMessageSessionRequest);
                 _state = StateEnum.Ready;
@@ -319,7 +317,6 @@ namespace oojjrs.oplat.steam
                 _lobbyChatMessageCallback?.Dispose();
                 _lobbyChatUpdateCallback?.Dispose();
                 _lobbyDataUpdateCallback?.Dispose();
-                _lobbyInviteCallback?.Dispose();
                 _messageSessionFailedCallback?.Dispose();
                 _messageSessionRequestCallback?.Dispose();
                 _lifetimeSource.Dispose();
@@ -353,14 +350,12 @@ namespace oojjrs.oplat.steam
             DisposeSafely(_lobbyChatMessageCallback);
             DisposeSafely(_lobbyChatUpdateCallback);
             DisposeSafely(_lobbyDataUpdateCallback);
-            DisposeSafely(_lobbyInviteCallback);
             DisposeSafely(_messageSessionFailedCallback);
             DisposeSafely(_messageSessionRequestCallback);
             _gameLobbyJoinRequestedCallback = null;
             _lobbyChatMessageCallback = null;
             _lobbyChatUpdateCallback = null;
             _lobbyDataUpdateCallback = null;
-            _lobbyInviteCallback = null;
             _messageSessionFailedCallback = null;
             _messageSessionRequestCallback = null;
             _lifetimeSource.Dispose();
@@ -2185,24 +2180,6 @@ namespace oojjrs.oplat.steam
                     return;
                 }
 
-            }
-            catch (Exception exception)
-            {
-                Debug.LogException(exception);
-            }
-        }
-
-        private void OnLobbyInvite(LobbyInvite_t callback)
-        {
-            try
-            {
-                var gameId = new CGameID(callback.m_ulGameID);
-                var playerId = new CSteamID(callback.m_ulSteamIDUser);
-                var lobbyId = new CSteamID(callback.m_ulSteamIDLobby);
-                if ((gameId.IsSteamApp() == false) || (gameId.AppID() != SteamUtils.GetAppID()) || (playerId.IsValid() == false) || (playerId.BIndividualAccount() == false) || (lobbyId.IsValid() == false) || (lobbyId.IsLobby() == false))
-                    return;
-
-                _friendResult.OnInvited(playerId.m_SteamID.ToString(), lobbyId.m_SteamID.ToString());
             }
             catch (Exception exception)
             {

@@ -93,7 +93,7 @@ Anonymous는 같은 Project Key·App ID로 접속한 대상에게만 초대를 �
 
 Anonymous와 Ugsymous는 플랫폼 초대 수락 UI가 없으므로 `OnJoinRequested`를 발생시키지 않는다. Ugsymous는 올바른 Oplat 초대 형식의 Friends 메시지만 `OnInvited`로 전달한다. 게임 UI는 `OnInvited`로 받은 방 ID를 보관하고 사용자가 수락하면 기존 Join을 호출한다.
 
-Steam은 같은 앱의 `LobbyInvite_t`를 `OnInvited`로, 실행 중 받은 `GameLobbyJoinRequested_t`를 `OnJoinRequested`로 전달한다. 초대 수락으로 게임이 시작된 경우 Steam 시작 인자와 운영체제 명령행의 `+connect_lobby`를 읽어 첫 Update에서 보낸 사람 ID가 빈 `OnJoinRequested`를 한 번 전달한다.
+Steam은 `LobbyInvite_t`를 게임에 전달하지 않고 Steam UI의 초대 알림과 수락 절차에 맡긴다. 실행 중 받은 `GameLobbyJoinRequested_t`는 `OnJoinRequested`로 전달한다. 초대 수락으로 게임이 시작된 경우 Steam 시작 인자와 운영체제 명령행의 `+connect_lobby`를 읽어 첫 Update에서 보낸 사람 ID가 빈 `OnJoinRequested`를 한 번 전달한다.
 
 게임 내 초대 수락 버튼과 친구의 게임 참여 버튼은 방 ID를 기존 `MyNetRoomServiceInterface.JoinAsync`에 전달한다. 플랫폼 UI의 `OnJoinRequested`도 같은 게임 측 참여 처리로 연결한다. 별도의 친구 전용 입장 API는 두지 않는다. 현재 방에서 나갈지, 비밀번호를 입력받을지는 게임이 결정하며 최종 성공은 Join 결과로 판단한다.
 
@@ -111,7 +111,7 @@ Steam은 같은 앱의 `LobbyInvite_t`를 `OnInvited`로, 실행 중 받은 `Gam
 | 접속 상태와 같은 게임의 방 | `GetFriendPersonaState`, `GetFriendGamePlayed` |
 | 친구 추가 절차 시작 | `ActivateGameOverlayToUser("friendadd", steamId)` |
 | 초대 발송 | `InviteUserToLobby` |
-| 초대 도착 | 같은 게임의 `LobbyInvite_t` |
+| 초대 도착 | Steam UI가 같은 게임의 `LobbyInvite_t`를 표시하며 게임 콜백으로 전달하지 않음 |
 | 참여 요청 | `GameLobbyJoinRequested_t`, 시작 인자 `+connect_lobby` |
 
 Steam의 Invisible 로비는 친구에게 일반 로비 정보로 노출되지 않으므로 비공개 방의 직접 참여 대상은 제공하지 않는다. 초대로 받은 방 ID는 기존 입장 경로로 전달한다.
