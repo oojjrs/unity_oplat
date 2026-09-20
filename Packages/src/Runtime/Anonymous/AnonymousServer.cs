@@ -56,8 +56,7 @@ namespace oojjrs.oplat.anonymous
         private static void AddFriendAccount(AnonymousServerSession session, string playerId)
         {
             var accounts = ReadFriendAccounts(session);
-            var friendAccount = ResolveFriendAccount(session, playerId);
-            if (accounts.Any(account => ResolveFriendAccount(session, account) == friendAccount))
+            if (accounts.Contains(playerId, StringComparer.Ordinal))
                 return;
 
             var path = GetFriendStoragePath(session);
@@ -133,18 +132,6 @@ namespace oojjrs.oplat.anonymous
             {
                 return Array.Empty<string>();
             }
-        }
-
-        private static string ResolveFriendAccount(AnonymousServerSession session, string account)
-        {
-            if (account == session.BaseAccount)
-                return account;
-
-            var instancePrefix = $"{session.BaseAccount}:{session.AppId}:";
-            if (account.StartsWith(instancePrefix, StringComparison.Ordinal))
-                return account;
-
-            return instancePrefix + account;
         }
 
         private async Task AcceptAsync()
@@ -233,24 +220,22 @@ namespace oojjrs.oplat.anonymous
                 cancellationToken.ThrowIfCancellationRequested();
                 var friendIds = new HashSet<string>(StringComparer.Ordinal);
                 var friends = new List<FriendData>();
-                foreach (var storedAccount in accounts)
+                foreach (var friendId in accounts)
                 {
-                    var account = ResolveFriendAccount(session, storedAccount);
-                    if (friendIds.Add(account) == false)
+                    if (friendIds.Add(friendId) == false)
                         continue;
 
                     var friend = new FriendData()
                     {
-                        Id = account,
-                        Nickname = storedAccount,
+                        Id = friendId,
+                        Nickname = friendId,
                         RoomId = string.Empty,
                         State = MyNetFriendInterface.StateEnum.Offline,
                     };
-                    if (Sessions.TryGetValue(account, out var friendSession) && (friendSession.AppId == session.AppId) && (friendSession.ProjectKey == session.ProjectKey))
+                    if (TryGetFriendSession(session, friendId, out var friendSession))
                     {
-                        friend.Nickname = friendSession.Nickname;
                         friend.State = MyNetFriendInterface.StateEnum.Online;
-                        var room = RoomState.Rooms.Find(value => (value.Room.IsPrivate == false) && value.Room.Players.Any(player => player.Id == account));
+                        var room = RoomState.Rooms.Find(value => (value.Room.IsPrivate == false) && value.Room.Players.Any(player => player.Id == friendSession.Account));
                         friend.RoomId = room?.Room.Id ?? string.Empty;
                     }
 
@@ -281,11 +266,11 @@ namespace oojjrs.oplat.anonymous
                 if ((room.Room.Players ?? Array.Empty<AnonymousServerRoom.PlayerData>()).Any(player => player.Id == session.Account) == false)
                     return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
 
-                var playerId = ResolveFriendAccount(session, argument.PlayerId);
-                if ((Sessions.TryGetValue(playerId, out var targetSession) == false) || (targetSession.AppId != session.AppId) || (targetSession.ProjectKey != session.ProjectKey))
+                if (TryGetFriendSession(session, argument.PlayerId, out var targetSession) == false)
                     return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
 
-                targetSession.Messages.Send(AnonymousTransport.Message.CreateFriendInvited(MyNetSerializer.Serialize(new FriendInviteData() { PlayerId = session.Account, RoomId = argument.RoomId })));
+                var playerId = string.IsNullOrEmpty(session.InstanceId) ? session.Account : session.InstanceId;
+                targetSession.Messages.Send(AnonymousTransport.Message.CreateFriendInvited(MyNetSerializer.Serialize(new FriendInviteData() { PlayerId = playerId, RoomId = argument.RoomId })));
                 return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Success);
             }
             catch (Exception)
@@ -385,6 +370,15 @@ namespace oojjrs.oplat.anonymous
             }
 
             _ = AcceptAsync();
+        }
+
+        private bool TryGetFriendSession(AnonymousServerSession session, string playerId, out AnonymousServerSession friendSession)
+        {
+            if (Sessions.TryGetValue(playerId, out friendSession) && (friendSession.AppId == session.AppId) && (friendSession.ProjectKey == session.ProjectKey))
+                return true;
+
+            friendSession = Sessions.Values.FirstOrDefault(value => (value.AppId == session.AppId) && (value.ProjectKey == session.ProjectKey) && (value.InstanceId == playerId));
+            return friendSession != null;
         }
     }
 }

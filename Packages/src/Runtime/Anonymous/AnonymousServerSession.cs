@@ -2,11 +2,11 @@ namespace oojjrs.oplat.anonymous
 {
     internal sealed class AnonymousServerSession
     {
-        internal AnonymousServerSession(string account, uint appId, string baseAccount, AnonymousTransport.MessageQueue messages, string nickname, string projectKey)
+        internal AnonymousServerSession(string account, uint appId, string instanceId, AnonymousTransport.MessageQueue messages, string nickname, string projectKey)
         {
             Account = account;
             AppId = appId;
-            BaseAccount = baseAccount;
+            InstanceId = instanceId ?? string.Empty;
             Messages = messages;
             Nickname = nickname;
             ProjectKey = projectKey;
@@ -14,7 +14,7 @@ namespace oojjrs.oplat.anonymous
 
         internal string Account { get; }
         public uint AppId { get; }
-        internal string BaseAccount { get; }
+        internal string InstanceId { get; }
         internal AnonymousTransport.MessageQueue Messages { get; }
         internal string Nickname { get; }
         public string ProjectKey { get; }
