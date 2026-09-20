@@ -43,7 +43,7 @@ Anonymous 네트워크는 `127.0.0.1:45831`의 로컬 서버를 사용한다. �
 ["friend-account-a", "friend-account-b"]
 ```
 
-Unity 에디터에서 Anonymous 플랫폼이 초기화된 플레이 모드 중 `Tools > Oplat > Open Anonymous Friend List` 메뉴를 선택하면 현재 실행 인스턴스의 파일을 기본 앱으로 연다. 파일이나 디렉터리가 없으면 빈 배열 `[]`로 생성한다.
+Unity 에디터의 `Tools > Oplat > Open Anonymous Friend List` 메뉴로 해당 파일을 기본 앱에서 연다. 플레이 중이면 초기화된 Anonymous 인스턴스를 사용하고, 편집 모드에서는 선택한 `MyPlatformInitializer` 또는 열린 씬의 유일한 Anonymous 초기화기 설정에서 App ID와 인스턴스 ID를 읽는다. 초기화기가 여러 개면 원하는 GameObject를 먼저 선택한다. 파일이나 디렉터리가 없으면 빈 배열 `[]`로 생성한다.
 
 같은 ID는 한 번만 반환한다. 같은 Project Key·App ID의 접속 세션이 있으면 `Online`과 현재 닉네임을 반환하고, 없으면 `Offline`과 계정 ID를 표시 이름으로 반환한다. 접속한 친구가 공개 방에 있으면 `RoomId`를 제공하며, 방이 없거나 비공개이면 빈 문자열이다.
 

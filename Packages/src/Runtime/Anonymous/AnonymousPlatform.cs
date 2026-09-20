@@ -64,6 +64,50 @@ namespace oojjrs.oplat.anonymous
             return nickname;
         }
 
+#if UNITY_EDITOR
+        private static MyPlatformInitializer.CallbackInterface GetEditorCallback()
+        {
+            var selectedGameObject = UnityEditor.Selection.activeGameObject;
+            if (selectedGameObject != null)
+            {
+                var selectedInitializer = selectedGameObject.GetComponentInParent<MyPlatformInitializer>(true);
+                if (selectedInitializer != null)
+                {
+                    var selectedCallback = selectedInitializer.GetComponent<MyPlatformInitializer.CallbackInterface>();
+                    if ((selectedCallback != null) && (selectedCallback.InitialType == MyPlatformTypeEnum.Anonymous))
+                        return selectedCallback;
+                }
+            }
+
+            var result = default(MyPlatformInitializer.CallbackInterface);
+            foreach (var initializer in UnityEngine.Object.FindObjectsByType<MyPlatformInitializer>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                var callback = initializer.GetComponent<MyPlatformInitializer.CallbackInterface>();
+                if ((callback == null) || (callback.InitialType != MyPlatformTypeEnum.Anonymous))
+                    continue;
+
+                if (result != null)
+                    return null;
+
+                result = callback;
+            }
+
+            return result;
+        }
+#endif
+
+        private static void GetIdentity(uint appId, string instanceId, out string account, out string nickname)
+        {
+            nickname = GetNickname();
+            account = GetAccount(nickname);
+            instanceId = instanceId?.Trim();
+            if (string.IsNullOrEmpty(instanceId))
+                return;
+
+            account = $"{account}:{appId}:{instanceId}";
+            nickname = $"{nickname} [{instanceId}]";
+        }
+
         private static string GetNickname()
         {
             var deviceName = SystemInfo.deviceName;
@@ -102,13 +146,27 @@ namespace oojjrs.oplat.anonymous
         private static void OpenFriendList()
         {
             var platform = UnityEngine.Object.FindFirstObjectByType<AnonymousPlatform>();
-            if ((platform == null) || (platform._isInitialized == false))
+            uint appId;
+            string account;
+            if ((platform != null) && platform._isInitialized)
             {
-                UnityEditor.EditorUtility.DisplayDialog("Anonymous Friend List", "Start Play Mode with the Anonymous platform before opening its friend list.", "OK");
-                return;
+                appId = platform._appId;
+                account = platform._account;
+            }
+            else
+            {
+                var callback = GetEditorCallback();
+                if (callback == null)
+                {
+                    UnityEditor.EditorUtility.DisplayDialog("Anonymous Friend List", "Select a GameObject with one Anonymous MyPlatformInitializer, or keep exactly one in the open scenes.", "OK");
+                    return;
+                }
+
+                appId = callback.AppId;
+                GetIdentity(appId, callback.AnonymousInstanceId, out account, out _);
             }
 
-            var path = AnonymousServer.GetFriendStoragePath(platform._appId, GetStorageProjectKey(), platform._account);
+            var path = AnonymousServer.GetFriendStoragePath(appId, GetStorageProjectKey(), account);
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             if (File.Exists(path) == false)
                 File.WriteAllText(path, "[]", new UTF8Encoding(false));
@@ -123,15 +181,8 @@ namespace oojjrs.oplat.anonymous
             if (_isInitialized)
                 return;
 
-            var nickname = GetNickname();
-            var account = GetAccount(nickname);
             var appId = callback.AppId;
-            var instanceId = callback.AnonymousInstanceId?.Trim();
-            if (string.IsNullOrEmpty(instanceId) == false)
-            {
-                account = $"{account}:{appId}:{instanceId}";
-                nickname = $"{nickname} [{instanceId}]";
-            }
+            GetIdentity(appId, callback.AnonymousInstanceId, out var account, out var nickname);
 
             _account = account;
             _appId = appId;
