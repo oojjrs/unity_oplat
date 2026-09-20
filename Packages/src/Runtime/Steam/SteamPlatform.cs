@@ -100,9 +100,10 @@ namespace oojjrs.oplat.steam
             if (actualAppId != callback.AppId)
                 throw new InvalidOperationException($"Steam initialized with App ID {actualAppId}, but {callback.AppId} was expected.");
 
-            _net.Initialize(callback.ChatResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomResult);
+            _net.Initialize(callback.ChatResult, callback.FriendResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomResult);
             _profileSprite = await LoadProfileSpriteAsync(cancellationToken);
             _storage.Initialize();
+            _net.PrepareLaunchJoinRequest();
         }
 
         private Sprite CreateProfileSprite(int imageHandle)

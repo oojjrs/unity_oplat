@@ -64,6 +64,62 @@ namespace oojjrs.oplat.steam
             }
         }
 
+        private sealed class SteamNetFriend : MyNetFriendInterface
+        {
+            private readonly string _id;
+            private readonly string _nickname;
+            private readonly string _roomId;
+            private readonly MyNetFriendInterface.StateEnum _state;
+
+            public SteamNetFriend(string id, string nickname, string roomId, MyNetFriendInterface.StateEnum state)
+            {
+                _id = id;
+                _nickname = nickname;
+                _roomId = roomId;
+                _state = state;
+            }
+
+            string MyNetFriendInterface.Id => _id;
+            string MyNetFriendInterface.Nickname => _nickname;
+            string MyNetFriendInterface.RoomId => _roomId;
+            MyNetFriendInterface.StateEnum MyNetFriendInterface.State => _state;
+        }
+
+        private sealed class SteamNetFriendService : MyNetFriendServiceInterface
+        {
+            private readonly SteamNet _net;
+
+            public SteamNetFriendService(SteamNet net)
+            {
+                _net = net;
+            }
+
+            Task MyNetFriendServiceInterface.InviteAsync(MyNetFriendServiceInterface.InviteConfigInterface config, MyNetFriendServiceInterface.InviteResultInterface result)
+            {
+                return _net.InviteFriendAsync(config, result);
+            }
+
+            Task MyNetFriendServiceInterface.RefreshAsync(MyNetFriendServiceInterface.ResultInterface result)
+            {
+                return _net.RefreshFriendAsync(result);
+            }
+
+            Task MyNetFriendServiceInterface.RequestAddAsync(MyNetFriendServiceInterface.RequestAddConfigInterface config, MyNetFriendServiceInterface.RequestAddResultInterface result)
+            {
+                return _net.RequestAddFriendAsync(config, result);
+            }
+
+            Task MyNetFriendServiceInterface.StartAsync(MyNetFriendServiceInterface.ConfigInterface config, MyNetFriendServiceInterface.ResultInterface result)
+            {
+                return _net.StartFriendAsync(config, result);
+            }
+
+            void MyNetFriendServiceInterface.Stop()
+            {
+                _net.StopFriend();
+            }
+        }
+
         private sealed class PendingBroadcast
         {
             public MessageKind Kind { get; }
@@ -101,6 +157,7 @@ namespace oojjrs.oplat.steam
         private const int FieldCountMax = 128;
         private const int FieldKeyByteCountMax = 256;
         private const int FieldValueByteCountMax = 4096;
+        private const int LaunchCommandLineByteCountMax = 32768;
         private const int LobbySearchResultCountMax = 50;
         private const int MessageByteCountMax = 64 * 1024;
         private const int MessageChannel = 45831;
@@ -151,6 +208,11 @@ namespace oojjrs.oplat.steam
         private string _chatRoomId;
         private CSteamID _currentLobby;
         private string _epoch;
+        private MyNetFriendServiceInterface.ConfigInterface _friendPollingConfig;
+        private int _friendPollingGeneration;
+        private MyNetFriendServiceInterface.ResultInterface _friendPollingResult;
+        private MyNetFriendResultInterface _friendResult;
+        private Callback<GameLobbyJoinRequested_t> _gameLobbyJoinRequestedCallback;
         private bool _hasPassword;
         private MyNetHostResultInterface _hostResult;
         private bool _isInitialized;
@@ -161,6 +223,7 @@ namespace oojjrs.oplat.steam
         private Callback<LobbyChatMsg_t> _lobbyChatMessageCallback;
         private Callback<LobbyChatUpdate_t> _lobbyChatUpdateCallback;
         private Callback<LobbyDataUpdate_t> _lobbyDataUpdateCallback;
+        private Callback<LobbyInvite_t> _lobbyInviteCallback;
         private MyNetLobbyServiceInterface.ConfigInterface _lobbyPollingConfig;
         private int _lobbyPollingGeneration;
         private MyNetLobbyServiceInterface.ResultInterface _lobbyPollingResult;
@@ -173,10 +236,12 @@ namespace oojjrs.oplat.steam
         private MyNetInterface.Field[] _memberRoomFields = Array.Empty<MyNetInterface.Field>();
         private Callback<SteamNetworkingMessagesSessionFailed_t> _messageSessionFailedCallback;
         private Callback<SteamNetworkingMessagesSessionRequest_t> _messageSessionRequestCallback;
+        private float _nextFriendPollTimeSeconds;
         private float _nextLobbyPollTimeSeconds;
         private ulong _nextPlayerUpdateId;
         private ulong _originalHostId;
         private string _password;
+        private ulong _pendingLaunchLobbyId;
         private ulong _pendingPlayerUpdateId;
         private MyNetPlayerServiceInterface.UpdateResultInterface _playerResult;
         private TaskCompletionSource<PlayerUpdateOutcomeEnum> _playerUpdateSource;
@@ -189,6 +254,7 @@ namespace oojjrs.oplat.steam
         internal SteamNet()
         {
             Chat = new SteamNetChatService(this);
+            Friend = new SteamNetFriendService(this);
             Host = new SteamNetHostService(this);
             Lobby = new SteamNetLobbyService(this);
             Member = new SteamNetMemberService(this);
@@ -197,6 +263,7 @@ namespace oojjrs.oplat.steam
         }
 
         private MyNetChatServiceInterface Chat { get; }
+        private MyNetFriendServiceInterface Friend { get; }
         private MyNetHostServiceInterface Host { get; }
         private MyNetLobbyServiceInterface Lobby { get; }
         private MyNetMemberServiceInterface Member { get; }
@@ -204,7 +271,7 @@ namespace oojjrs.oplat.steam
         private MyNetRoomServiceInterface Room { get; }
 
         MyNetChatServiceInterface MyNetInterface.Chat => Chat;
-        MyNetFriendServiceInterface MyNetInterface.Friend => throw new NotSupportedException("Friends are not implemented for this platform.");
+        MyNetFriendServiceInterface MyNetInterface.Friend => Friend;
         MyNetHostServiceInterface MyNetInterface.Host => Host;
         MyNetLobbyServiceInterface MyNetInterface.Lobby => Lobby;
         MyNetMemberServiceInterface MyNetInterface.Member => Member;
@@ -216,12 +283,13 @@ namespace oojjrs.oplat.steam
             set => _useLocal = value;
         }
 
-        internal void Initialize(MyNetChatResultInterface chatResult, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
+        internal void Initialize(MyNetChatResultInterface chatResult, MyNetFriendResultInterface friendResult, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
         {
             if (_isInitialized)
                 return;
 
             _chatResult = chatResult ?? throw new ArgumentNullException(nameof(chatResult));
+            _friendResult = friendResult ?? throw new ArgumentNullException(nameof(friendResult));
             _hostResult = hostResult ?? throw new ArgumentNullException(nameof(hostResult));
             _memberResult = memberResult ?? throw new ArgumentNullException(nameof(memberResult));
             _playerResult = playerResult ?? throw new ArgumentNullException(nameof(playerResult));
@@ -235,9 +303,11 @@ namespace oojjrs.oplat.steam
             _lifetimeSource = new CancellationTokenSource();
             try
             {
+                _gameLobbyJoinRequestedCallback = Callback<GameLobbyJoinRequested_t>.Create(OnGameLobbyJoinRequested);
                 _lobbyChatMessageCallback = Callback<LobbyChatMsg_t>.Create(OnLobbyChatMessage);
                 _lobbyChatUpdateCallback = Callback<LobbyChatUpdate_t>.Create(OnLobbyChatUpdate);
                 _lobbyDataUpdateCallback = Callback<LobbyDataUpdate_t>.Create(OnLobbyDataUpdate);
+                _lobbyInviteCallback = Callback<LobbyInvite_t>.Create(OnLobbyInvite);
                 _messageSessionFailedCallback = Callback<SteamNetworkingMessagesSessionFailed_t>.Create(OnMessageSessionFailed);
                 _messageSessionRequestCallback = Callback<SteamNetworkingMessagesSessionRequest_t>.Create(OnMessageSessionRequest);
                 _state = StateEnum.Ready;
@@ -245,9 +315,11 @@ namespace oojjrs.oplat.steam
             }
             catch
             {
+                _gameLobbyJoinRequestedCallback?.Dispose();
                 _lobbyChatMessageCallback?.Dispose();
                 _lobbyChatUpdateCallback?.Dispose();
                 _lobbyDataUpdateCallback?.Dispose();
+                _lobbyInviteCallback?.Dispose();
                 _messageSessionFailedCallback?.Dispose();
                 _messageSessionRequestCallback?.Dispose();
                 _lifetimeSource.Dispose();
@@ -264,6 +336,9 @@ namespace oojjrs.oplat.steam
             EnsureMainThread();
             _state = StateEnum.Disposed;
             _isInitialized = false;
+            ++_friendPollingGeneration;
+            _friendPollingConfig = null;
+            _friendPollingResult = null;
             ++_lobbyPollingGeneration;
             _lobbyPollingConfig = null;
             _lobbyPollingResult = null;
@@ -274,14 +349,18 @@ namespace oojjrs.oplat.steam
                 source.TrySetCanceled();
 
             PendingLobbyData.Clear();
+            DisposeSafely(_gameLobbyJoinRequestedCallback);
             DisposeSafely(_lobbyChatMessageCallback);
             DisposeSafely(_lobbyChatUpdateCallback);
             DisposeSafely(_lobbyDataUpdateCallback);
+            DisposeSafely(_lobbyInviteCallback);
             DisposeSafely(_messageSessionFailedCallback);
             DisposeSafely(_messageSessionRequestCallback);
+            _gameLobbyJoinRequestedCallback = null;
             _lobbyChatMessageCallback = null;
             _lobbyChatUpdateCallback = null;
             _lobbyDataUpdateCallback = null;
+            _lobbyInviteCallback = null;
             _messageSessionFailedCallback = null;
             _messageSessionRequestCallback = null;
             _lifetimeSource.Dispose();
@@ -309,16 +388,161 @@ namespace oojjrs.oplat.steam
                 return;
 
             EnsureMainThread();
+            DeliverPendingLaunchJoinRequest();
             ReceiveMessages();
             FlushResponses();
             FlushPendingBroadcasts();
             HandleResponses();
             FlushRequests();
             HandleRequests();
+            UpdateFriendPolling();
             UpdateLobbyPolling();
 
             if ((_currentLobby.m_SteamID != 0) && (SteamMatchmaking.GetLobbyOwner(_currentLobby).m_SteamID != _originalHostId))
                 ResetSession(true, StateEnum.Ready);
+        }
+
+        internal Task InviteFriendAsync(MyNetFriendServiceInterface.InviteConfigInterface config, MyNetFriendServiceInterface.InviteResultInterface result)
+        {
+            EnsureInitialized();
+            var playerId = config.PlayerId;
+            var roomId = config.RoomId;
+            if (string.IsNullOrWhiteSpace(playerId))
+            {
+                result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyPlayerId);
+                return Task.CompletedTask;
+            }
+
+            if (string.IsNullOrWhiteSpace(roomId))
+            {
+                result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyRoomId);
+                return Task.CompletedTask;
+            }
+
+            using (var cancellationSource = CreateCancellationSource(config.CancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                cancellationToken.ThrowIfCancellationRequested();
+                if ((TryParsePlayerId(playerId, out var player) == false) || (player.m_SteamID == _localSteamId) || (SteamFriends.HasFriend(player, EFriendFlags.k_EFriendFlagImmediate) == false))
+                {
+                    result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
+                    return Task.CompletedTask;
+                }
+
+                if (TryParseLobbyId(roomId, out var lobby) == false)
+                {
+                    result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
+                    return Task.CompletedTask;
+                }
+
+                if ((_currentLobby != lobby) || (AcceptedPlayerIds.Contains(_localSteamId) == false))
+                {
+                    result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
+                    return Task.CompletedTask;
+                }
+
+                try
+                {
+                    if (SteamMatchmaking.InviteUserToLobby(lobby, player) == false)
+                    {
+                        result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
+                        return Task.CompletedTask;
+                    }
+                }
+                catch (Exception exception)
+                {
+                    result.OnException(new MyNetSessionException("Failed to send Steam friend invitation.", exception));
+                    return Task.CompletedTask;
+                }
+
+                result.OnOk(roomId, playerId);
+                return Task.CompletedTask;
+            }
+        }
+
+        internal void PrepareLaunchJoinRequest()
+        {
+            EnsureInitialized();
+            if (SteamApps.GetLaunchCommandLine(out var commandLine, LaunchCommandLineByteCountMax) > 0 && TryReadLaunchLobbyId(commandLine, out _pendingLaunchLobbyId))
+                return;
+
+            TryReadLaunchLobbyId(Environment.GetCommandLineArgs(), out _pendingLaunchLobbyId);
+        }
+
+        internal Task RefreshFriendAsync(MyNetFriendServiceInterface.ResultInterface result)
+        {
+            RefreshFriend(CancellationToken.None, result, null);
+            return Task.CompletedTask;
+        }
+
+        internal Task RequestAddFriendAsync(MyNetFriendServiceInterface.RequestAddConfigInterface config, MyNetFriendServiceInterface.RequestAddResultInterface result)
+        {
+            EnsureInitialized();
+            var playerId = config.PlayerId;
+            if (string.IsNullOrWhiteSpace(playerId))
+            {
+                result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyPlayerId);
+                return Task.CompletedTask;
+            }
+
+            using (var cancellationSource = CreateCancellationSource(config.CancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                cancellationToken.ThrowIfCancellationRequested();
+                if ((TryParsePlayerId(playerId, out var player) == false) || (player.m_SteamID == _localSteamId) || (SteamUtils.IsOverlayEnabled() == false))
+                {
+                    result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
+                    return Task.CompletedTask;
+                }
+
+                try
+                {
+                    SteamFriends.ActivateGameOverlayToUser("friendadd", player);
+                }
+                catch (Exception exception)
+                {
+                    result.OnException(new MyNetSessionException("Failed to open the Steam friend request overlay.", exception));
+                    return Task.CompletedTask;
+                }
+
+                result.OnOk(playerId);
+                return Task.CompletedTask;
+            }
+        }
+
+        internal Task StartFriendAsync(MyNetFriendServiceInterface.ConfigInterface config, MyNetFriendServiceInterface.ResultInterface result)
+        {
+            EnsureInitialized();
+            config.CancellationToken.ThrowIfCancellationRequested();
+            ++_friendPollingGeneration;
+            _friendPollingConfig = config;
+            _friendPollingResult = result;
+            _nextFriendPollTimeSeconds = float.PositiveInfinity;
+            var pollingGeneration = _friendPollingGeneration;
+            try
+            {
+                RefreshFriend(config.CancellationToken, result, pollingGeneration);
+            }
+            finally
+            {
+                if (pollingGeneration == _friendPollingGeneration)
+                {
+                    if (config.CancellationToken.IsCancellationRequested || _lifetimeSource.IsCancellationRequested)
+                        StopFriend();
+                    else
+                        _nextFriendPollTimeSeconds = Time.realtimeSinceStartup + Math.Max(MinimumPollingDelaySeconds, config.PollingDelaySeconds);
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+
+        internal void StopFriend()
+        {
+            EnsureInitialized();
+            ++_friendPollingGeneration;
+            _friendPollingConfig = null;
+            _friendPollingResult = null;
         }
 
         internal async Task RefreshLobbyAsync(MyNetLobbyServiceInterface.ResultInterface result, CancellationToken callerCancellationToken)
@@ -1514,6 +1738,16 @@ namespace oojjrs.oplat.steam
             return new SteamNetRoom(EncodeCode(lobby.m_SteamID), DecodeFields(SteamMatchmaking.GetLobbyData(lobby, MetadataRoomFields)), ReadBooleanLobbyData(lobby, MetadataHasPassword), hostId.ToString(), lobby.m_SteamID.ToString(), ReadBooleanLobbyData(lobby, MetadataIsLocked), ReadBooleanLobbyData(lobby, MetadataIsPrivate), maxPlayers, players, SteamMatchmaking.GetLobbyData(lobby, MetadataTitle) ?? string.Empty);
         }
 
+        private void DeliverPendingLaunchJoinRequest()
+        {
+            if (_pendingLaunchLobbyId == 0)
+                return;
+
+            var lobbyId = _pendingLaunchLobbyId;
+            _pendingLaunchLobbyId = 0;
+            _friendResult.OnJoinRequested(string.Empty, lobbyId.ToString());
+        }
+
         private void BroadcastRoster(MessageKind kind = MessageKind.RosterChanged, ulong updatedPlayerId = 0, ulong excludedPlayerId = 0)
         {
             var playerIds = AcceptedPlayerIds.Where(playerId => (playerId != _localSteamId) && (playerId != excludedPlayerId)).ToArray();
@@ -1689,6 +1923,105 @@ namespace oojjrs.oplat.steam
             }
         }
 
+        private MyNetFriendInterface[] ReadFriends()
+        {
+            var friendCount = SteamFriends.GetFriendCount(EFriendFlags.k_EFriendFlagImmediate);
+            if (friendCount < 0)
+                throw new InvalidOperationException("Steam could not read the friend list because the local user is not logged on.");
+
+            var appId = SteamUtils.GetAppID();
+            var friendIds = new HashSet<ulong>();
+            var friends = new List<MyNetFriendInterface>(friendCount);
+            for (var index = 0; index < friendCount; ++index)
+            {
+                var friendId = SteamFriends.GetFriendByIndex(index, EFriendFlags.k_EFriendFlagImmediate);
+                if ((friendId.IsValid() == false) || (friendId.BIndividualAccount() == false) || (friendIds.Add(friendId.m_SteamID) == false))
+                    throw new FormatException("Steam returned an invalid or duplicate friend ID.");
+
+                var id = friendId.m_SteamID.ToString();
+                var nickname = SteamFriends.GetFriendPersonaName(friendId);
+                if (string.IsNullOrWhiteSpace(nickname) || (nickname == "[unknown]"))
+                    nickname = id;
+
+                var state = (MyNetFriendInterface.StateEnum)SteamFriends.GetFriendPersonaState(friendId);
+                if ((state < MyNetFriendInterface.StateEnum.Offline) || (state > MyNetFriendInterface.StateEnum.Invisible))
+                    throw new FormatException("Steam returned an invalid friend persona state.");
+
+                var roomId = string.Empty;
+                if (SteamFriends.GetFriendGamePlayed(friendId, out var gameInfo) && (gameInfo.m_gameID.AppID() == appId) && gameInfo.m_steamIDLobby.IsValid() && gameInfo.m_steamIDLobby.IsLobby())
+                    roomId = gameInfo.m_steamIDLobby.m_SteamID.ToString();
+
+                friends.Add(new SteamNetFriend(id, nickname, roomId, state));
+            }
+
+            return friends.ToArray();
+        }
+
+        private void RefreshFriend(CancellationToken callerCancellationToken, MyNetFriendServiceInterface.ResultInterface result, int? pollingGeneration)
+        {
+            using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                cancellationToken.ThrowIfCancellationRequested();
+                if (pollingGeneration.HasValue && (pollingGeneration.Value != _friendPollingGeneration))
+                    return;
+
+                MyNetFriendInterface[] friends = null;
+                Exception caughtException = null;
+                try
+                {
+                    friends = ReadFriends();
+                }
+                catch (Exception exception)
+                {
+                    caughtException = exception;
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (pollingGeneration.HasValue && (pollingGeneration.Value != _friendPollingGeneration))
+                    return;
+
+                if (caughtException == null)
+                    result.OnOk(friends);
+                else
+                    result.OnException(new MyNetSessionException("Failed to get Steam friends.", caughtException));
+            }
+        }
+
+        private void UpdateFriendPolling()
+        {
+            var config = _friendPollingConfig;
+            if (config == null)
+                return;
+
+            if (config.CancellationToken.IsCancellationRequested || _lifetimeSource.IsCancellationRequested)
+            {
+                StopFriend();
+                return;
+            }
+
+            if (Time.realtimeSinceStartup < _nextFriendPollTimeSeconds)
+                return;
+
+            var result = _friendPollingResult;
+            var pollingGeneration = _friendPollingGeneration;
+            _nextFriendPollTimeSeconds = float.PositiveInfinity;
+            try
+            {
+                RefreshFriend(config.CancellationToken, result, pollingGeneration);
+            }
+            finally
+            {
+                if (pollingGeneration == _friendPollingGeneration)
+                {
+                    if (config.CancellationToken.IsCancellationRequested || _lifetimeSource.IsCancellationRequested)
+                        StopFriend();
+                    else
+                        _nextFriendPollTimeSeconds = Time.realtimeSinceStartup + Math.Max(MinimumPollingDelaySeconds, config.PollingDelaySeconds);
+                }
+            }
+        }
+
         private void UpdateLobbyPolling()
         {
             var config = _lobbyPollingConfig;
@@ -1768,6 +2101,22 @@ namespace oojjrs.oplat.steam
             }
         }
 
+        private void OnGameLobbyJoinRequested(GameLobbyJoinRequested_t callback)
+        {
+            try
+            {
+                if ((callback.m_steamIDLobby.IsValid() == false) || (callback.m_steamIDLobby.IsLobby() == false))
+                    return;
+
+                var playerId = callback.m_steamIDFriend.IsValid() && callback.m_steamIDFriend.BIndividualAccount() ? callback.m_steamIDFriend.m_SteamID.ToString() : string.Empty;
+                _friendResult.OnJoinRequested(playerId, callback.m_steamIDLobby.m_SteamID.ToString());
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
+        }
+
         private void OnLobbyDataUpdate(LobbyDataUpdate_t callback)
         {
             try
@@ -1789,6 +2138,24 @@ namespace oojjrs.oplat.steam
                     return;
                 }
 
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
+        }
+
+        private void OnLobbyInvite(LobbyInvite_t callback)
+        {
+            try
+            {
+                var gameId = new CGameID(callback.m_ulGameID);
+                var playerId = new CSteamID(callback.m_ulSteamIDUser);
+                var lobbyId = new CSteamID(callback.m_ulSteamIDLobby);
+                if ((gameId.IsSteamApp() == false) || (gameId.AppID() != SteamUtils.GetAppID()) || (playerId.IsValid() == false) || (playerId.BIndividualAccount() == false) || (lobbyId.IsValid() == false) || (lobbyId.IsLobby() == false))
+                    return;
+
+                _friendResult.OnInvited(playerId.m_SteamID.ToString(), lobbyId.m_SteamID.ToString());
             }
             catch (Exception exception)
             {
@@ -3042,6 +3409,55 @@ namespace oojjrs.oplat.steam
             }
 
             return true;
+        }
+
+        private static bool TryParseLobbyId(string value, out CSteamID lobby)
+        {
+            lobby = CSteamID.Nil;
+            if (ulong.TryParse(value, out var id) == false)
+                return false;
+
+            lobby = new CSteamID(id);
+            return lobby.IsValid() && lobby.IsLobby();
+        }
+
+        private static bool TryParsePlayerId(string value, out CSteamID player)
+        {
+            player = CSteamID.Nil;
+            if (ulong.TryParse(value, out var id) == false)
+                return false;
+
+            player = new CSteamID(id);
+            return player.IsValid() && player.BIndividualAccount();
+        }
+
+        private static bool TryReadLaunchLobbyId(string commandLine, out ulong lobbyId)
+        {
+            if (string.IsNullOrWhiteSpace(commandLine))
+            {
+                lobbyId = 0;
+                return false;
+            }
+
+            return TryReadLaunchLobbyId(commandLine.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries), out lobbyId);
+        }
+
+        private static bool TryReadLaunchLobbyId(string[] arguments, out ulong lobbyId)
+        {
+            lobbyId = 0;
+            for (var index = 0; index + 1 < arguments.Length; ++index)
+            {
+                if (arguments[index] != "+connect_lobby")
+                    continue;
+
+                if (TryParseLobbyId(arguments[index + 1].Trim('"'), out var lobby))
+                {
+                    lobbyId = lobby.m_SteamID;
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 
