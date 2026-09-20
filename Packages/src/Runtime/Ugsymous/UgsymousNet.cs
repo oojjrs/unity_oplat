@@ -113,6 +113,7 @@ namespace oojjrs.oplat.ugsymous
         {
             _lifetimeSource.Cancel();
             _lobby.Stop();
+            _room.Dispose();
             _friend.Dispose();
             _chat.Dispose();
             _transport.Dispose();

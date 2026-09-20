@@ -399,7 +399,7 @@ namespace oojjrs.oplat.steam
             UpdateLobbyPolling();
 
             if ((_currentLobby.m_SteamID != 0) && (SteamMatchmaking.GetLobbyOwner(_currentLobby).m_SteamID != _originalHostId))
-                ResetSession(true, StateEnum.Ready);
+                ExitCurrentRoom(true);
         }
 
         internal Task InviteFriendAsync(MyNetFriendServiceInterface.InviteConfigInterface config, MyNetFriendServiceInterface.InviteResultInterface result)
@@ -1791,6 +1791,23 @@ namespace oojjrs.oplat.steam
             }
         }
 
+        private void ExitCurrentRoom(bool leaveLobby)
+        {
+            var state = _state;
+            ResetSession(leaveLobby, StateEnum.Ready);
+            if ((state != StateEnum.Host) && (state != StateEnum.Member))
+                return;
+
+            try
+            {
+                _roomResult.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
+        }
+
         private void FlushPendingBroadcasts()
         {
             if (_state != StateEnum.Host)
@@ -2131,7 +2148,7 @@ namespace oojjrs.oplat.steam
                 {
                     if (ReadBooleanLobbyData(_currentLobby, MetadataClosed) || (SteamMatchmaking.GetLobbyOwner(_currentLobby).m_SteamID != _originalHostId))
                     {
-                        ResetSession(true, StateEnum.Ready);
+                        ExitCurrentRoom(true);
                         return;
                     }
 
@@ -2182,7 +2199,7 @@ namespace oojjrs.oplat.steam
                 RemovePendingPlayer(playerId);
                 if (playerId == _localSteamId)
                 {
-                    ResetSession(false, StateEnum.Ready);
+                    ExitCurrentRoom(false);
                     return;
                 }
 
@@ -2200,7 +2217,7 @@ namespace oojjrs.oplat.steam
                 }
 
                 if ((_currentLobby.m_SteamID != 0) && (SteamMatchmaking.GetLobbyOwner(_currentLobby).m_SteamID != _originalHostId))
-                    ResetSession(true, StateEnum.Ready);
+                    ExitCurrentRoom(true);
             }
             catch (Exception exception)
             {
@@ -2251,7 +2268,7 @@ namespace oojjrs.oplat.steam
                         return;
 
                     if ((kind == MessageKind.RoomClosed) || (((kind == MessageKind.PlayerKicked) || (kind == MessageKind.AdmissionRejected)) && (targetId == _localSteamId)))
-                        ResetSession(true, StateEnum.Ready);
+                        ExitCurrentRoom(true);
                 }
             }
             catch (Exception exception)
@@ -2403,7 +2420,7 @@ namespace oojjrs.oplat.steam
                     {
                         ApplyMemberSnapshot(payload);
                         if (AcceptedPlayerIds.Contains(_localSteamId) == false)
-                            ResetSession(true, StateEnum.Ready);
+                            ExitCurrentRoom(true);
                         else
                             _roomResult.OnOk(BuildCurrentRoom());
                     }
@@ -2460,7 +2477,7 @@ namespace oojjrs.oplat.steam
                         var playerId = DecodePlayerUpdated(payload, out var snapshot);
                         ApplyMemberSnapshot(snapshot);
                         if (AcceptedPlayerIds.Contains(_localSteamId) == false)
-                            ResetSession(true, StateEnum.Ready);
+                            ExitCurrentRoom(true);
                         else
                             _playerResult.OnOk(BuildCurrentRoom().Players.First(value => value.Id == playerId.ToString()));
                     }
@@ -2490,11 +2507,11 @@ namespace oojjrs.oplat.steam
                     break;
                 case MessageKind.RoomClosed:
                     if (senderId == _originalHostId)
-                        ResetSession(true, StateEnum.Ready);
+                        ExitCurrentRoom(true);
                     break;
                 case MessageKind.PlayerKicked:
                     if ((senderId == _originalHostId) && (DecodeUInt64(payload) == _localSteamId))
-                        ResetSession(true, StateEnum.Ready);
+                        ExitCurrentRoom(true);
                     break;
             }
         }

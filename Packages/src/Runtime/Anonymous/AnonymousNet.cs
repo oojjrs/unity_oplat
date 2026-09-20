@@ -494,18 +494,15 @@ namespace oojjrs.oplat.anonymous
                         ChatResult.OnReceived(chat.Message, chat.PlayerId, chat.RoomId);
                     }
 
-                    if (_useLocal)
-                    {
-                        HandleLocalMessages();
-                        await Task.Delay(1, cancellationToken);
-                        continue;
-                    }
-
                     while (Client.TryReceiveRoomChanged(out var exitedRoomId, out var updatedContent))
                     {
                         if (exitedRoomId != null)
                         {
+                            var isCurrentRoom = _currentRoomId == exitedRoomId;
                             ClearCurrentRoom(exitedRoomId);
+                            if (isCurrentRoom)
+                                RoomResult.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
+
                             continue;
                         }
 
@@ -529,6 +526,13 @@ namespace oojjrs.oplat.anonymous
                                 throw new FormatException("Invalid anonymous player update notification.");
 
                             PlayerResult.OnOk(playerData.ToNetPlayer());
+                        }
+
+                        if (_useLocal)
+                        {
+                            HandleLocalMessages();
+                            await Task.Delay(1, cancellationToken);
+                            continue;
                         }
 
                         if (roomRole == RoomRoleEnum.Host)
@@ -572,6 +576,10 @@ namespace oojjrs.oplat.anonymous
                         }
 
                         HostService.HandleRequests();
+                    }
+                    else if (_useLocal)
+                    {
+                        HandleLocalMessages();
                     }
                 }
 

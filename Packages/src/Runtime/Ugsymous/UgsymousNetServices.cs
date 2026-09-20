@@ -447,12 +447,18 @@ namespace oojjrs.oplat.ugsymous
         }
     }
 
-    internal sealed class UgsymousNetRoomService : MyNetRoomServiceInterface
+    internal sealed class UgsymousNetRoomService : MyNetRoomServiceInterface, IDisposable
     {
+        private readonly HashSet<string> _exitingRoomIds = new();
         private readonly Dictionary<string, UgsymousRoom> _rooms = new();
         private readonly UgsymousNet _net;
         private bool _isBusy;
-        internal UgsymousNetRoomService(UgsymousNet net) => _net = net;
+
+        internal UgsymousNetRoomService(UgsymousNet net)
+        {
+            _net = net;
+            MultiplayerService.Instance.SessionRemoved += OnSessionRemoved;
+        }
 
         async Task MyNetRoomServiceInterface.CreateAsync(MyNetRoomServiceInterface.CreateConfigInterface config, MyNetRoomServiceInterface.CreateResultInterface result)
         {
@@ -501,7 +507,20 @@ namespace oojjrs.oplat.ugsymous
                 }
 
                 if (config.PlayerId == session.CurrentPlayer.Id)
-                    await session.LeaveAsync();
+                {
+                    _exitingRoomIds.Add(config.RoomId);
+                    try
+                    {
+                        if (session.Host == _net.Account)
+                            await session.AsHost().DeleteAsync();
+                        else
+                            await session.LeaveAsync();
+                    }
+                    finally
+                    {
+                        _exitingRoomIds.Remove(config.RoomId);
+                    }
+                }
                 else if (session.Host == _net.Account)
                     await session.AsHost().RemovePlayerAsync(config.PlayerId);
                 else
@@ -511,7 +530,9 @@ namespace oojjrs.oplat.ugsymous
                 }
 
                 config.CancellationToken.ThrowIfCancellationRequested();
-                _rooms.Remove(config.RoomId);
+                if (config.PlayerId == session.CurrentPlayer.Id)
+                    _rooms.Remove(config.RoomId);
+
                 result.OnOk(config.RoomId, config.PlayerId);
             }, result);
         }
@@ -544,6 +565,15 @@ namespace oojjrs.oplat.ugsymous
             return room;
         }
 
+        private void OnSessionRemoved(ISession session)
+        {
+            if (_rooms.Remove(session.Id) == false)
+                return;
+
+            if (_exitingRoomIds.Remove(session.Id) == false)
+                _net.RoomResult.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
+        }
+
         private async Task RunAsync(Func<Task> action, MyNetInterface.CatchInterface result)
         {
             if (_isBusy)
@@ -556,6 +586,11 @@ namespace oojjrs.oplat.ugsymous
             try { await action(); }
             catch (SessionException e) { result.OnException(new(e.Message, e)); }
             finally { _isBusy = false; }
+        }
+
+        public void Dispose()
+        {
+            MultiplayerService.Instance.SessionRemoved -= OnSessionRemoved;
         }
     }
 

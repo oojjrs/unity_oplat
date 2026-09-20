@@ -27,6 +27,8 @@ Unity 에디터의 `Tools > Oplat > Open Anonymous Storage Folder` 메뉴로 위
 
 Anonymous 네트워크는 `127.0.0.1:45831`의 로컬 서버를 사용한다. 채팅 메시지 한계는 `service.Net.Chat.MessageByteCountMax`에서 조회한다.
 
+방장이 나가거나 연결이 끊기면 로컬 서버가 방을 삭제하고 남은 멤버를 모두 내보낸다. 멤버는 `RoomResult.OnFailed(NotFoundRoom)`을 받아 로비 전환을 처리할 수 있으며, `UseLocal` 사용 여부와 관계없이 이 방 수명주기 알림을 받는다.
+
 플랫폼 공통 API는 [인터페이스 문서](../index.md)를 참고한다.
 
 ## 친구

@@ -23,6 +23,8 @@ Unity Dashboard에서 프로젝트를 연결하고 Authentication, Cloud Save, F
 
 Session 목록 정보인 `ISessionInfo`에는 참가 코드, private 여부와 플레이어 목록이 없으므로 Lobby 결과의 `Code`는 빈 문자열, `IsPrivate`는 `false`, `Players`는 빈 목록이다. 방에 참가하거나 생성한 뒤 얻는 Room 결과에는 전체 Session 정보가 제공된다.
 
+방장이 자기 퇴장을 요청하면 `LeaveAsync`로 호스트를 이전하지 않고 Session을 삭제해 모든 멤버를 내보낸다. 삭제되거나 강퇴된 멤버는 `RoomResult.OnFailed(NotFoundRoom)`을 받는다.
+
 Vivox 메시지 한계와 UTP 패킷 한계는 각각 `Chat.MessageByteCountMax`와 concrete transport 내부 제한을 따른다. 공개 API 호출과 결과 callback 처리는 Unity 메인 스레드에서 수행한다.
 
 ## 친구와 방 초대
