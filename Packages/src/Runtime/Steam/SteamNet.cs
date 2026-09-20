@@ -246,6 +246,7 @@ namespace oojjrs.oplat.steam
         private TaskCompletionSource<PlayerUpdateOutcomeEnum> _playerUpdateSource;
         private MyNetInterface.Field[] _roomFields = Array.Empty<MyNetInterface.Field>();
         private MyNetRoomServiceInterface.UpdateResultInterface _roomResult;
+        private MyNetRoomSwitchHandlerInterface _roomSwitchHandler;
         private volatile StateEnum _state;
         private string _title;
         private volatile bool _useLocal;
@@ -267,7 +268,7 @@ namespace oojjrs.oplat.steam
         private MyNetLobbyServiceInterface Lobby { get; }
         private MyNetMemberServiceInterface Member { get; }
         private MyNetPlayerServiceInterface Player { get; }
-        private MyNetRoomServiceInterface Room { get; }
+        private SteamNetRoomService Room { get; }
 
         MyNetChatServiceInterface MyNetInterface.Chat => Chat;
         MyNetFriendServiceInterface MyNetInterface.Friend => Friend;
@@ -282,7 +283,9 @@ namespace oojjrs.oplat.steam
             set => _useLocal = value;
         }
 
-        internal void Initialize(MyNetChatResultInterface chatResult, MyNetFriendResultInterface friendResult, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
+        internal string Account => _localSteamId.ToString();
+
+        internal void Initialize(MyNetChatResultInterface chatResult, MyNetFriendResultInterface friendResult, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomSwitchHandlerInterface roomSwitchHandler, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
         {
             if (_isInitialized)
                 return;
@@ -292,6 +295,7 @@ namespace oojjrs.oplat.steam
             _hostResult = hostResult ?? throw new ArgumentNullException(nameof(hostResult));
             _memberResult = memberResult ?? throw new ArgumentNullException(nameof(memberResult));
             _playerResult = playerResult ?? throw new ArgumentNullException(nameof(playerResult));
+            _roomSwitchHandler = roomSwitchHandler;
             _roomResult = roomResult ?? throw new ArgumentNullException(nameof(roomResult));
             _mainThreadId = Environment.CurrentManagedThreadId;
             var localSteamId = SteamUser.GetSteamID();
@@ -336,6 +340,7 @@ namespace oojjrs.oplat.steam
             ++_friendPollingGeneration;
             _friendPollingConfig = null;
             _friendPollingResult = null;
+            _roomSwitchHandler = null;
             ++_lobbyPollingGeneration;
             _lobbyPollingConfig = null;
             _lobbyPollingResult = null;
@@ -974,6 +979,16 @@ namespace oojjrs.oplat.steam
                 else
                     result.OnOk(room);
             }
+        }
+
+        internal Task<MyNetRoomInterface> GetCurrentRoomAsync(CancellationToken cancellationToken)
+        {
+            EnsureInitialized();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (((_state != StateEnum.Host) && (_state != StateEnum.Member)) || (AcceptedPlayerIds.Contains(_localSteamId) == false))
+                return Task.FromResult<MyNetRoomInterface>(null);
+
+            return Task.FromResult(BuildCurrentRoom());
         }
 
         internal async Task UpdateRoomAsync(MyNetRoomServiceInterface.UpdateConfigInterface config, MyNetRoomServiceInterface.UpdateResultInterface result)
@@ -1755,7 +1770,34 @@ namespace oojjrs.oplat.steam
 
             var lobbyId = _pendingLaunchLobbyId;
             _pendingLaunchLobbyId = 0;
-            _friendResult.OnJoinRequested(string.Empty, lobbyId.ToString());
+            RequestRoomSwitch(string.Empty, lobbyId.ToString());
+        }
+
+        private async Task HandleRoomSwitchRequestAsync(string playerId, string roomId)
+        {
+            var cancellationToken = _lifetimeSource.Token;
+            try
+            {
+                await Room.HandleSwitchRequestAsync(playerId, roomId, _roomSwitchHandler, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
+        }
+
+        private void RequestRoomSwitch(string playerId, string roomId)
+        {
+            if (_roomSwitchHandler == null)
+            {
+                _friendResult.OnJoinRequested(playerId, roomId);
+                return;
+            }
+
+            _ = HandleRoomSwitchRequestAsync(playerId, roomId);
         }
 
         private void BroadcastRoster(MessageKind kind = MessageKind.RosterChanged, ulong updatedPlayerId = 0, ulong excludedPlayerId = 0)
@@ -2151,7 +2193,7 @@ namespace oojjrs.oplat.steam
                     return;
 
                 var playerId = callback.m_steamIDFriend.IsValid() && callback.m_steamIDFriend.BIndividualAccount() ? callback.m_steamIDFriend.m_SteamID.ToString() : string.Empty;
-                _friendResult.OnJoinRequested(playerId, callback.m_steamIDLobby.m_SteamID.ToString());
+                RequestRoomSwitch(playerId, callback.m_steamIDLobby.m_SteamID.ToString());
             }
             catch (Exception exception)
             {

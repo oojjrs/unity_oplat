@@ -16,6 +16,7 @@ namespace oojjrs.oplat
             MyPlatformTypeEnum InitialType { get; }
             MyNetMemberResultInterface MemberResult => EmptyResult;
             MyNetPlayerServiceInterface.UpdateResultInterface PlayerResult => EmptyResult;
+            MyNetRoomSwitchHandlerInterface RoomSwitchHandler => null;
             MyNetRoomServiceInterface.UpdateResultInterface RoomResult => EmptyResult;
 
             void OnResult(MyPlatformServiceInterface service);

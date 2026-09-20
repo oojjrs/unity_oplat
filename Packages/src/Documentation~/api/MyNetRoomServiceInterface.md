@@ -8,6 +8,7 @@
 | --- | --- |
 | `CreateAsync(CreateConfigInterface, CreateResultInterface)` | 생성하고 참가한 `MyNetRoomInterface` |
 | `JoinAsync(JoinConfigInterface, JoinResultInterface)` | 참가한 `MyNetRoomInterface` |
+| `SwitchAsync(JoinConfigInterface, JoinResultInterface)` | 전환 후 참가한 `MyNetRoomInterface` |
 | `UpdateAsync(UpdateConfigInterface, UpdateResultInterface)` | 갱신된 `MyNetRoomInterface` |
 | `ExitAsync(ExitConfigInterface, ExitResultInterface)` | 처리한 `roomId`, `playerId` |
 
@@ -37,6 +38,14 @@
 | `Password` | 방 비밀번호 |
 | `PlayerFields` | 참가 플레이어의 초기 필드 |
 | `PlayerNickname` | 참가 플레이어 표시 이름 |
+
+`JoinAsync`는 기존과 같이 현재 방을 정리하지 않고 대상 방 참가만 시도한다. 이미 다른 방에 참가한 상태의 처리 방식도 기존 플랫폼 구현을 유지한다.
+
+`SwitchAsync`는 같은 `JoinConfigInterface`와 `JoinResultInterface`를 사용하는 상위 전환 API다. 대상이 현재 방이면 현재 방 스냅샷으로 즉시 성공한다. 현재 방이 없으면 대상 방에 참가한다. 다른 방에 참가 중이면 로컬 플레이어 ID로 `ExitAsync`를 먼저 수행한 뒤 대상 방에 참가한다. 이때 현재 플레이어가 방장이면 기존 `ExitAsync` 계약에 따라 방을 닫고, 일반 멤버이면 방을 나간다.
+
+전환 중 다른 `SwitchAsync` 또는 플랫폼 참여 요청이 들어오면 새 요청은 `OnBusy`로 끝난다. 퇴장에 실패하면 참가를 시도하지 않고 해당 실패를 그대로 반환한다. 퇴장은 성공했지만 새 방 참가가 실패하면 플레이어는 방이 없는 상태가 되며 참가 실패를 반환한다. 취소는 기존 작업과 같이 `OperationCanceledException`으로 완료한다.
+
+기존 외부 구현의 소스 호환성을 위해 인터페이스 기본 구현은 `JoinAsync`로 연결된다. 패키지에 포함된 Anonymous, Steam, Ugsymous 구현은 모두 위의 전체 전환 동작을 제공한다.
 
 ## `UpdateConfigInterface`
 

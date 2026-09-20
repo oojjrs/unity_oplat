@@ -470,11 +470,13 @@ namespace oojjrs.oplat.ugsymous
         private readonly HashSet<string> _exitingRoomIds = new();
         private readonly Dictionary<string, UgsymousRoom> _rooms = new();
         private readonly UgsymousNet _net;
+        private readonly MyNetRoomSwitcher _switcher;
         private bool _isBusy;
 
         internal UgsymousNetRoomService(UgsymousNet net)
         {
             _net = net;
+            _switcher = new(() => _net.Account, GetCurrentRoomAsync, (config, result) => ((MyNetRoomServiceInterface)this).ExitAsync(config, result), (config, result) => ((MyNetRoomServiceInterface)this).JoinAsync(config, result));
             MultiplayerService.Instance.SessionRemoved += OnSessionRemoved;
         }
 
@@ -506,6 +508,11 @@ namespace oojjrs.oplat.ugsymous
                 config.CancellationToken.ThrowIfCancellationRequested();
                 result.OnOk(GetRoom(session));
             }, result);
+        }
+
+        Task MyNetRoomServiceInterface.SwitchAsync(MyNetRoomServiceInterface.JoinConfigInterface config, MyNetRoomServiceInterface.JoinResultInterface result)
+        {
+            return _switcher.SwitchAsync(config, result);
         }
 
         async Task MyNetRoomServiceInterface.ExitAsync(MyNetRoomServiceInterface.ExitConfigInterface config, MyNetRoomServiceInterface.ExitResultInterface result)
@@ -581,6 +588,13 @@ namespace oojjrs.oplat.ugsymous
                 _rooms.Add(session.Id, room = new(session));
 
             return room;
+        }
+
+        private Task<MyNetRoomInterface> GetCurrentRoomAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var session = MultiplayerService.Instance.Sessions.Values.FirstOrDefault(value => value.CurrentPlayer?.Id == _net.Account);
+            return Task.FromResult(session == null ? null : GetRoom(session));
         }
 
         private void OnSessionRemoved(ISession session)

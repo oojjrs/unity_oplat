@@ -7,10 +7,12 @@ namespace oojjrs.oplat.anonymous
     internal class AnonymousNetRoomService : MyNetRoomServiceInterface
     {
         private readonly AnonymousNet Net;
+        private readonly MyNetRoomSwitcher Switcher;
 
         internal AnonymousNetRoomService(AnonymousNet net)
         {
             Net = net;
+            Switcher = new(() => Net.Account, Net.GetCurrentRoomAsync, (config, result) => ((MyNetRoomServiceInterface)this).ExitAsync(config, result), (config, result) => ((MyNetRoomServiceInterface)this).JoinAsync(config, result));
         }
 
         async Task MyNetRoomServiceInterface.CreateAsync(MyNetRoomServiceInterface.CreateConfigInterface config, MyNetRoomServiceInterface.CreateResultInterface result)
@@ -167,6 +169,11 @@ namespace oojjrs.oplat.anonymous
                 Net.SetCurrentRoom(room);
                 result.OnOk(room);
             }
+        }
+
+        Task MyNetRoomServiceInterface.SwitchAsync(MyNetRoomServiceInterface.JoinConfigInterface config, MyNetRoomServiceInterface.JoinResultInterface result)
+        {
+            return Switcher.SwitchAsync(config, result);
         }
 
         async Task MyNetRoomServiceInterface.UpdateAsync(MyNetRoomServiceInterface.UpdateConfigInterface config, MyNetRoomServiceInterface.UpdateResultInterface result)

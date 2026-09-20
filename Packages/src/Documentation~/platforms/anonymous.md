@@ -55,6 +55,6 @@ Unity 에디터의 `Tools > Oplat > Open Anonymous Friend List` 메뉴로 해당
 
 `service.Net.Friend.RequestAddAsync(config, result)`는 요청자의 목록에 대상 계정 ID를 저장한다. 미접속 대상도 등록할 수 있고 같은 값의 중복 등록은 성공으로 처리한다. 상대 목록은 변경하지 않는다. 저장 완료 후 `OnOk(playerId)`가 호출되며 다음 Refresh 또는 반복 조회에서 추가된 친구를 확인한다.
 
-`service.Net.Friend.InviteAsync(config, result)`는 호출자가 참가한 방으로 같은 App ID에서 계정 ID가 일치하는 접속 대상을 초대한다. 대상의 `MyPlatformInitializer.CallbackInterface.FriendResult`에 호출자의 계정 ID와 방 ID를 전달하며 오프라인 초대는 저장하지 않는다. Anonymous에는 플랫폼 참여 UI가 없으므로 `OnJoinRequested`는 발생하지 않는다. 게임 UI에서 초대를 수락하면 받은 방 ID로 기존 Join을 호출한다.
+`service.Net.Friend.InviteAsync(config, result)`는 호출자가 참가한 방으로 같은 App ID에서 계정 ID가 일치하는 접속 대상을 초대한다. 대상의 `MyPlatformInitializer.CallbackInterface.FriendResult`에 호출자의 계정 ID와 방 ID를 전달하며 오프라인 초대는 저장하지 않는다. Anonymous에는 플랫폼 참여 UI가 없으므로 `OnJoinRequested`는 발생하지 않는다. 게임 UI에서 초대를 수락하면 준비를 끝낸 뒤 받은 방 ID로 `Room.SwitchAsync`를 호출한다. Oplat이 현재 방 퇴장 또는 닫기와 새 방 참가를 순서대로 수행한다.
 
 실행 인스턴스는 같은 버전을 사용해야 하며, 인증 메시지 형식이 변경되었으므로 이전 버전의 로컬 서버는 종료한 뒤 다시 실행한다.

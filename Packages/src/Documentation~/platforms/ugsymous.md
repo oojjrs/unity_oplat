@@ -35,7 +35,7 @@ Vivox 메시지 한계와 UTP 패킷 한계는 각각 `Chat.MessageByteCountMax`
 
 친구 목록을 갱신할 때 현재 공개 Session ID를 자신의 Friends presence activity에 게시한다. 친구의 presence가 `Online`, `Busy`, `Away` 중 하나일 때만 해당 activity의 Room ID를 노출한다. 비공개 Session은 presence에 Room ID를 게시하지 않는다.
 
-`Net.Friend.InviteAsync`는 현재 참가한 Session ID를 온라인 친구에게 Friends 메시지로 보낸다. 수신 측은 `FriendResult.OnInvited`로 Player ID와 Room ID를 받고, 사용자가 수락하면 기존 `Room.JoinAsync`를 호출한다. UGS Friends에는 Steam과 같은 플랫폼 초대 수락 UI가 없으므로 `OnJoinRequested`는 발생하지 않는다. 메시지는 오프라인 보관용이 아니며 Friends 서비스가 허용하는 presence 상태에서만 발송한다.
+`Net.Friend.InviteAsync`는 현재 참가한 Session ID를 온라인 친구에게 Friends 메시지로 보낸다. 수신 측은 `FriendResult.OnInvited`로 Player ID와 Room ID를 받고, 사용자가 수락하면 준비를 끝낸 뒤 `Room.SwitchAsync`를 호출한다. Oplat이 현재 Session 퇴장 또는 삭제와 대상 Session 참가를 순서대로 수행한다. UGS Friends에는 Steam과 같은 플랫폼 초대 수락 UI가 없으므로 `OnJoinRequested`는 발생하지 않는다. 메시지는 오프라인 보관용이 아니며 Friends 서비스가 허용하는 presence 상태에서만 발송한다.
 
 친구 목록, presence, 초대는 같은 Unity 프로젝트와 UGS 환경 안에서 동작한다. 개발·스테이징·프로덕션 환경을 나누면 각 환경의 관계와 상태도 서로 분리된다.
 

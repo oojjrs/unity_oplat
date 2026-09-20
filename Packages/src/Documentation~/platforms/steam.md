@@ -24,7 +24,7 @@ Steamworks App Admin에서 사용자별 byte quota와 file count를 설정하고
 - `StartAsync(config, result)`는 즉시 한 번 조회한 뒤 최소 1초 간격으로 반복하고 `Stop()`으로 중지한다. 방 참가 중에도 계속 조회하며 목록 중지는 초대 콜백을 중지하지 않는다.
 - `RequestAddAsync(config, result)`는 유효한 개인 Steam ID의 `friendadd` Overlay를 연다. `OnOk`는 Overlay 요청을 넘겼다는 뜻이며 실제 친구 승인 결과가 아니다. Overlay를 사용할 수 없거나 자기 자신을 지정하면 `NotPermitted`다.
 - `InviteAsync(config, result)`는 호출자가 현재 참가한 Lobby로 현재 Steam 친구를 초대한다. Steam이 발송 요청을 받았을 때만 `OnOk`를 호출하며 상대에게 도착하거나 수락했다는 보장은 없다.
-- `LobbyInvite_t`는 Steam UI가 초대 알림과 수락 절차를 제공하므로 게임에 `FriendResult.OnInvited`로 전달하지 않는다. 실행 중 사용자가 수락하면 `GameLobbyJoinRequested_t`를 `FriendResult.OnJoinRequested`로 전달한다. 초대 수락으로 게임이 새로 시작되면 `+connect_lobby`를 읽어 첫 Update에서 보낸 사람 ID가 빈 `OnJoinRequested`를 전달한다.
+- `LobbyInvite_t`는 Steam UI가 초대 알림과 수락 절차를 제공하므로 게임에 `FriendResult.OnInvited`로 전달하지 않는다. `RoomSwitchHandler`가 있으면 실행 중의 `GameLobbyJoinRequested_t`와 새 실행의 `+connect_lobby`를 게임 준비, 현재 방 정리, 대상 방 참가와 최종 결과 흐름으로 처리한다. 처리기를 생략한 기존 게임에는 동일한 요청을 `FriendResult.OnJoinRequested`로 전달한다.
 
 친구 서비스는 Unity 메인 스레드에서 호출한다. 친구 승인, Overlay 표시, 초대 표시·수락과 게임 재실행은 Steam 클라이언트와 서로 다른 두 계정으로 확인해야 한다.
 

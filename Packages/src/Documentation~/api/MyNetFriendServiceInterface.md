@@ -89,13 +89,13 @@ Anonymous는 같은 Project Key·App ID로 접속한 대상에게만 초대를 �
 
 콜백의 `roomId`는 비어 있지 않다. `OnInvited`의 `playerId`는 초대한 계정이다. 시작 인자로 받은 참여 요청처럼 보낸 사람을 알 수 없는 경우 `OnJoinRequested`의 `playerId`는 빈 문자열이다. 수신 콜백은 Unity 메인 스레드에서 전달한다.
 
-참여 요청 전에 반드시 초대 수신 콜백이 발생하는 것은 아니다. 게임 시작 인자로 들어온 요청은 플랫폼과 결과 처리기가 준비된 뒤 전달한다. 플랫폼 UI와 게임 UI가 같은 방의 참여를 중복 요청할 수 있으므로 게임은 이미 참여 중인 대상과 진행 중인 참여 작업을 구분한다.
+참여 요청 전에 반드시 초대 수신 콜백이 발생하는 것은 아니다. 게임 시작 인자로 들어온 요청은 플랫폼과 결과 처리기가 준비된 뒤 전달한다.
 
-Anonymous와 Ugsymous는 플랫폼 초대 수락 UI가 없으므로 `OnJoinRequested`를 발생시키지 않는다. Ugsymous는 올바른 Oplat 초대 형식의 Friends 메시지만 `OnInvited`로 전달한다. 게임 UI는 `OnInvited`로 받은 방 ID를 보관하고 사용자가 수락하면 기존 Join을 호출한다.
+Anonymous와 Ugsymous는 플랫폼 초대 수락 UI가 없으므로 `OnJoinRequested`를 발생시키지 않는다. Ugsymous는 올바른 Oplat 초대 형식의 Friends 메시지만 `OnInvited`로 전달한다. 게임 UI는 `OnInvited`로 받은 방 ID를 보관하고 사용자가 수락하면 필요한 화면 준비를 끝낸 뒤 `Room.SwitchAsync`를 호출한다.
 
-Steam은 `LobbyInvite_t`를 게임에 전달하지 않고 Steam UI의 초대 알림과 수락 절차에 맡긴다. 실행 중 받은 `GameLobbyJoinRequested_t`는 `OnJoinRequested`로 전달한다. 초대 수락으로 게임이 시작된 경우 Steam 시작 인자와 운영체제 명령행의 `+connect_lobby`를 읽어 첫 Update에서 보낸 사람 ID가 빈 `OnJoinRequested`를 한 번 전달한다.
+Steam은 `LobbyInvite_t`를 게임에 전달하지 않고 Steam UI의 초대 알림과 수락 절차에 맡긴다. `RoomSwitchHandler`를 제공하면 실행 중 받은 `GameLobbyJoinRequested_t`와 시작 인자 `+connect_lobby`를 준비 처리기와 공통 방 전환으로 직접 연결한다. 처리기를 생략한 기존 게임에는 같은 요청을 기존 `OnJoinRequested`로 전달한다.
 
-게임 내 초대 수락 버튼과 친구의 게임 참여 버튼은 방 ID를 기존 `MyNetRoomServiceInterface.JoinAsync`에 전달한다. 플랫폼 UI의 `OnJoinRequested`도 같은 게임 측 참여 처리로 연결한다. 별도의 친구 전용 입장 API는 두지 않는다. 현재 방에서 나갈지, 비밀번호를 입력받을지는 게임이 결정하며 최종 성공은 Join 결과로 판단한다.
+공통 `SwitchAsync`는 현재 방 판정, 같은 방 성공, 다른 방 퇴장 또는 닫기, 대상 방 참가와 중복 요청의 `Busy` 처리를 담당한다. 기존 `JoinAsync`, `ExitAsync`, `OnInvited`, `OnJoinRequested` 계약은 변경하지 않는다. 플랫폼 자동 전환의 게임 준비와 결과 계약은 [`MyNetRoomSwitchHandlerInterface`](MyNetRoomSwitchHandlerInterface.md)를 참고한다.
 
 ## 결과와 실패
 

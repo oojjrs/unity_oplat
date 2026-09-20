@@ -67,6 +67,7 @@ namespace oojjrs.oplat
         Task CreateAsync(CreateConfigInterface config, CreateResultInterface result);
         Task ExitAsync(ExitConfigInterface config, ExitResultInterface result);
         Task JoinAsync(JoinConfigInterface config, JoinResultInterface result);
+        Task SwitchAsync(JoinConfigInterface config, JoinResultInterface result) => JoinAsync(config, result);
         Task UpdateAsync(UpdateConfigInterface config, UpdateResultInterface result);
     }
 }
