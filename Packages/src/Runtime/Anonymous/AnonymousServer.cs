@@ -7,8 +7,6 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.Serialization.Json;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -91,24 +89,27 @@ namespace oojjrs.oplat.anonymous
             });
         }
 
-        private static string GetFriendStorageKey(string value)
+        private static string GetAccountDirectoryName(string account)
         {
-            using (var algorithm = SHA256.Create())
-                return BitConverter.ToString(algorithm.ComputeHash(Encoding.UTF8.GetBytes(value))).Replace("-", string.Empty).ToLowerInvariant();
+            var value = Uri.EscapeDataString(account);
+            if (value.EndsWith(".", StringComparison.Ordinal))
+                value = value[..^1] + "%2E";
+
+            return $"Account={value}";
         }
 
         private static string GetFriendStoragePath(AnonymousServerSession session)
         {
-            return GetFriendStoragePath(session.AppId, session.ProjectKey, session.Account);
+            return GetFriendStoragePath(session.AppId, session.Account);
         }
 
-        public static string GetFriendStoragePath(uint appId, string projectKey, string account)
+        public static string GetFriendStoragePath(uint appId, string account)
         {
             var localApplicationDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (string.IsNullOrEmpty(localApplicationDataPath))
                 throw new InvalidOperationException("The local application data path is unavailable.");
 
-            return Path.Combine(localApplicationDataPath, "oojjrs", "Oplat", "AnonymousServer", "v1", GetFriendStorageKey(projectKey), appId.ToString(CultureInfo.InvariantCulture), "users", GetFriendStorageKey(account), "friends.json");
+            return Path.Combine(localApplicationDataPath, "oojjrs", "Oplat", "AnonymousServer", "v1", $"AppId={appId.ToString(CultureInfo.InvariantCulture)}", "users", GetAccountDirectoryName(account), "friends.json");
         }
 
         private static string[] ReadFriendAccounts(AnonymousServerSession session)
@@ -373,7 +374,7 @@ namespace oojjrs.oplat.anonymous
 
         private bool TryGetFriendSession(AnonymousServerSession session, string playerId, out AnonymousServerSession friendSession)
         {
-            return Sessions.TryGetValue(playerId, out friendSession) && (friendSession.AppId == session.AppId) && (friendSession.ProjectKey == session.ProjectKey);
+            return Sessions.TryGetValue(playerId, out friendSession) && (friendSession.AppId == session.AppId);
         }
     }
 }

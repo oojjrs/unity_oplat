@@ -123,26 +123,6 @@ namespace oojjrs.oplat.anonymous
             return nameof(AnonymousPlatform);
         }
 
-        private static string GetStorageProjectKey()
-        {
-            var identifier = Application.identifier?.Trim();
-            if (string.IsNullOrEmpty(identifier) == false)
-                return identifier;
-
-            var companyName = Application.companyName?.Trim();
-            var productName = Application.productName?.Trim();
-            if (string.IsNullOrEmpty(companyName) == false && string.IsNullOrEmpty(productName) == false)
-                return $"{companyName}.{productName}";
-
-            if (string.IsNullOrEmpty(productName) == false)
-                return productName;
-
-            if (string.IsNullOrEmpty(companyName) == false)
-                return companyName;
-
-            return nameof(AnonymousPlatform);
-        }
-
 #if UNITY_EDITOR
         [UnityEditor.MenuItem("Tools/Oplat/Open Anonymous Friend List")]
         private static void OpenFriendList()
@@ -168,7 +148,7 @@ namespace oojjrs.oplat.anonymous
                 GetIdentity(callback.AnonymousInstanceId, out account, out _);
             }
 
-            var path = AnonymousServer.GetFriendStoragePath(appId, GetStorageProjectKey(), account);
+            var path = AnonymousServer.GetFriendStoragePath(appId, account);
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             if (File.Exists(path) == false)
                 File.WriteAllText(path, "[]", new UTF8Encoding(false));
@@ -196,12 +176,11 @@ namespace oojjrs.oplat.anonymous
 
             _profileSprite = profileSpriteRequest.asset as Sprite;
 
-            var projectKey = GetStorageProjectKey();
-            await Net.AuthenticateAsync(_account, _nickname, appId, projectKey, cancellationToken);
+            await Net.AuthenticateAsync(_account, _nickname, appId, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
             Net.Initialize(_account, callback.ChatResult, callback.FriendResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomResult);
-            _storage.Initialize(appId, projectKey, _account);
+            _storage.Initialize(appId, _account);
 
             _isInitialized = true;
         }

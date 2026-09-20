@@ -16,10 +16,10 @@
 Anonymous 저장소는 현재 Windows 계정의 다음 경로 아래에 파일을 직접 저장한다.
 
 ```text
-%LOCALAPPDATA%\oojjrs\Oplat\AnonymousStorage\v1\<project-key SHA-256>\<AppId>\users\<account SHA-256>\files\<logical path>
+%LOCALAPPDATA%\oojjrs\Oplat\AnonymousStorage\v1\AppId=<AppId>\users\Account=<Account>\files\<logical path>
 ```
 
-Project Key는 `Application.identifier`이며, 값이 없으면 company/product 이름으로 대체한다. 프로젝트, App ID와 Account별로 격리되는 로컬 개발 저장소이며 신뢰할 수 있는 원격 데이터베이스가 아니다.
+`AppId=`와 `Account=` 접두사 뒤에 실제 값을 사용하므로 폴더 이름에서 경로의 출처를 확인할 수 있다. Account에 경로 문자로 사용할 수 없는 값이 있으면 URI 방식으로 이스케이프한다. App ID와 Account별로 격리되는 로컬 개발 저장소이며 신뢰할 수 있는 원격 데이터베이스가 아니다. App ID는 소비 프로젝트마다 고유한 값을 사용해야 한다. 이전 Project Key·해시 기반 경로의 데이터는 자동으로 이전하지 않는다.
 
 Unity 에디터의 `Tools > Oplat > Open Anonymous Storage Folder` 메뉴로 위 경로의 `v1` 폴더를 탐색기에서 연다. 플레이 모드나 로컬 서버 실행 여부와 관계없이 사용할 수 있으며, 폴더가 없으면 생성한다.
 
@@ -36,10 +36,10 @@ Anonymous 네트워크는 `127.0.0.1:45831`의 로컬 서버를 사용한다. �
 `service.Net.Friend.RefreshAsync(result)`는 기존 로컬 서버에 친구 목록을 요청한다. 서버가 다음 계정별 파일을 읽고 현재 접속 세션과 방 정보를 합쳐 스냅샷을 반환한다.
 
 ```text
-%LOCALAPPDATA%\oojjrs\Oplat\AnonymousServer\v1\<project-key SHA-256>\<AppId>\users\<account SHA-256>\friends.json
+%LOCALAPPDATA%\oojjrs\Oplat\AnonymousServer\v1\AppId=<AppId>\users\Account=<Account>\friends.json
 ```
 
-파일 내용은 계정 ID의 JSON 배열이다. `AnonymousInstanceId`를 제공한 실행 인스턴스의 계정 ID는 해당 값과 같다. 해시는 UTF-8 문자열의 SHA-256을 소문자 16진수로 표현한다. 파일과 디렉터리가 없으면 빈 목록이며, 잘못된 JSON·읽기 권한 오류 등은 조회 실패로 전달한다. Refresh는 파일을 만들거나 수정하지 않는다.
+파일 내용은 계정 ID의 JSON 배열이다. `AnonymousInstanceId`를 제공한 실행 인스턴스의 계정 ID는 해당 값과 같다. 경로의 App ID와 Account 표기 및 이스케이프 규칙은 Anonymous 저장소와 같다. 파일과 디렉터리가 없으면 빈 목록이며, 잘못된 JSON·읽기 권한 오류 등은 조회 실패로 전달한다. Refresh는 파일을 만들거나 수정하지 않는다.
 
 ```json
 ["alice", "bob"]
@@ -47,12 +47,12 @@ Anonymous 네트워크는 `127.0.0.1:45831`의 로컬 서버를 사용한다. �
 
 Unity 에디터의 `Tools > Oplat > Open Anonymous Friend List` 메뉴로 해당 파일을 기본 앱에서 연다. 플레이 중이면 초기화된 Anonymous 인스턴스를 사용하고, 편집 모드에서는 선택한 `MyPlatformInitializer` 또는 열린 씬의 유일한 Anonymous 초기화기 설정에서 App ID와 인스턴스 ID를 읽는다. 초기화기가 여러 개면 원하는 GameObject를 먼저 선택한다. 파일이나 디렉터리가 없으면 빈 배열 `[]`로 생성한다.
 
-같은 ID는 한 번만 반환한다. `Id`와 `Nickname`은 파일에 입력한 계정 ID를 그대로 반환한다. 같은 Project Key·App ID에서 해당 계정 ID로 인증한 세션이 있으면 `Online`, 없으면 `Offline`이다. 접속한 친구가 공개 방에 있으면 `RoomId`를 제공하며, 방이 없거나 비공개이면 빈 문자열이다.
+같은 ID는 한 번만 반환한다. `Id`와 `Nickname`은 파일에 입력한 계정 ID를 그대로 반환한다. 같은 App ID에서 해당 계정 ID로 인증한 세션이 있으면 `Online`, 없으면 `Offline`이다. 접속한 친구가 공개 방에 있으면 `RoomId`를 제공하며, 방이 없거나 비공개이면 빈 문자열이다.
 
 반복 조회는 `service.Net.Friend.StartAsync(config, result)`로 시작하고 `Stop()`으로 중지한다. 최소 1초 간격이며 방 참가 중에도 계속 조회한다. 재시작·중지·취소 이후 이전 반복 조회의 결과는 전달하지 않는다.
 
 `service.Net.Friend.RequestAddAsync(config, result)`는 요청자의 목록에 대상 계정 ID를 저장한다. 미접속 대상도 등록할 수 있고 같은 값의 중복 등록은 성공으로 처리한다. 상대 목록은 변경하지 않는다. 저장 완료 후 `OnOk(playerId)`가 호출되며 다음 Refresh 또는 반복 조회에서 추가된 친구를 확인한다.
 
-`service.Net.Friend.InviteAsync(config, result)`는 호출자가 참가한 방으로 같은 Project Key·App ID에서 계정 ID가 일치하는 접속 대상을 초대한다. 대상의 `MyPlatformInitializer.CallbackInterface.FriendResult`에 호출자의 계정 ID와 방 ID를 전달하며 오프라인 초대는 저장하지 않는다. Anonymous에는 플랫폼 참여 UI가 없으므로 `OnJoinRequested`는 발생하지 않는다. 게임 UI에서 초대를 수락하면 받은 방 ID로 기존 Join을 호출한다.
+`service.Net.Friend.InviteAsync(config, result)`는 호출자가 참가한 방으로 같은 App ID에서 계정 ID가 일치하는 접속 대상을 초대한다. 대상의 `MyPlatformInitializer.CallbackInterface.FriendResult`에 호출자의 계정 ID와 방 ID를 전달하며 오프라인 초대는 저장하지 않는다. Anonymous에는 플랫폼 참여 UI가 없으므로 `OnJoinRequested`는 발생하지 않는다. 게임 UI에서 초대를 수락하면 받은 방 ID로 기존 Join을 호출한다.
 
 실행 인스턴스는 같은 버전을 사용해야 하며, 인증 메시지 형식이 변경되었으므로 이전 버전의 로컬 서버는 종료한 뒤 다시 실행한다.

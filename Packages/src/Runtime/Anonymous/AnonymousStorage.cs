@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -13,7 +11,6 @@ namespace oojjrs.oplat.anonymous
     {
         private const int FileBufferByteCount = 81920;
         private const string FilesDirectoryName = "files";
-        private const int ProjectKeyByteCountMax = 1024;
         private const string TemporaryDirectoryName = "temp";
 
         private readonly CancellationTokenSource LifetimeCancellationSource = new();
@@ -94,14 +91,8 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
-        internal void Initialize(uint appId, string projectKey, string account)
+        internal void Initialize(uint appId, string account)
         {
-            if (string.IsNullOrWhiteSpace(projectKey))
-                throw new ArgumentException("An anonymous storage project key is required.", nameof(projectKey));
-
-            if (Encoding.UTF8.GetByteCount(projectKey) > ProjectKeyByteCountMax)
-                throw new ArgumentException($"An anonymous storage project key cannot exceed {ProjectKeyByteCountMax} UTF-8 bytes.", nameof(projectKey));
-
             if (string.IsNullOrEmpty(account))
                 throw new ArgumentException("An anonymous storage account is required.", nameof(account));
 
@@ -109,7 +100,7 @@ namespace oojjrs.oplat.anonymous
                 throw new InvalidOperationException("Anonymous storage has been shut down.");
 
             var storageBasePath = GetStorageBasePath();
-            var accountRootPath = GetAccountRootPath(storageBasePath, appId, projectKey, account);
+            var accountRootPath = GetAccountRootPath(storageBasePath, appId, account);
             if (_isInitialized)
             {
                 if (string.Equals(_accountRootPath, accountRootPath, StringComparison.Ordinal) == false)
@@ -192,9 +183,9 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
-        private static string GetAccountRootPath(string storageBasePath, uint appId, string projectKey, string account)
+        private static string GetAccountRootPath(string storageBasePath, uint appId, string account)
         {
-            return Path.GetFullPath(Path.Combine(GetStorageRootPath(storageBasePath), GetStorageKeyHash(projectKey), appId.ToString(CultureInfo.InvariantCulture), "users", GetStorageKeyHash(account)));
+            return Path.GetFullPath(Path.Combine(GetStorageRootPath(storageBasePath), $"AppId={appId.ToString(CultureInfo.InvariantCulture)}", "users", GetAccountDirectoryName(account)));
         }
 
         private static string GetStorageBasePath()
@@ -331,17 +322,13 @@ namespace oojjrs.oplat.anonymous
             return filePath[rootPrefix.Length..].Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
         }
 
-        private static string GetStorageKeyHash(string value)
+        private static string GetAccountDirectoryName(string account)
         {
-            using (var algorithm = SHA256.Create())
-            {
-                var hash = algorithm.ComputeHash(Encoding.UTF8.GetBytes(value));
-                var result = new StringBuilder(hash.Length * 2);
-                foreach (var item in hash)
-                    result.Append(item.ToString("x2", CultureInfo.InvariantCulture));
+            var value = Uri.EscapeDataString(account);
+            if (value.EndsWith(".", StringComparison.Ordinal))
+                value = value[..^1] + "%2E";
 
-                return result.ToString();
-            }
+            return $"Account={value}";
         }
 
         private string GetTargetPath(string fileName)
