@@ -41,7 +41,7 @@ namespace oojjrs.oplat
 
         private static bool IsItem(Type propertyType)
         {
-            return propertyType.IsPrimitive || (propertyType == typeof(string)) || (propertyType == typeof(DateTime)) || (propertyType == typeof(TimeSpan));
+            return propertyType.IsPrimitive || (propertyType == typeof(string)) || (propertyType == typeof(DateTime)) || (propertyType == typeof(MyTime)) || (propertyType == typeof(TimeSpan));
         }
 
         private static bool IsTuple(Type type)
@@ -161,6 +161,8 @@ namespace oojjrs.oplat
                 return TimeSpan.FromTicks(br.ReadInt64());
             else if (type == typeof(DateTime))
                 return DateTime.FromBinary(br.ReadInt64());
+            else if (type == typeof(MyTime))
+                return MyTime.FromUtcTicks(br.ReadInt64());
             else
                 throw new NotImplementedException();
         }

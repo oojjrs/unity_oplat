@@ -81,7 +81,10 @@ namespace oojjrs.oplat.ugsymous
             }
 
             config.CancellationToken.ThrowIfCancellationRequested();
-            await VivoxService.Instance.SendChannelTextMessageAsync(ToChannel(config.RoomId), config.Message);
+            await VivoxService.Instance.SendChannelTextMessageAsync(ToChannel(config.RoomId), config.Message, new MessageOptions()
+            {
+                Metadata = _net.Time.UtcNow.ToString(),
+            });
             config.CancellationToken.ThrowIfCancellationRequested();
             result.OnOk(config.RoomId);
         }
@@ -89,7 +92,10 @@ namespace oojjrs.oplat.ugsymous
         private void OnChannelMessageReceived(VivoxMessage message)
         {
             if (_channels.TryGetValue(message.ChannelName, out var roomId))
-                _net.ChatResult.OnReceived(message.MessageText, message.SenderPlayerId, roomId);
+            {
+                var sentAt = MyTime.TryParse(message.Metadata, out var value) ? value : _net.Time.UtcNow;
+                _net.ChatResult.OnReceived(message.MessageText, message.SenderPlayerId, roomId, sentAt);
+            }
         }
 
         private static string ToChannel(string roomId)

@@ -14,6 +14,7 @@ namespace oojjrs.oplat.ugsymous
 {
     internal sealed class UgsymousPlatform : MonoBehaviour, MyPlatform.PlatformInterface
     {
+        private readonly MyTimeServiceInterface _time = MyPlatform.CreateTimeServiceFromLocalClock();
         private UgsymousNet _net;
         private string _nickname;
         private Sprite _profileSprite;
@@ -25,6 +26,7 @@ namespace oojjrs.oplat.ugsymous
         string MyPlatformServiceInterface.Nickname => _nickname;
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
         MyStorageServiceInterface MyPlatformServiceInterface.Storage { get; } = new UgsymousStorage();
+        MyTimeServiceInterface MyPlatformServiceInterface.Time => _time;
 
         internal static string ToHex(byte[] bytes)
         {
@@ -64,7 +66,7 @@ namespace oojjrs.oplat.ugsymous
                 await VivoxService.Instance.LoginAsync();
 
             cancellationToken.ThrowIfCancellationRequested();
-            _net = new UgsymousNet(authentication.PlayerId, callback);
+            _net = new UgsymousNet(authentication.PlayerId, callback, _time);
         }
 
         private async Task AuthenticateAsync(string profile)

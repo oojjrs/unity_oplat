@@ -10,6 +10,7 @@ namespace oojjrs.oplat.anonymous
             public string Message { get; set; }
             public string PlayerId { get; set; }
             public string RoomId { get; set; }
+            public MyTime SentAt { get; set; }
         }
 
         internal sealed class State

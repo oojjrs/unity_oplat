@@ -151,7 +151,7 @@ namespace oojjrs.oplat.anonymous
 
                 if (Net.UseLocal)
                 {
-                    Net.ChatResult.OnReceived(message, Net.Account, roomId);
+                    Net.ChatResult.OnReceived(message, Net.Account, roomId, Net.Time.UtcNow);
                     result.OnOk(roomId);
                     return;
                 }

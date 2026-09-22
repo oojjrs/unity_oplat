@@ -36,7 +36,7 @@ namespace oojjrs.oplat
             {
             }
 
-            void MyNetChatResultInterface.OnReceived(string message, string playerId, string roomId)
+            void MyNetChatResultInterface.OnReceived(string message, string playerId, string roomId, MyTime sentAt)
             {
             }
 

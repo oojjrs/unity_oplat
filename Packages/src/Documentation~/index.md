@@ -9,6 +9,13 @@
 | [`MyPlatformInitializer.CallbackInterface`](api/MyPlatformInitializer.CallbackInterface.md) | 플랫폼 설정, 결과 처리기 연결, 초기화 완료 처리 |
 | [`MyPlatformServiceInterface`](api/MyPlatformServiceInterface.md) | 계정·프로필·저장소·네트워크 진입점과 서비스 수명 |
 
+## 시간
+
+| 문서 | 설명 |
+| --- | --- |
+| [`MyTime`](api/MyTime.md) | 네트워크로 전달할 수 있는 UTC 절대 시각 값과 변환·연산 |
+| [`MyTimeServiceInterface`](api/MyTimeServiceInterface.md) | 플랫폼 기준 UTC 시계와 동기화 상태 |
+
 ## 저장소
 
 | 문서 | 설명 |

@@ -36,6 +36,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 Message = argument.Message,
                 PlayerId = session.Account,
                 RoomId = argument.RoomId,
+                SentAt = MyTime.FromUtcDateTime(DateTime.UtcNow),
             });
             foreach (var playerId in chatState.GetPlayers(argument.RoomId).ToArray())
             {

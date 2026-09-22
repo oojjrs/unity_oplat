@@ -248,6 +248,7 @@ namespace oojjrs.oplat.steam
         private MyNetRoomServiceInterface.UpdateResultInterface _roomResult;
         private MyNetRoomSwitchHandlerInterface _roomSwitchHandler;
         private volatile StateEnum _state;
+        private MyTimeServiceInterface _time;
         private string _title;
         private volatile bool _useLocal;
 
@@ -285,7 +286,7 @@ namespace oojjrs.oplat.steam
 
         internal string Account => _localSteamId.ToString();
 
-        internal void Initialize(MyNetChatResultInterface chatResult, MyNetFriendResultInterface friendResult, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomSwitchHandlerInterface roomSwitchHandler, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
+        internal void Initialize(MyNetChatResultInterface chatResult, MyNetFriendResultInterface friendResult, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomSwitchHandlerInterface roomSwitchHandler, MyNetRoomServiceInterface.UpdateResultInterface roomResult, MyTimeServiceInterface time)
         {
             if (_isInitialized)
                 return;
@@ -297,6 +298,7 @@ namespace oojjrs.oplat.steam
             _playerResult = playerResult ?? throw new ArgumentNullException(nameof(playerResult));
             _roomSwitchHandler = roomSwitchHandler;
             _roomResult = roomResult ?? throw new ArgumentNullException(nameof(roomResult));
+            _time = time ?? throw new ArgumentNullException(nameof(time));
             _mainThreadId = Environment.CurrentManagedThreadId;
             var localSteamId = SteamUser.GetSteamID();
             if ((localSteamId.IsValid() == false) || (localSteamId.BIndividualAccount() == false))
@@ -768,7 +770,7 @@ namespace oojjrs.oplat.steam
                 var cancellationToken = cancellationSource.Token;
                 if (_useLocal)
                 {
-                    _chatResult.OnReceived(message, _localSteamId.ToString(), roomId);
+                    _chatResult.OnReceived(message, _localSteamId.ToString(), roomId, _time.UtcNow);
                     result.OnOk(roomId);
                     return;
                 }
@@ -788,7 +790,7 @@ namespace oojjrs.oplat.steam
                     if ((_chatRoomId != roomId) || (AcceptedPlayerIds.Contains(_localSteamId) == false))
                         throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
 
-                    var data = EncodeChat(message);
+                    var data = EncodeChat(message, _time.UtcNow);
                     if (SteamMatchmaking.SendLobbyChatMsg(_currentLobby, data, data.Length) == false)
                         throw new InvalidOperationException("Steam rejected the chat message.");
                 }
@@ -2299,11 +2301,12 @@ namespace oojjrs.oplat.steam
                         if ((_chatRoomId != roomId) || (AcceptedPlayerIds.Contains(sender.m_SteamID) == false))
                             return;
 
+                        var sentAt = MyTime.FromUtcTicks(reader.ReadInt64());
                         var message = reader.ReadString();
                         if ((Encoding.UTF8.GetByteCount(message) > SteamNetChatService.MessageByteCountMax) || (stream.Position != stream.Length))
                             return;
 
-                        _chatResult.OnReceived(message, sender.m_SteamID.ToString(), roomId);
+                        _chatResult.OnReceived(message, sender.m_SteamID.ToString(), roomId, sentAt);
                         return;
                     }
 
@@ -2326,7 +2329,7 @@ namespace oojjrs.oplat.steam
             }
         }
 
-        private static byte[] EncodeChat(string message)
+        private static byte[] EncodeChat(string message, MyTime sentAt)
         {
             using (var stream = new MemoryStream())
             {
@@ -2334,6 +2337,7 @@ namespace oojjrs.oplat.steam
                 {
                     writer.Write(ChatMagic);
                     writer.Write((byte)ProtocolVersion);
+                    writer.Write(sentAt.UtcTicks);
                     writer.Write(message);
                 }
 

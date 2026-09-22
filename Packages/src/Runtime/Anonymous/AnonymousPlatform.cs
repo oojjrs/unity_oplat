@@ -11,6 +11,7 @@ namespace oojjrs.oplat.anonymous
     {
         private readonly AnonymousNet Net = new();
         private readonly AnonymousStorage _storage = new();
+        private readonly MyTimeServiceInterface _time = MyPlatform.CreateTimeServiceFromLocalClock();
 
         private string _account;
         private uint _appId;
@@ -25,6 +26,7 @@ namespace oojjrs.oplat.anonymous
         string MyPlatformServiceInterface.Nickname => _nickname ?? GetNickname();
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
         MyStorageServiceInterface MyPlatformServiceInterface.Storage => _storage;
+        MyTimeServiceInterface MyPlatformServiceInterface.Time => _time;
 
         private void OnDestroy()
         {
@@ -179,7 +181,7 @@ namespace oojjrs.oplat.anonymous
             await Net.AuthenticateAsync(_account, _nickname, appId, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
-            Net.Initialize(_account, callback.ChatResult, callback.FriendResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomResult);
+            Net.Initialize(_account, callback.ChatResult, callback.FriendResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomResult, _time);
             _storage.Initialize(appId, _account);
 
             _isInitialized = true;

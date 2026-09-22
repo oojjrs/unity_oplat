@@ -11,6 +11,12 @@
 
 같은 논리 인스턴스에는 실행할 때마다 같은 `AnonymousInstanceId`를 제공해야 한다. 명령행 인자나 테스트 런처 등 값의 출처는 소비 프로젝트가 정한다.
 
+## 시간
+
+`service.Time`은 플랫폼 생성 시점의 `DateTime.UtcNow`를 기준점으로 잡고 이후 경과 시간을 monotonic clock으로 계산한다. 외부 서버와 동기화하지 않으므로 `IsSynchronized`는 `false`다.
+
+원격 채팅의 `sentAt`은 Anonymous 로컬 서버가 메시지를 접수한 UTC 시각이다. `UseLocal` 채팅은 플랫폼 시간 서비스의 시각을 사용한다.
+
 ## 저장소
 
 Anonymous 저장소는 현재 Windows 계정의 다음 경로 아래에 파일을 직접 저장한다.

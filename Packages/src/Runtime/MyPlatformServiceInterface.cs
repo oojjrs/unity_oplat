@@ -11,5 +11,6 @@ namespace oojjrs.oplat
         string Nickname { get; }
         Sprite ProfileSprite { get; }
         MyStorageServiceInterface Storage { get; }
+        MyTimeServiceInterface Time { get; }
     }
 }

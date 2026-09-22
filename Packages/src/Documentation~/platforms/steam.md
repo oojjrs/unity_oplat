@@ -12,6 +12,12 @@
 
 초기화된 플랫폼 오브젝트가 매 프레임 Steam 콜백을 처리하며, 오브젝트가 파괴될 때 Steam API를 종료한다.
 
+## 시간
+
+초기화 직후 `SteamUtils.GetServerRealTime()`의 Unix epoch 초를 기준점으로 잡고 이후 경과 시간을 monotonic clock으로 계산한다. `service.Time.IsSynchronized`는 `true`다. Steam 기준점은 초 단위이므로 tick 단위로 전진하더라도 실제 기준 정확도는 약 1초 수준이다.
+
+채팅 메시지는 발신자의 Steam 서버 기준 `MyTime`을 Lobby 메시지에 포함해 `sentAt`으로 전달한다.
+
 ## Steam Cloud
 
 Steamworks App Admin에서 사용자별 byte quota와 file count를 설정하고 Cloud 설정을 저장·게시해야 한다. Storage Task 완료는 현재 프로세스의 `ISteamRemoteStorage` 작업 완료를 뜻하며, 기기 간 업로드·다운로드는 Steam 클라이언트의 후속 동기화가 담당한다.
@@ -50,7 +56,7 @@ Chat·Lobby·Room·Player 작업은 Unity 메인 스레드에서 호출한다. `
 
 Steam의 `Send`는 패킷 객체를 큐에 적재한다. 원격 전송에는 Anonymous와 같은 `MyNetSerializer`와 `MyNetDeserializer`를 사용하며, Steam은 바이트 전송을 담당한다. 호스트 자신의 처리와 `UseLocal`은 직렬화 없이 원본 객체를 전달한다. 전송과 처리가 끝날 때까지 적재한 객체를 변경하지 않는다.
 
-전송과 수신 결과 적용은 플랫폼의 `Update`에서 진행한다. 메인 스레드 정지나 백그라운드 실행 중단은 적용을 지연시킬 수 있다. Unix time 전달은 PC 시계를 자동 보정하지 않으며, 시간 동기화 프로토콜은 게임에서 왕복 시간과 시계 차이를 별도로 처리해야 한다.
+전송과 수신 결과 적용은 플랫폼의 `Update`에서 진행한다. 메인 스레드 정지나 백그라운드 실행 중단은 적용을 지연시킬 수 있다. Steam 서버 기준 시계는 잘못된 PC 시각의 큰 오차를 피하지만 초 미만의 멀티플레이 정밀도를 보장하지 않는다. 더 높은 정밀도가 필요하면 게임에서 왕복 시간과 호스트 시계 차이를 별도로 처리한다.
 
 `CreateAsync`와 `JoinAsync`는 네이티브 요청을 직접 취소할 수 없어 늦게 생성되거나 참가된 Lobby를 정리한 뒤 완료될 수 있다. 패키지는 P2P 채널 `45831`을 사용하므로 같은 API의 전역 session callback을 다른 시스템도 다룬다면 dispatcher와 소유권 정책을 공유해야 한다.
 

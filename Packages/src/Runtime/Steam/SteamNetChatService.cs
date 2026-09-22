@@ -5,7 +5,7 @@ namespace oojjrs.oplat.steam
 {
     internal sealed class SteamNetChatService : MyNetChatServiceInterface
     {
-        internal const int MessageByteCountMax = 4089;
+        internal const int MessageByteCountMax = 4081;
 
         private readonly SteamNet Net;
 

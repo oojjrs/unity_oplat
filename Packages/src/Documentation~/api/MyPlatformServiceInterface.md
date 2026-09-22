@@ -13,9 +13,12 @@
 | `bool IsRestartRequired` | Steam이 현재 프로세스의 종료와 재실행을 요청했는지 여부 |
 | `MyStorageServiceInterface Storage` | 사용자 파일 저장소 |
 | `MyNetInterface Net` | Lobby, 방, 플레이어, 채팅과 게임 메시지 서비스 |
+| `MyTimeServiceInterface Time` | monotonic 경과 시간으로 전진하는 UTC 시계와 동기화 상태 |
 
 서비스를 장기간 보관하면 접근 전에 `IsAlive`를 확인한다. `ProfileSprite`의 수명은 서비스가 관리하므로 소비자가 직접 파괴하지 않는다.
 
 `Account`는 클라이언트에서 조회한 식별 문자열이며 서버 인증 증명이 아니다. 신뢰 경계에서 사용하려면 해당 플랫폼의 서버 측 인증 절차를 별도로 구현한다.
 
 Steam 재실행 흐름과 플랫폼 차이는 [Steam](../platforms/steam.md)과 [Anonymous](../platforms/anonymous.md)를 참고한다.
+
+시각 값과 플랫폼별 기준점은 [`MyTime`](MyTime.md)과 [`MyTimeServiceInterface`](MyTimeServiceInterface.md)를 참고한다.

@@ -20,6 +20,7 @@ namespace oojjrs.oplat.steam
         private bool _isRestartRequired;
         private Sprite _profileSprite;
         private Texture2D _profileSpriteTexture;
+        private MyTimeServiceInterface _time = MyPlatform.CreateTimeServiceFromLocalClock();
 
         string MyPlatformServiceInterface.Account => SteamUser.GetSteamID().ToString();
         bool MyPlatformServiceInterface.IsAlive => (this != null) && _isInitialized;
@@ -28,6 +29,7 @@ namespace oojjrs.oplat.steam
         string MyPlatformServiceInterface.Nickname => SteamFriends.GetPersonaName();
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
         MyStorageServiceInterface MyPlatformServiceInterface.Storage => _storage;
+        MyTimeServiceInterface MyPlatformServiceInterface.Time => _time;
 
         private void OnDestroy()
         {
@@ -100,7 +102,8 @@ namespace oojjrs.oplat.steam
             if (actualAppId != callback.AppId)
                 throw new InvalidOperationException($"Steam initialized with App ID {actualAppId}, but {callback.AppId} was expected.");
 
-            _net.Initialize(callback.ChatResult, callback.FriendResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomSwitchHandler, callback.RoomResult);
+            _time = MyPlatform.CreateTimeService(MyTime.FromUnixTimeSeconds(SteamUtils.GetServerRealTime()), true);
+            _net.Initialize(callback.ChatResult, callback.FriendResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomSwitchHandler, callback.RoomResult, _time);
             _profileSprite = await LoadProfileSpriteAsync(cancellationToken);
             _storage.Initialize();
             _net.PrepareLaunchJoinRequest();

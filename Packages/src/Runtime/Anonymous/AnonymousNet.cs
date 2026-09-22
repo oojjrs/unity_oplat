@@ -361,6 +361,7 @@ namespace oojjrs.oplat.anonymous
         internal MyNetMemberResultInterface MemberResult { get; private set; }
         internal MyNetPlayerServiceInterface.UpdateResultInterface PlayerResult { get; private set; }
         internal MyNetRoomServiceInterface.UpdateResultInterface RoomResult { get; private set; }
+        internal MyTimeServiceInterface Time { get; private set; }
         internal bool UseLocal => _useLocal;
 
         internal AnonymousNet()
@@ -492,7 +493,7 @@ namespace oojjrs.oplat.anonymous
             HostService.HandleRequests();
         }
 
-        internal void Initialize(string account, MyNetChatResultInterface chatResult, MyNetFriendResultInterface friendResult, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult)
+        internal void Initialize(string account, MyNetChatResultInterface chatResult, MyNetFriendResultInterface friendResult, MyNetHostResultInterface hostResult, MyNetMemberResultInterface memberResult, MyNetPlayerServiceInterface.UpdateResultInterface playerResult, MyNetRoomServiceInterface.UpdateResultInterface roomResult, MyTimeServiceInterface time)
         {
             _account = account;
             ChatResult = chatResult ?? throw new ArgumentNullException(nameof(chatResult));
@@ -501,6 +502,7 @@ namespace oojjrs.oplat.anonymous
             MemberResult = memberResult;
             PlayerResult = playerResult;
             RoomResult = roomResult;
+            Time = time ?? throw new ArgumentNullException(nameof(time));
             _isInitialized = true;
         }
 
@@ -528,7 +530,7 @@ namespace oojjrs.oplat.anonymous
                     while (Client.TryReceiveChat(out var chatContent))
                     {
                         var chat = await AnonymousServer.DeserializeAsync<AnonymousServerChat.MessageData>(chatContent);
-                        ChatResult.OnReceived(chat.Message, chat.PlayerId, chat.RoomId);
+                        ChatResult.OnReceived(chat.Message, chat.PlayerId, chat.RoomId, chat.SentAt);
                     }
 
                     while (Client.TryReceiveRoomChanged(out var exitedRoomId, out var updatedContent))

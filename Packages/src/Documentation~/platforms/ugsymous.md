@@ -21,6 +21,12 @@ Unity Dashboard에서 프로젝트를 연결하고 Authentication, Cloud Save, F
 
 패키지는 `com.unity.services.friends` 1.2.0에 의존한다. 초기화는 Core, Authentication 로그인, Friends, Vivox 순서로 진행하며 Friends 관계에는 presence와 profile을 포함한다.
 
+## 시간
+
+UGS 클라이언트 SDK에는 공통 서버 시각 API가 없으므로 `service.Time`은 플랫폼 생성 시점의 `DateTime.UtcNow`를 기준점으로 잡고 이후 경과 시간을 monotonic clock으로 계산한다. Cloud Code를 필수 의존성으로 추가하지 않으며 `IsSynchronized`는 `false`다.
+
+Vivox 채팅은 발신자의 플랫폼 시간 서비스 UTC tick을 메시지 메타데이터에 포함해 `sentAt`으로 전달한다. 메타데이터가 없는 메시지는 수신자의 플랫폼 시각으로 대체한다.
+
 Lobby 목록 조회는 공개 Lobby만 반환한다. 목록 결과의 `Code`는 빈 문자열, `IsPrivate`는 `false`, `Players`는 빈 목록이다. 방에 참가하거나 생성한 뒤 얻는 Room 결과에는 전체 Session 정보가 제공된다.
 
 Lobby 조회가 네트워크 오류, bad gateway, service unavailable 또는 gateway timeout으로 끝나면 반복 조회를 중지하고 `OnFailed(Disconnected)`를 호출한다.

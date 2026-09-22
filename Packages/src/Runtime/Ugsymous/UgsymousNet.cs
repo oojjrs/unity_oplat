@@ -37,8 +37,9 @@ namespace oojjrs.oplat.ugsymous
         internal MyNetMemberResultInterface MemberResult { get; }
         internal MyNetPlayerServiceInterface.UpdateResultInterface PlayerResult { get; }
         internal MyNetRoomServiceInterface.UpdateResultInterface RoomResult { get; }
+        internal MyTimeServiceInterface Time { get; }
 
-        internal UgsymousNet(string account, MyPlatformInitializer.CallbackInterface callback)
+        internal UgsymousNet(string account, MyPlatformInitializer.CallbackInterface callback, MyTimeServiceInterface time)
         {
             _lifetimeToken = _lifetimeSource.Token;
             Account = account;
@@ -48,6 +49,7 @@ namespace oojjrs.oplat.ugsymous
             MemberResult = callback.MemberResult;
             PlayerResult = callback.PlayerResult;
             RoomResult = callback.RoomResult;
+            Time = time ?? throw new ArgumentNullException(nameof(time));
             _transport = new(account);
             _chat = new(this);
             _friend = new(this);
