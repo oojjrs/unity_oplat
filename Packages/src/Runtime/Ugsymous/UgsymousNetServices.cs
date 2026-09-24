@@ -474,8 +474,9 @@ namespace oojjrs.oplat.ugsymous
     internal sealed class UgsymousNetRoomService : MyNetRoomServiceInterface, IDisposable
     {
         private readonly HashSet<string> _exitingRoomIds = new();
-        private readonly Dictionary<string, UgsymousRoom> _rooms = new();
+        private readonly Dictionary<string, (ISession session, Action<string> handler)> _hostChangeRegistrations = new();
         private readonly UgsymousNet _net;
+        private readonly Dictionary<string, UgsymousRoom> _rooms = new();
         private readonly MyNetRoomSwitcher _switcher;
         private bool _isBusy;
 
@@ -562,7 +563,7 @@ namespace oojjrs.oplat.ugsymous
 
                 config.CancellationToken.ThrowIfCancellationRequested();
                 if (config.PlayerId == session.CurrentPlayer.Id)
-                    _rooms.Remove(config.RoomId);
+                    RemoveRoom(config.RoomId);
 
                 result.OnOk(config.RoomId, config.PlayerId);
             }, result);
@@ -591,7 +592,12 @@ namespace oojjrs.oplat.ugsymous
             if (_rooms.TryGetValue(session.Id, out var room))
                 room.Session = session;
             else
+            {
                 _rooms.Add(session.Id, room = new(session));
+                Action<string> handler = _ => OnSessionHostChanged(session);
+                _hostChangeRegistrations.Add(session.Id, (session, handler));
+                session.SessionHostChanged += handler;
+            }
 
             return room;
         }
@@ -603,13 +609,53 @@ namespace oojjrs.oplat.ugsymous
             return Task.FromResult(session == null ? null : GetRoom(session));
         }
 
+        private async void OnSessionHostChanged(ISession session)
+        {
+            if ((_rooms.ContainsKey(session.Id) == false) || (_exitingRoomIds.Add(session.Id) == false))
+                return;
+
+            SessionException caughtException = null;
+            try
+            {
+                if (session.Host == _net.Account)
+                    await session.AsHost().DeleteAsync();
+                else
+                    await session.LeaveAsync();
+            }
+            catch (SessionException e)
+            {
+                caughtException = e;
+            }
+            finally
+            {
+                _exitingRoomIds.Remove(session.Id);
+                RemoveRoom(session.Id);
+            }
+
+            if (_net.LifetimeCancellationToken.IsCancellationRequested)
+                return;
+
+            if (caughtException != null)
+                _net.RoomResult.OnException(new("Failed to close UGS room after host migration.", caughtException));
+
+            _net.RoomResult.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
+        }
+
         private void OnSessionRemoved(ISession session)
         {
-            if (_rooms.Remove(session.Id) == false)
+            if (RemoveRoom(session.Id) == false)
                 return;
 
             if (_exitingRoomIds.Remove(session.Id) == false)
                 _net.RoomResult.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
+        }
+
+        private bool RemoveRoom(string roomId)
+        {
+            if (_hostChangeRegistrations.Remove(roomId, out var registration))
+                registration.session.SessionHostChanged -= registration.handler;
+
+            return _rooms.Remove(roomId);
         }
 
         private async Task RunAsync(Func<Task> action, MyNetInterface.CatchInterface result)
@@ -629,6 +675,10 @@ namespace oojjrs.oplat.ugsymous
         public void Dispose()
         {
             MultiplayerService.Instance.SessionRemoved -= OnSessionRemoved;
+            foreach (var registration in _hostChangeRegistrations.Values)
+                registration.session.SessionHostChanged -= registration.handler;
+
+            _hostChangeRegistrations.Clear();
         }
     }
 

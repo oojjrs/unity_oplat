@@ -33,6 +33,8 @@ Lobby 조회가 네트워크 오류, bad gateway, service unavailable 또는 gat
 
 방장이 자기 퇴장을 요청하면 `LeaveAsync`로 호스트를 이전하지 않고 Session을 삭제해 모든 멤버를 내보낸다. 삭제되거나 강퇴된 멤버는 `RoomResult.OnFailed(NotFoundRoom)`을 받는다.
 
+방장이 예기치 않게 연결을 잃어 UGS가 다른 플레이어에게 호스트를 이전하면 새 호스트는 Session을 삭제하고, 나머지 멤버는 Session을 나간다. 승계된 방은 계속 사용하지 않으며 모든 멤버는 `RoomResult.OnFailed(NotFoundRoom)`을 받는다.
+
 Vivox 메시지 한계와 UTP 패킷 한계는 각각 `Chat.MessageByteCountMax`와 concrete transport 내부 제한을 따른다. 공개 API 호출과 결과 callback 처리는 Unity 메인 스레드에서 수행한다.
 
 ## 친구와 방 초대
