@@ -13,7 +13,7 @@ namespace oojjrs.oplat.steam
         internal SteamNetRoomService(SteamNet net)
         {
             Net = net;
-            Switcher = new(() => Net.Account, Net.GetCurrentRoomAsync, Net.ExitRoomAsync, Net.JoinRoomAsync);
+            Switcher = new(() => Net.Account, Net.GetCurrentRoomAsync, (config, result) => Net.ExitRoomAsync(config, result, true), (config, result) => Net.JoinRoomAsync(config, result, true));
         }
 
         Task MyNetRoomServiceInterface.CreateAsync(MyNetRoomServiceInterface.CreateConfigInterface config, MyNetRoomServiceInterface.CreateResultInterface result)
@@ -23,12 +23,12 @@ namespace oojjrs.oplat.steam
 
         Task MyNetRoomServiceInterface.ExitAsync(MyNetRoomServiceInterface.ExitConfigInterface config, MyNetRoomServiceInterface.ExitResultInterface result)
         {
-            return Net.ExitRoomAsync(config, result);
+            return Net.ExitRoomAsync(config, result, false);
         }
 
         Task MyNetRoomServiceInterface.JoinAsync(MyNetRoomServiceInterface.JoinConfigInterface config, MyNetRoomServiceInterface.JoinResultInterface result)
         {
-            return Net.JoinRoomAsync(config, result);
+            return Net.JoinRoomAsync(config, result, false);
         }
 
         Task MyNetRoomServiceInterface.SwitchAsync(MyNetRoomServiceInterface.JoinConfigInterface config, MyNetRoomServiceInterface.JoinResultInterface result)

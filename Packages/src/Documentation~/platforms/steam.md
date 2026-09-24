@@ -60,4 +60,6 @@ Steam의 `Send`는 패킷 객체를 큐에 적재한다. 원격 전송에는 Ano
 
 `CreateAsync`와 `JoinAsync`는 네이티브 요청을 직접 취소할 수 없어 늦게 생성되거나 참가된 Lobby를 정리한 뒤 완료될 수 있다. 패키지는 P2P 채널 `45831`을 사용하므로 같은 API의 전역 session callback을 다른 시스템도 다룬다면 dispatcher와 소유권 정책을 공유해야 한다.
 
+`SwitchAsync`와 `RoomSwitchHandler`의 자동 전환은 진행 중인 Lobby 목록 조회가 끝난 뒤 방 전환을 계속한다. 다른 방 작업이 진행 중이거나 전환 요청 자체가 겹치면 기존과 같이 `OnBusy`로 완료한다.
+
 저장소의 `steam_appid.txt`는 공유 테스트 앱 Spacewar `480`을 사용한다. 실제 제품 검증과 배포에는 해당 Steamworks 앱의 App ID를 사용한다.

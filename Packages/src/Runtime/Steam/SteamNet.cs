@@ -216,6 +216,7 @@ namespace oojjrs.oplat.steam
         private bool _hasPassword;
         private MyNetHostResultInterface _hostResult;
         private bool _isInitialized;
+        private bool _isLobbyOperation;
         private bool _isLobbyPolling;
         private bool _isLocked;
         private bool _isPrivate;
@@ -565,6 +566,7 @@ namespace oojjrs.oplat.steam
                 Exception caughtException = null;
                 try
                 {
+                    _isLobbyOperation = true;
                     rooms = await RefreshLobbyCoreAsync(cancellationToken);
                 }
                 catch (BusyException)
@@ -581,6 +583,7 @@ namespace oojjrs.oplat.steam
                 }
                 finally
                 {
+                    _isLobbyOperation = false;
                     OperationGate.Release();
                 }
 
@@ -870,7 +873,7 @@ namespace oojjrs.oplat.steam
             }
         }
 
-        internal async Task ExitRoomAsync(MyNetRoomServiceInterface.ExitConfigInterface config, MyNetRoomServiceInterface.ExitResultInterface result)
+        internal async Task ExitRoomAsync(MyNetRoomServiceInterface.ExitConfigInterface config, MyNetRoomServiceInterface.ExitResultInterface result, bool waitForLobbyOperation)
         {
             EnsureInitialized();
             if (string.IsNullOrWhiteSpace(config.PlayerId))
@@ -888,7 +891,7 @@ namespace oojjrs.oplat.steam
             using (var cancellationSource = CreateCancellationSource(config.CancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
-                if (await OperationGate.WaitAsync(0, cancellationToken) == false)
+                if (await WaitForRoomOperationAsync(waitForLobbyOperation, cancellationToken) == false)
                 {
                     result.OnBusy();
                     return;
@@ -926,7 +929,7 @@ namespace oojjrs.oplat.steam
             }
         }
 
-        internal async Task JoinRoomAsync(MyNetRoomServiceInterface.JoinConfigInterface config, MyNetRoomServiceInterface.JoinResultInterface result)
+        internal async Task JoinRoomAsync(MyNetRoomServiceInterface.JoinConfigInterface config, MyNetRoomServiceInterface.JoinResultInterface result, bool waitForLobbyOperation)
         {
             EnsureInitialized();
             if (string.IsNullOrWhiteSpace(config.RoomId) && string.IsNullOrWhiteSpace(config.Code))
@@ -938,7 +941,7 @@ namespace oojjrs.oplat.steam
             using (var cancellationSource = CreateCancellationSource(config.CancellationToken))
             {
                 var cancellationToken = cancellationSource.Token;
-                if (await OperationGate.WaitAsync(0, cancellationToken) == false)
+                if (await WaitForRoomOperationAsync(waitForLobbyOperation, cancellationToken) == false)
                 {
                     result.OnBusy();
                     return;
@@ -1547,6 +1550,18 @@ namespace oojjrs.oplat.steam
             }
         }
 
+        private async Task<bool> WaitForRoomOperationAsync(bool waitForLobbyOperation, CancellationToken cancellationToken)
+        {
+            if (await OperationGate.WaitAsync(0, cancellationToken))
+                return true;
+
+            if ((waitForLobbyOperation == false) || (_isLobbyOperation == false))
+                return false;
+
+            await OperationGate.WaitAsync(cancellationToken);
+            return true;
+        }
+
         private async Task<bool> RequestLobbyDataAsync(CSteamID lobby, CancellationToken cancellationToken)
         {
             var source = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -2117,10 +2132,12 @@ namespace oojjrs.oplat.steam
                     MyNetRoomInterface[] rooms;
                     try
                     {
+                        _isLobbyOperation = true;
                         rooms = await RefreshLobbyCoreAsync(cancellationToken);
                     }
                     finally
                     {
+                        _isLobbyOperation = false;
                         OperationGate.Release();
                     }
 
