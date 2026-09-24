@@ -263,7 +263,7 @@ namespace oojjrs.oplat.ugsymous
         private async Task<MyNetFriendInterface[]> ReadFriendsAsync(CancellationToken cancellationToken)
         {
             var session = MultiplayerService.Instance.Sessions.Values.FirstOrDefault(t => t.CurrentPlayer?.Id == _net.Account);
-            var roomId = (session != null) && (session.IsPrivate == false) ? session.Id : string.Empty;
+            var roomId = (session != null) && (UgsymousNet.GetVisibility(session) != MyNetRoomInterface.VisibilityEnum.Private) ? session.Id : string.Empty;
             await _service.SetPresenceAsync(Availability.Online, new UgsymousFriendActivity { RoomId = roomId });
             cancellationToken.ThrowIfCancellationRequested();
             await _service.ForceRelationshipsRefreshAsync();
@@ -491,7 +491,7 @@ namespace oojjrs.oplat.ugsymous
         {
             await RunAsync(async () =>
             {
-                var options = new SessionOptions { IsLocked = config.IsLocked, IsPrivate = config.IsPrivate, MaxPlayers = config.MaxPlayers, Name = config.Title, Password = config.Password, PlayerProperties = UgsymousNet.ToPlayerProperties(config.PlayerFields, config.PlayerNickname), SessionProperties = UgsymousNet.ToSessionProperties(config.RoomFields) };
+                var options = new SessionOptions { IsLocked = config.IsLocked, IsPrivate = UgsymousNet.ToIsPrivate(config.Visibility), MaxPlayers = config.MaxPlayers, Name = config.Title, Password = config.Password, PlayerProperties = UgsymousNet.ToPlayerProperties(config.PlayerFields, config.PlayerNickname), SessionProperties = UgsymousNet.ToSessionProperties(config.RoomFields, config.Visibility) };
                 options.WithRelayNetwork().WithNetworkHandler(_net.Transport);
                 var session = await MultiplayerService.Instance.CreateSessionAsync(options);
                 config.CancellationToken.ThrowIfCancellationRequested();
@@ -579,8 +579,8 @@ namespace oojjrs.oplat.ugsymous
                     return;
                 }
 
-                session.AsHost().IsPrivate = config.IsPrivate;
-                session.AsHost().SetProperties(UgsymousNet.ToSessionProperties(config.RoomFields));
+                session.AsHost().IsPrivate = UgsymousNet.ToIsPrivate(config.Visibility);
+                session.AsHost().SetProperties(UgsymousNet.ToSessionProperties(config.RoomFields, config.Visibility));
                 await session.AsHost().SavePropertiesAsync();
                 config.CancellationToken.ThrowIfCancellationRequested();
                 result.OnOk(GetRoom(session));

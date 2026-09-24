@@ -8,15 +8,15 @@ namespace oojjrs.oplat.anonymous.controllers
     {
         public record RequestArgument
         {
-            public bool IsPrivate { get; set; }
             public AnonymousServerRoom.FieldData[] RoomFields { get; set; }
             public string RoomId { get; set; }
+            public MyNetRoomInterface.VisibilityEnum Visibility { get; set; }
         }
 
         internal static async Task<AnonymousServerResponse> RunAsync(byte[] content, AnonymousServerRoom.State roomState, IReadOnlyDictionary<string, AnonymousServerSession> sessions, AnonymousServerSession session)
         {
             var requestArgument = await AnonymousServer.DeserializeAsync<RequestArgument>(content);
-            if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.RoomId))
+            if ((requestArgument == null) || string.IsNullOrWhiteSpace(requestArgument.RoomId) || (Enum.IsDefined(typeof(MyNetRoomInterface.VisibilityEnum), requestArgument.Visibility) == false))
                 throw new FormatException("Invalid anonymous room update request.");
 
             if (requestArgument.RoomFields != null)
@@ -32,7 +32,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
 
             room.Fields = AnonymousServerRoom.FieldData.Merge(room.Fields, requestArgument.RoomFields);
-            room.IsPrivate = requestArgument.IsPrivate;
+            room.Visibility = requestArgument.Visibility;
 
             await AnonymousServerRoom.NotifyUpdatedAsync(room, sessions, session.Account);
 

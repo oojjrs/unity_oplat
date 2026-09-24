@@ -166,19 +166,19 @@ namespace oojjrs.oplat.steam
         private const int MetadataValueByteCountMax = Constants.k_cubChatMetadataMax - 1;
         private const int MinimumPollingDelaySeconds = 1;
         private const int PlayerCountMax = 250;
-        private const int ProtocolVersion = 2;
+        private const int ProtocolVersion = 3;
         private const int RosterChunkCharacterCount = 7000;
         private const int RosterChunkCountMax = 16;
         private const uint ChatMagic = 0x4f504c48;
         private const uint ControlMagic = 0x4f504c43;
         private const uint MessageMagic = 0x4f504c4e;
         private const string CodeAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+        private const string LaunchLobbyArgument = "+connect_lobby";
         private const string MetadataClosed = "oplat.closed";
         private const string MetadataEpoch = "oplat.epoch";
         private const string MetadataHasPassword = "oplat.password";
         private const string MetadataHost = "oplat.host";
         private const string MetadataIsLocked = "oplat.locked";
-        private const string MetadataIsPrivate = "oplat.private";
         private const string MetadataMaxPlayers = "oplat.maxPlayers";
         private const string MetadataPlayerFields = "oplat.player.fields";
         private const string MetadataPlayerNickname = "oplat.player.nickname";
@@ -188,6 +188,8 @@ namespace oojjrs.oplat.steam
         private const string MetadataRosterRevision = "oplat.roster.revision";
         private const string MetadataSchema = "oplat.schema";
         private const string MetadataTitle = "oplat.title";
+        private const string MetadataVisibility = "oplat.visibility";
+        private const string RichPresenceConnectKey = "connect";
 
         private readonly HashSet<ulong> AcceptedPlayerIds = new();
         private readonly HashSet<ulong> BlockedPlayerIds = new();
@@ -213,13 +215,13 @@ namespace oojjrs.oplat.steam
         private MyNetFriendServiceInterface.ResultInterface _friendPollingResult;
         private MyNetFriendResultInterface _friendResult;
         private Callback<GameLobbyJoinRequested_t> _gameLobbyJoinRequestedCallback;
+        private Callback<GameRichPresenceJoinRequested_t> _gameRichPresenceJoinRequestedCallback;
         private bool _hasPassword;
         private MyNetHostResultInterface _hostResult;
         private bool _isInitialized;
         private bool _isLobbyOperation;
         private bool _isLobbyPolling;
         private bool _isLocked;
-        private bool _isPrivate;
         private CancellationTokenSource _lifetimeSource;
         private Callback<LobbyChatMsg_t> _lobbyChatMessageCallback;
         private Callback<LobbyChatUpdate_t> _lobbyChatUpdateCallback;
@@ -245,6 +247,7 @@ namespace oojjrs.oplat.steam
         private ulong _pendingPlayerUpdateId;
         private MyNetPlayerServiceInterface.UpdateResultInterface _playerResult;
         private TaskCompletionSource<PlayerUpdateOutcomeEnum> _playerUpdateSource;
+        private string _richPresenceConnect;
         private MyNetInterface.Field[] _roomFields = Array.Empty<MyNetInterface.Field>();
         private MyNetRoomServiceInterface.UpdateResultInterface _roomResult;
         private MyNetRoomSwitchHandlerInterface _roomSwitchHandler;
@@ -252,6 +255,7 @@ namespace oojjrs.oplat.steam
         private MyTimeServiceInterface _time;
         private string _title;
         private volatile bool _useLocal;
+        private MyNetRoomInterface.VisibilityEnum _visibility;
 
         internal SteamNet()
         {
@@ -310,6 +314,7 @@ namespace oojjrs.oplat.steam
             try
             {
                 _gameLobbyJoinRequestedCallback = Callback<GameLobbyJoinRequested_t>.Create(OnGameLobbyJoinRequested);
+                _gameRichPresenceJoinRequestedCallback = Callback<GameRichPresenceJoinRequested_t>.Create(OnGameRichPresenceJoinRequested);
                 _lobbyChatMessageCallback = Callback<LobbyChatMsg_t>.Create(OnLobbyChatMessage);
                 _lobbyChatUpdateCallback = Callback<LobbyChatUpdate_t>.Create(OnLobbyChatUpdate);
                 _lobbyDataUpdateCallback = Callback<LobbyDataUpdate_t>.Create(OnLobbyDataUpdate);
@@ -317,10 +322,12 @@ namespace oojjrs.oplat.steam
                 _messageSessionRequestCallback = Callback<SteamNetworkingMessagesSessionRequest_t>.Create(OnMessageSessionRequest);
                 _state = StateEnum.Ready;
                 _isInitialized = true;
+                UpdateJoinRichPresence();
             }
             catch
             {
                 _gameLobbyJoinRequestedCallback?.Dispose();
+                _gameRichPresenceJoinRequestedCallback?.Dispose();
                 _lobbyChatMessageCallback?.Dispose();
                 _lobbyChatUpdateCallback?.Dispose();
                 _lobbyDataUpdateCallback?.Dispose();
@@ -349,18 +356,21 @@ namespace oojjrs.oplat.steam
             _lobbyPollingResult = null;
             _lifetimeSource.Cancel();
             ResetSession(true, StateEnum.Disposed);
+            UpdateJoinRichPresence();
 
             foreach (var source in PendingLobbyData.Values)
                 source.TrySetCanceled();
 
             PendingLobbyData.Clear();
             DisposeSafely(_gameLobbyJoinRequestedCallback);
+            DisposeSafely(_gameRichPresenceJoinRequestedCallback);
             DisposeSafely(_lobbyChatMessageCallback);
             DisposeSafely(_lobbyChatUpdateCallback);
             DisposeSafely(_lobbyDataUpdateCallback);
             DisposeSafely(_messageSessionFailedCallback);
             DisposeSafely(_messageSessionRequestCallback);
             _gameLobbyJoinRequestedCallback = null;
+            _gameRichPresenceJoinRequestedCallback = null;
             _lobbyChatMessageCallback = null;
             _lobbyChatUpdateCallback = null;
             _lobbyDataUpdateCallback = null;
@@ -403,6 +413,8 @@ namespace oojjrs.oplat.steam
 
             if ((_currentLobby.m_SteamID != 0) && (SteamMatchmaking.GetLobbyOwner(_currentLobby).m_SteamID != _originalHostId))
                 ExitCurrentRoom(true);
+
+            UpdateJoinRichPresence();
         }
 
         internal Task InviteFriendAsync(MyNetFriendServiceInterface.InviteConfigInterface config, MyNetFriendServiceInterface.InviteResultInterface result)
@@ -1026,11 +1038,12 @@ namespace oojjrs.oplat.steam
 
                     var previousLobbyId = _currentLobby.m_SteamID;
                     var previousRoomFields = _roomFields;
-                    var previousIsPrivate = _isPrivate;
+                    var previousVisibility = _visibility;
                     try
                     {
                         _roomFields = MergeFields(_roomFields, NormalizeFields(config.RoomFields));
-                        _isPrivate = config.IsPrivate;
+                        _visibility = config.Visibility;
+                        ToLobbyType(_visibility);
                         EncodeMemberSnapshot();
                         PublishRoomData();
                         PublishRoster();
@@ -1043,7 +1056,7 @@ namespace oojjrs.oplat.steam
                             throw;
 
                         _roomFields = previousRoomFields;
-                        _isPrivate = previousIsPrivate;
+                        _visibility = previousVisibility;
                         try
                         {
                             PublishRoomData();
@@ -1277,7 +1290,7 @@ namespace oojjrs.oplat.steam
                 throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.Disconnected);
 
             SteamMatchmaking.AddRequestLobbyListStringFilter(MetadataSchema, ProtocolVersion.ToString(), ELobbyComparison.k_ELobbyComparisonEqual);
-            SteamMatchmaking.AddRequestLobbyListStringFilter(MetadataIsPrivate, "0", ELobbyComparison.k_ELobbyComparisonEqual);
+            SteamMatchmaking.AddRequestLobbyListStringFilter(MetadataVisibility, MyNetRoomInterface.VisibilityEnum.Public.ToString(), ELobbyComparison.k_ELobbyComparisonEqual);
             SteamMatchmaking.AddRequestLobbyListStringFilter(MetadataClosed, "0", ELobbyComparison.k_ELobbyComparisonEqual);
             SteamMatchmaking.AddRequestLobbyListDistanceFilter(ELobbyDistanceFilter.k_ELobbyDistanceFilterWorldwide);
             SteamMatchmaking.AddRequestLobbyListResultCountFilter(LobbySearchResultCountMax);
@@ -1318,7 +1331,7 @@ namespace oojjrs.oplat.steam
             var playerFields = NormalizeFields(config.PlayerFields);
             var playerNickname = GetNickname(config.PlayerNickname, new CSteamID(_localSteamId));
             _state = StateEnum.Creating;
-            var lobbyType = config.IsPrivate ? ELobbyType.k_ELobbyTypeInvisible : ELobbyType.k_ELobbyTypePublic;
+            var lobbyType = ToLobbyType(config.Visibility);
             CSteamID lobby;
             try
             {
@@ -1352,7 +1365,7 @@ namespace oojjrs.oplat.steam
             _hasPassword = string.IsNullOrEmpty(password) == false;
             _title = title;
             _isLocked = config.IsLocked;
-            _isPrivate = config.IsPrivate;
+            _visibility = config.Visibility;
             _maxPlayers = config.MaxPlayers;
             _roomFields = roomFields;
             _localPlayerFields = playerFields;
@@ -1649,7 +1662,7 @@ namespace oojjrs.oplat.steam
             _epoch = SteamMatchmaking.GetLobbyData(_currentLobby, MetadataEpoch);
             _title = SteamMatchmaking.GetLobbyData(_currentLobby, MetadataTitle) ?? string.Empty;
             _isLocked = ReadBooleanLobbyData(_currentLobby, MetadataIsLocked);
-            _isPrivate = ReadBooleanLobbyData(_currentLobby, MetadataIsPrivate);
+            _visibility = ReadVisibilityLobbyData(_currentLobby);
             _maxPlayers = ParseBoundedInt(SteamMatchmaking.GetLobbyData(_currentLobby, MetadataMaxPlayers), 1, PlayerCountMax);
             _password = null;
             _hasPassword = ReadBooleanLobbyData(_currentLobby, MetadataHasPassword);
@@ -1661,7 +1674,7 @@ namespace oojjrs.oplat.steam
         {
             if (_state != StateEnum.Creating)
             {
-                var type = _isPrivate ? ELobbyType.k_ELobbyTypeInvisible : ELobbyType.k_ELobbyTypePublic;
+                var type = ToLobbyType(_visibility);
                 if (SteamMatchmaking.SetLobbyType(_currentLobby, type) == false)
                     throw new InvalidOperationException("Steam rejected the lobby type.");
             }
@@ -1670,7 +1683,7 @@ namespace oojjrs.oplat.steam
             SetLobbyData(MetadataEpoch, _epoch);
             SetLobbyData(MetadataHost, _originalHostId.ToString());
             SetLobbyData(MetadataTitle, _title);
-            SetLobbyData(MetadataIsPrivate, _isPrivate ? "1" : "0");
+            SetLobbyData(MetadataVisibility, _visibility.ToString());
             SetLobbyData(MetadataIsLocked, _isLocked ? "1" : "0");
             SetLobbyData(MetadataMaxPlayers, _maxPlayers.ToString());
             SetLobbyData(MetadataHasPassword, string.IsNullOrEmpty(_password) ? "0" : "1");
@@ -1748,7 +1761,7 @@ namespace oojjrs.oplat.steam
                 players.Add(new SteamNetPlayer(fields, playerId.ToString(), playerId == _originalHostId, nickname));
             }
 
-            return new SteamNetRoom(EncodeCode(_currentLobby.m_SteamID), roomFields, _hasPassword, _originalHostId.ToString(), _currentLobby.m_SteamID.ToString(), _isLocked, _isPrivate, _maxPlayers, players.ToArray(), _title);
+            return new SteamNetRoom(EncodeCode(_currentLobby.m_SteamID), roomFields, _hasPassword, _originalHostId.ToString(), _currentLobby.m_SteamID.ToString(), _isLocked, _maxPlayers, players.ToArray(), _title, _visibility);
         }
 
         private static MyNetRoomInterface BuildSearchRoom(CSteamID lobby)
@@ -1759,7 +1772,8 @@ namespace oojjrs.oplat.steam
             if (SteamMatchmaking.GetLobbyData(lobby, MetadataSchema) != ProtocolVersion.ToString())
                 throw new FormatException("Steam lobby protocol metadata is missing.");
 
-            if (ReadBooleanLobbyData(lobby, MetadataIsPrivate) || ReadBooleanLobbyData(lobby, MetadataClosed))
+            var visibility = ReadVisibilityLobbyData(lobby);
+            if ((visibility != MyNetRoomInterface.VisibilityEnum.Public) || ReadBooleanLobbyData(lobby, MetadataClosed))
                 throw new FormatException("Steam lobby is not visible in the public list.");
 
             if (ulong.TryParse(SteamMatchmaking.GetLobbyData(lobby, MetadataHost), out var hostId) == false)
@@ -1777,7 +1791,7 @@ namespace oojjrs.oplat.steam
             if (players.Length > maxPlayers)
                 throw new FormatException("Steam lobby roster exceeds its player limit.");
 
-            return new SteamNetRoom(EncodeCode(lobby.m_SteamID), DecodeFields(SteamMatchmaking.GetLobbyData(lobby, MetadataRoomFields)), ReadBooleanLobbyData(lobby, MetadataHasPassword), hostId.ToString(), lobby.m_SteamID.ToString(), ReadBooleanLobbyData(lobby, MetadataIsLocked), ReadBooleanLobbyData(lobby, MetadataIsPrivate), maxPlayers, players, SteamMatchmaking.GetLobbyData(lobby, MetadataTitle) ?? string.Empty);
+            return new SteamNetRoom(EncodeCode(lobby.m_SteamID), DecodeFields(SteamMatchmaking.GetLobbyData(lobby, MetadataRoomFields)), ReadBooleanLobbyData(lobby, MetadataHasPassword), hostId.ToString(), lobby.m_SteamID.ToString(), ReadBooleanLobbyData(lobby, MetadataIsLocked), maxPlayers, players, SteamMatchmaking.GetLobbyData(lobby, MetadataTitle) ?? string.Empty, visibility);
         }
 
         private void DeliverPendingLaunchJoinRequest()
@@ -1964,7 +1978,7 @@ namespace oojjrs.oplat.steam
             _hasPassword = false;
             _title = null;
             _isLocked = false;
-            _isPrivate = false;
+            _visibility = MyNetRoomInterface.VisibilityEnum.Public;
             _maxPlayers = 0;
             _roomFields = Array.Empty<MyNetInterface.Field>();
             _memberRoomFields = Array.Empty<MyNetInterface.Field>();
@@ -2007,6 +2021,20 @@ namespace oojjrs.oplat.steam
                     Debug.LogWarning($"Failed to close Steam peer channel during cleanup: {exception.Message}");
                 }
             }
+        }
+
+        private void UpdateJoinRichPresence()
+        {
+            var connect = string.Empty;
+            if (((_state == StateEnum.Host) || (_state == StateEnum.Member)) && (_currentLobby.m_SteamID != 0) && (_isLocked == false) && (_visibility != MyNetRoomInterface.VisibilityEnum.Private) && (AcceptedPlayerIds.Count < _maxPlayers))
+                connect = $"{LaunchLobbyArgument} {_currentLobby.m_SteamID}";
+
+            if (_richPresenceConnect == connect)
+                return;
+
+            _richPresenceConnect = connect;
+            if (SteamFriends.SetRichPresence(RichPresenceConnectKey, connect) == false)
+                Debug.LogWarning($"{GetType().Name}> RICH PRESENCE REJECTED : {RichPresenceConnectKey}");
         }
 
         private MyNetFriendInterface[] ReadFriends()
@@ -2213,6 +2241,22 @@ namespace oojjrs.oplat.steam
 
                 var playerId = callback.m_steamIDFriend.IsValid() && callback.m_steamIDFriend.BIndividualAccount() ? callback.m_steamIDFriend.m_SteamID.ToString() : string.Empty;
                 RequestRoomSwitch(playerId, callback.m_steamIDLobby.m_SteamID.ToString());
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
+        }
+
+        private void OnGameRichPresenceJoinRequested(GameRichPresenceJoinRequested_t callback)
+        {
+            try
+            {
+                if (TryReadLaunchLobbyId(callback.m_rgchConnect, out var lobbyId) == false)
+                    return;
+
+                var playerId = callback.m_steamIDFriend.IsValid() && callback.m_steamIDFriend.BIndividualAccount() ? callback.m_steamIDFriend.m_SteamID.ToString() : string.Empty;
+                RequestRoomSwitch(playerId, lobbyId.ToString());
             }
             catch (Exception exception)
             {
@@ -2907,7 +2951,7 @@ namespace oojjrs.oplat.steam
                 {
                     writer.Write(_hasPassword);
                     writer.Write(_isLocked);
-                    writer.Write(_isPrivate);
+                    writer.Write((int)_visibility);
                     writer.Write(_maxPlayers);
                     writer.Write(_title ?? string.Empty);
                     var roomFields = _state == StateEnum.Host ? _roomFields : _memberRoomFields;
@@ -2927,7 +2971,7 @@ namespace oojjrs.oplat.steam
         {
             bool hasPassword;
             bool isLocked;
-            bool isPrivate;
+            MyNetRoomInterface.VisibilityEnum visibility;
             int maxPlayers;
             string title;
             MyNetInterface.Field[] memberRoomFields;
@@ -2937,7 +2981,9 @@ namespace oojjrs.oplat.steam
             {
                 hasPassword = reader.ReadBoolean();
                 isLocked = reader.ReadBoolean();
-                isPrivate = reader.ReadBoolean();
+                visibility = (MyNetRoomInterface.VisibilityEnum)reader.ReadInt32();
+                if (Enum.IsDefined(typeof(MyNetRoomInterface.VisibilityEnum), visibility) == false)
+                    throw new FormatException("Steam member snapshot has an invalid room visibility.");
                 maxPlayers = reader.ReadInt32();
                 if ((maxPlayers < 1) || (maxPlayers > PlayerCountMax))
                     throw new FormatException("Steam member snapshot has an invalid player limit.");
@@ -2973,7 +3019,7 @@ namespace oojjrs.oplat.steam
 
             _hasPassword = hasPassword;
             _isLocked = isLocked;
-            _isPrivate = isPrivate;
+            _visibility = visibility;
             _maxPlayers = maxPlayers;
             _title = title;
             _memberRoomFields = memberRoomFields;
@@ -3456,6 +3502,23 @@ namespace oojjrs.oplat.steam
             return SteamMatchmaking.GetLobbyData(lobby, key) == "1";
         }
 
+        private static MyNetRoomInterface.VisibilityEnum ReadVisibilityLobbyData(CSteamID lobby)
+        {
+            var value = SteamMatchmaking.GetLobbyData(lobby, MetadataVisibility);
+            if ((Enum.TryParse(value, out MyNetRoomInterface.VisibilityEnum visibility) == false) || (Enum.IsDefined(typeof(MyNetRoomInterface.VisibilityEnum), visibility) == false))
+                throw new FormatException("Steam room visibility metadata is invalid.");
+
+            return visibility;
+        }
+
+        private static ELobbyType ToLobbyType(MyNetRoomInterface.VisibilityEnum visibility) => visibility switch
+        {
+            MyNetRoomInterface.VisibilityEnum.Public => ELobbyType.k_ELobbyTypePublic,
+            MyNetRoomInterface.VisibilityEnum.FriendsOnly => ELobbyType.k_ELobbyTypeFriendsOnly,
+            MyNetRoomInterface.VisibilityEnum.Private => ELobbyType.k_ELobbyTypePrivate,
+            _ => throw new ArgumentOutOfRangeException(nameof(visibility)),
+        };
+
         private static int ParseBoundedInt(string value, int minimum, int maximum)
         {
             if ((int.TryParse(value, out var result) == false) || (result < minimum) || (result > maximum))
@@ -3534,7 +3597,7 @@ namespace oojjrs.oplat.steam
             lobbyId = 0;
             for (var index = 0; index + 1 < arguments.Length; ++index)
             {
-                if (arguments[index] != "+connect_lobby")
+                if (arguments[index] != LaunchLobbyArgument)
                     continue;
 
                 if (TryParseLobbyId(arguments[index + 1].Trim('"'), out var lobby))

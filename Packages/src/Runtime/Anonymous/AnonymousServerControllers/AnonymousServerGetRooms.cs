@@ -14,7 +14,7 @@ namespace oojjrs.oplat.anonymous.controllers
         {
             return await AnonymousServerResponse.CreateAsync(AnonymousServerResponse.ResultCodeEnum.Success, new ResponseArgument()
             {
-                Rooms = roomState.Rooms.Where(secret => secret.Room.IsPrivate == false).Select(secret => secret.Room with
+                Rooms = roomState.Rooms.Where(secret => secret.Room.Visibility == MyNetRoomInterface.VisibilityEnum.Public).Select(secret => secret.Room with
                 {
                     Fields = secret.Room.Fields.Where(field => field.Visibility == MyNetInterface.Field.VisibilityEnum.Public).ToArray(),
                     Players = secret.Room.Players.Select(player => player with { Fields = player.Fields.Where(field => field.Visibility == MyNetInterface.Field.VisibilityEnum.Public).ToArray() }).ToArray(),

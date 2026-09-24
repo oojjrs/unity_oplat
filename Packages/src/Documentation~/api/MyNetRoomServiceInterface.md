@@ -20,13 +20,13 @@
 | --- | --- |
 | `CancellationToken` | 작업 취소 토큰 |
 | `IsLocked` | 생성 직후 참가를 잠글지 여부 |
-| `IsPrivate` | 일반 Lobby 목록에서 숨길지 여부 |
 | `MaxPlayers` | 최대 플레이어 수 |
 | `Password` | 참가 비밀번호. 없으면 `null` 또는 빈 문자열 |
 | `PlayerFields` | 생성자 플레이어의 초기 필드 |
 | `PlayerNickname` | 생성자 표시 이름 |
 | `RoomFields` | 방의 초기 필드 |
 | `Title` | 방 제목 |
+| `Visibility` | `Public`, `FriendsOnly`, `Private` 중 생성할 방의 공개 범위 |
 
 ## `JoinConfigInterface`
 
@@ -53,10 +53,10 @@
 | --- | --- |
 | `CancellationToken` | 작업 취소 토큰 |
 | `RoomId` | 현재 방 ID |
-| `IsPrivate` | 변경할 공개 여부 |
 | `RoomFields` | key 기준으로 병합할 방 필드 |
+| `Visibility` | 변경할 방의 공개 범위 |
 
-방 갱신은 호스트만 할 수 있다. 현재 API는 생성 이후 `IsLocked`, 제목, 비밀번호와 최대 인원을 변경하지 않는다.
+방 갱신은 호스트만 할 수 있다. 현재 API는 생성 이후 `IsLocked`, 제목, 비밀번호와 최대 인원을 변경하지 않는다. 공개 범위별 목록·친구 노출 의미는 [`MyNetRoomInterface.VisibilityEnum`](MyNetRoomInterface.md#visibilityenum)을 참고한다.
 
 ## `ExitConfigInterface`
 

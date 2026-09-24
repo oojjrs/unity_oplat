@@ -12,13 +12,13 @@ namespace oojjrs.oplat.steam
         private readonly string HostId;
         private readonly string Id;
         private readonly bool IsLocked;
-        private readonly bool IsPrivate;
         private readonly int PlayerCountMax;
         private readonly IEnumerable<MyNetPlayerInterface> PlayerView;
         private readonly MyNetPlayerInterface[] Players;
         private readonly string Title;
+        private readonly MyNetRoomInterface.VisibilityEnum Visibility;
 
-        internal SteamNetRoom(string code, MyNetInterface.Field[] fields, bool hasPassword, string hostId, string id, bool isLocked, bool isPrivate, int playerCountMax, MyNetPlayerInterface[] players, string title)
+        internal SteamNetRoom(string code, MyNetInterface.Field[] fields, bool hasPassword, string hostId, string id, bool isLocked, int playerCountMax, MyNetPlayerInterface[] players, string title, MyNetRoomInterface.VisibilityEnum visibility)
         {
             Code = code;
             Fields = (MyNetInterface.Field[])fields.Clone();
@@ -26,11 +26,11 @@ namespace oojjrs.oplat.steam
             HostId = hostId;
             Id = id;
             IsLocked = isLocked;
-            IsPrivate = isPrivate;
             PlayerCountMax = playerCountMax;
             Players = (MyNetPlayerInterface[])players.Clone();
             PlayerView = System.Array.AsReadOnly(Players);
             Title = title;
+            Visibility = visibility;
 
             foreach (var player in Players)
             {
@@ -51,12 +51,12 @@ namespace oojjrs.oplat.steam
         string MyNetRoomInterface.HostId => HostId;
         string MyNetRoomInterface.Id => Id;
         bool MyNetRoomInterface.IsLocked => IsLocked;
-        bool MyNetRoomInterface.IsPrivate => IsPrivate;
         int MyNetRoomInterface.PlayerCount => Players.Length;
         int MyNetRoomInterface.PlayerCountAvailable => System.Math.Max(0, PlayerCountMax - Players.Length);
         int MyNetRoomInterface.PlayerCountMax => PlayerCountMax;
         IEnumerable<MyNetPlayerInterface> MyNetRoomInterface.Players => PlayerView;
         string MyNetRoomInterface.Title => Title;
+        MyNetRoomInterface.VisibilityEnum MyNetRoomInterface.Visibility => Visibility;
 
         string MyNetRoomInterface.GetData(string key)
         {

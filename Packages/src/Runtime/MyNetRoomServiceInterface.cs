@@ -10,13 +10,13 @@ namespace oojjrs.oplat
         {
             CancellationToken CancellationToken { get; }
             bool IsLocked { get; }
-            bool IsPrivate { get; }
             int MaxPlayers { get; }
             string Password { get; }
             IEnumerable<MyNetInterface.Field> PlayerFields { get; }
             string PlayerNickname { get; }
             IEnumerable<MyNetInterface.Field> RoomFields { get; }
             string Title { get; }
+            MyNetRoomInterface.VisibilityEnum Visibility { get; }
         }
 
         public interface CreateResultInterface : MyNetInterface.CatchInterface
@@ -54,9 +54,9 @@ namespace oojjrs.oplat
         public interface UpdateConfigInterface
         {
             CancellationToken CancellationToken { get; }
-            bool IsPrivate { get; }
             IEnumerable<MyNetInterface.Field> RoomFields { get; }
             string RoomId { get; }
+            MyNetRoomInterface.VisibilityEnum Visibility { get; }
         }
 
         public interface UpdateResultInterface : MyNetInterface.CatchInterface

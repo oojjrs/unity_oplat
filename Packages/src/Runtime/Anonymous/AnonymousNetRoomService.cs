@@ -26,13 +26,13 @@ namespace oojjrs.oplat.anonymous
                     await Net.SendAsync(AnonymousNet.OperationEnum.CreateRoom, new AnonymousServerCreateRoom.RequestArgument()
                     {
                         IsLocked = config.IsLocked,
-                        IsPrivate = config.IsPrivate,
                         MaxPlayers = config.MaxPlayers,
                         Password = config.Password,
                         PlayerFields = AnonymousServerRoom.FieldData.FromNetFields(config.PlayerFields),
                         PlayerNickname = config.PlayerNickname,
                         RoomFields = AnonymousServerRoom.FieldData.FromNetFields(config.RoomFields),
                         Title = config.Title,
+                        Visibility = config.Visibility,
                     }, cancellationToken);
                     var response = await Net.ReceiveAsync(AnonymousNet.OperationEnum.CreateRoom, cancellationToken);
                     response.EnsureSuccess();
@@ -194,9 +194,9 @@ namespace oojjrs.oplat.anonymous
                 {
                     await Net.SendAsync(AnonymousNet.OperationEnum.UpdateRoom, new AnonymousServerUpdateRoom.RequestArgument()
                     {
-                        IsPrivate = config.IsPrivate,
                         RoomFields = AnonymousServerRoom.FieldData.FromNetFields(config.RoomFields),
                         RoomId = roomId,
+                        Visibility = config.Visibility,
                     }, cancellationToken);
                     var response = await Net.ReceiveAsync(AnonymousNet.OperationEnum.UpdateRoom, cancellationToken);
                     switch (response.ResultCode)

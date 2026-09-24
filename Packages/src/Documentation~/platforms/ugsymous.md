@@ -27,7 +27,7 @@ UGS 클라이언트 SDK에는 공통 서버 시각 API가 없으므로 `service.
 
 Vivox 채팅은 발신자의 플랫폼 시간 서비스 UTC tick을 메시지 메타데이터에 포함해 `sentAt`으로 전달한다. 메타데이터가 없는 메시지는 수신자의 플랫폼 시각으로 대체한다.
 
-Lobby 목록 조회는 공개 Lobby만 반환한다. 목록 결과의 `Code`는 빈 문자열, `IsPrivate`는 `false`, `Players`는 빈 목록이다. 방에 참가하거나 생성한 뒤 얻는 Room 결과에는 전체 Session 정보가 제공된다.
+Lobby 목록 조회는 `Public` Session만 반환한다. 목록 결과의 `Code`는 빈 문자열, `Visibility`는 `Public`, `Players`는 빈 목록이다. `FriendsOnly`와 `Private`는 모두 UGS private Session으로 만들고 내부 Session 속성으로 둘을 구분한다. 방에 참가하거나 생성한 뒤 얻는 Room 결과에는 전체 Session 정보가 제공된다.
 
 Lobby 조회가 네트워크 오류, bad gateway, service unavailable 또는 gateway timeout으로 끝나면 반복 조회를 중지하고 `OnFailed(Disconnected)`를 호출한다.
 
@@ -41,7 +41,7 @@ Vivox 메시지 한계와 UTP 패킷 한계는 각각 `Chat.MessageByteCountMax`
 
 `Net.Friend.RequestAddAsync`는 UGS Player ID로 친구 요청을 보낸다. 상대가 먼저 보낸 요청이 있으면 친구 관계를 수락한다. 친구가 되기 전의 수신 요청 목록과 수락 UI는 공개 Oplat 계약에 포함하지 않으므로 게임이 별도로 제공해야 한다.
 
-친구 목록을 갱신할 때 현재 공개 Session ID를 자신의 Friends presence activity에 게시한다. 친구의 presence가 `Online`, `Busy`, `Away` 중 하나일 때만 해당 activity의 Room ID를 노출한다. 비공개 Session은 presence에 Room ID를 게시하지 않는다.
+친구 목록을 갱신할 때 현재 `Public` 또는 `FriendsOnly` Session ID를 자신의 Friends presence activity에 게시한다. 친구의 presence가 `Online`, `Busy`, `Away` 중 하나일 때만 해당 activity의 Room ID를 노출한다. `Private` Session은 presence에 Room ID를 게시하지 않는다.
 
 `Net.Friend.InviteAsync`는 현재 참가한 Session ID를 온라인 친구에게 Friends 메시지로 보낸다. 수신 측은 `FriendResult.OnInvited`로 Player ID와 Room ID를 받고, 사용자가 수락하면 준비를 끝낸 뒤 `Room.SwitchAsync`를 호출한다. Oplat이 현재 Session 퇴장 또는 삭제와 대상 Session 참가를 순서대로 수행한다. UGS Friends에는 Steam과 같은 플랫폼 초대 수락 UI가 없으므로 `OnJoinRequested`는 발생하지 않는다. 메시지는 오프라인 보관용이 아니며 Friends 서비스가 허용하는 presence 상태에서만 발송한다.
 

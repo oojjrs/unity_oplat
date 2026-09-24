@@ -8,19 +8,19 @@ namespace oojjrs.oplat.anonymous.controllers
         public record RequestArgument
         {
             public bool IsLocked { get; set; }
-            public bool IsPrivate { get; set; }
             public int MaxPlayers { get; set; }
             public string Password { get; set; }
             public AnonymousServerRoom.FieldData[] PlayerFields { get; set; }
             public string PlayerNickname { get; set; }
             public AnonymousServerRoom.FieldData[] RoomFields { get; set; }
             public string Title { get; set; }
+            public MyNetRoomInterface.VisibilityEnum Visibility { get; set; }
         }
 
         internal static async Task<AnonymousServerResponse> RunAsync(byte[] content, AnonymousServerRoom.State roomState, AnonymousServerSession session)
         {
             var requestArgument = await AnonymousServer.DeserializeAsync<RequestArgument>(content);
-            if ((requestArgument == null) || (requestArgument.MaxPlayers < 1))
+            if ((requestArgument == null) || (requestArgument.MaxPlayers < 1) || (Enum.IsDefined(typeof(MyNetRoomInterface.VisibilityEnum), requestArgument.Visibility) == false))
                 throw new FormatException("Invalid anonymous room request.");
 
             if (requestArgument.PlayerFields != null)
@@ -37,7 +37,6 @@ namespace oojjrs.oplat.anonymous.controllers
                 HostId = session.Account,
                 Id = Guid.NewGuid().ToString("N"),
                 IsLocked = requestArgument.IsLocked,
-                IsPrivate = requestArgument.IsPrivate,
                 MaxPlayers = requestArgument.MaxPlayers,
                 Players = new[]
                 {
@@ -50,6 +49,7 @@ namespace oojjrs.oplat.anonymous.controllers
                     },
                 },
                 Title = requestArgument.Title,
+                Visibility = requestArgument.Visibility,
             };
 
             roomState.Rooms.Add(new AnonymousServerRoom.RoomSecret(requestArgument.Password, responseArgument));

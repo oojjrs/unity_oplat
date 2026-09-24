@@ -92,10 +92,10 @@ namespace oojjrs.oplat.anonymous
             public string HostId { get; set; }
             public string Id { get; set; }
             public bool IsLocked { get; set; }
-            public bool IsPrivate { get; set; }
             public int MaxPlayers { get; set; }
             public PlayerData[] Players { get; set; }
             public string Title { get; set; }
+            public MyNetRoomInterface.VisibilityEnum Visibility { get; set; }
 
             internal RoomData GetMemberResponseArgument(string account)
             {
@@ -112,7 +112,7 @@ namespace oojjrs.oplat.anonymous
 
             internal MyNetRoomInterface ToNetRoom()
             {
-                if (string.IsNullOrEmpty(Code) || string.IsNullOrEmpty(HostId) || string.IsNullOrEmpty(Id) || (MaxPlayers < 1))
+                if (string.IsNullOrEmpty(Code) || string.IsNullOrEmpty(HostId) || string.IsNullOrEmpty(Id) || (MaxPlayers < 1) || (Enum.IsDefined(typeof(MyNetRoomInterface.VisibilityEnum), Visibility) == false))
                     throw new FormatException("Invalid anonymous room response.");
 
                 var playerData = Players ?? Array.Empty<PlayerData>();
@@ -125,7 +125,7 @@ namespace oojjrs.oplat.anonymous
                     players[index] = playerData[index].ToNetPlayer();
                 }
 
-                return new AnonymousNetRoom(Code, FieldData.ToNetFields(Fields), HasPassword, HostId, Id, IsLocked, IsPrivate, MaxPlayers, players, Title);
+                return new AnonymousNetRoom(Code, FieldData.ToNetFields(Fields), HasPassword, HostId, Id, IsLocked, MaxPlayers, players, Title, Visibility);
             }
         }
 

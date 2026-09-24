@@ -96,12 +96,12 @@ namespace oojjrs.oplat.ugsymous
         string MyNetRoomInterface.HostId => Session.Host;
         string MyNetRoomInterface.Id => Session.Id;
         bool MyNetRoomInterface.IsLocked => Session.IsLocked;
-        bool MyNetRoomInterface.IsPrivate => Session.IsPrivate;
         int MyNetRoomInterface.PlayerCount => Session.PlayerCount;
         int MyNetRoomInterface.PlayerCountAvailable => Session.AvailableSlots;
         int MyNetRoomInterface.PlayerCountMax => Session.MaxPlayers;
         IEnumerable<MyNetPlayerInterface> MyNetRoomInterface.Players => Session.Players.Select(GetPlayer);
         string MyNetRoomInterface.Title => Session.Name;
+        MyNetRoomInterface.VisibilityEnum MyNetRoomInterface.Visibility => UgsymousNet.GetVisibility(Session);
         internal ISession Session { get; set; }
 
         internal UgsymousRoom(ISession session) => Session = session;
@@ -127,12 +127,12 @@ namespace oojjrs.oplat.ugsymous
         string MyNetRoomInterface.HostId => Session.HostId;
         string MyNetRoomInterface.Id => Session.Id;
         bool MyNetRoomInterface.IsLocked => Session.IsLocked;
-        bool MyNetRoomInterface.IsPrivate => false;
         int MyNetRoomInterface.PlayerCount => Session.MaxPlayers - Session.AvailableSlots;
         int MyNetRoomInterface.PlayerCountAvailable => Session.AvailableSlots;
         int MyNetRoomInterface.PlayerCountMax => Session.MaxPlayers;
         IEnumerable<MyNetPlayerInterface> MyNetRoomInterface.Players => Enumerable.Empty<MyNetPlayerInterface>();
         string MyNetRoomInterface.Title => Session.Name;
+        MyNetRoomInterface.VisibilityEnum MyNetRoomInterface.Visibility => MyNetRoomInterface.VisibilityEnum.Public;
         internal Lobby Session { get; set; }
 
         internal UgsymousRoomStub(Lobby session) => Session = session;

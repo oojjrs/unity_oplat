@@ -25,4 +25,4 @@ Polling 간격은 최소 1초이며 방에 참가한 동안 자동 조회가 멈
 
 `MyNetInterface.CatchInterface`를 구현하고 `OnOk(IEnumerable<MyNetRoomInterface> rooms)`에서 방 스냅샷 목록을 받는다. 방이 없으면 빈 목록이다.
 
-Private 방은 일반 목록에서 제외된다. Steam은 한 번에 최대 50개를 반환하며 잠겼거나 정원이 찬 방도 검색 결과에서 제외할 수 있다. 자세한 내용은 [Steam 플랫폼](../platforms/steam.md)을 참고한다.
+`FriendsOnly`와 `Private` 방은 일반 목록에서 제외된다. Steam은 한 번에 최대 50개를 반환하며 잠겼거나 정원이 찬 방도 검색 결과에서 제외할 수 있다. 자세한 내용은 [Steam 플랫폼](../platforms/steam.md)을 참고한다.

@@ -9,6 +9,7 @@ namespace oojjrs.oplat.ugsymous
     internal sealed class UgsymousNet : MyNetInterface, IDisposable
     {
         internal const string PlayerPropertyNickname = "__Nickname__";
+        internal const string SessionPropertyVisibility = "__Visibility__";
         private readonly UgsymousNetChatService _chat;
         private readonly UgsymousNetFriendService _friend;
         private readonly UgsymousNetHostService _host;
@@ -71,7 +72,34 @@ namespace oojjrs.oplat.ugsymous
 
         internal CancellationTokenSource CreateCancellationSource(CancellationToken cancellationToken) => CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, LifetimeCancellationToken);
 
-        internal static Dictionary<string, SessionProperty> ToSessionProperties(IEnumerable<MyNetInterface.Field> fields) => (fields ?? Enumerable.Empty<MyNetInterface.Field>()).ToDictionary(t => t.key, t => new SessionProperty(t.value, ToVisibility(t.visibility)));
+        internal static MyNetRoomInterface.VisibilityEnum GetVisibility(ISession session)
+        {
+            if (session.IsPrivate == false)
+                return MyNetRoomInterface.VisibilityEnum.Public;
+
+            if ((session.Properties != null) && session.Properties.TryGetValue(SessionPropertyVisibility, out var property) && Enum.TryParse(property.Value, out MyNetRoomInterface.VisibilityEnum visibility) && Enum.IsDefined(typeof(MyNetRoomInterface.VisibilityEnum), visibility))
+                return visibility;
+
+            return MyNetRoomInterface.VisibilityEnum.Private;
+        }
+
+        internal static Dictionary<string, SessionProperty> ToSessionProperties(IEnumerable<MyNetInterface.Field> fields, MyNetRoomInterface.VisibilityEnum visibility)
+        {
+            if (Enum.IsDefined(typeof(MyNetRoomInterface.VisibilityEnum), visibility) == false)
+                throw new ArgumentOutOfRangeException(nameof(visibility));
+
+            var result = (fields ?? Enumerable.Empty<MyNetInterface.Field>()).ToDictionary(t => t.key, t => new SessionProperty(t.value, ToVisibility(t.visibility)));
+            result[SessionPropertyVisibility] = new SessionProperty(visibility.ToString(), VisibilityPropertyOptions.Member);
+            return result;
+        }
+
+        internal static bool ToIsPrivate(MyNetRoomInterface.VisibilityEnum visibility)
+        {
+            if (Enum.IsDefined(typeof(MyNetRoomInterface.VisibilityEnum), visibility) == false)
+                throw new ArgumentOutOfRangeException(nameof(visibility));
+
+            return visibility != MyNetRoomInterface.VisibilityEnum.Public;
+        }
 
         private static VisibilityPropertyOptions ToVisibility(MyNetInterface.Field.VisibilityEnum value) => value switch
         {

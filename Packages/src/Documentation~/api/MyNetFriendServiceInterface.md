@@ -12,7 +12,7 @@
 | --- | --- |
 | `string Id` | 플랫폼의 계정 ID. 게임에서 해석하지 않는 문자열이다. |
 | `string Nickname` | 표시 이름. 알 수 없으면 ID를 사용한다. |
-| `string RoomId` | 같은 게임에서 조회 가능한 참여 대상 방 ID. 미접속·다른 게임·방 없음·비공개이면 빈 문자열이다. |
+| `string RoomId` | 같은 게임에서 조회 가능한 참여 대상 방 ID. 미접속·다른 게임·방 없음·`Private`이면 빈 문자열이다. |
 | `StateEnum State` | 플랫폼에서 관측되는 친구 상태. 아래 상태 값을 사용한다. |
 
 문자열 프로퍼티는 null을 반환하지 않는다. 접속 상태와 방 ID는 입장 가능 여부를 보장하지 않는다. 친구 목록의 순서는 보장하지 않으며 같은 ID는 한 번만 반환한다.
@@ -32,7 +32,7 @@
 
 Anonymous는 서버에 접속 세션이 있으면 `Online`, 없으면 `Offline`을 반환한다. Steam은 실제로 조회된 persona 상태를 매핑한다. Ugsymous는 UGS Friends의 `Online`, `Busy`, `Away`, `Invisible`, `Offline`을 같은 의미의 공통 상태로 옮기며 `Unknown`은 `Offline`으로 처리한다. 현재 프로젝트의 Steamworks.NET에는 `Invisible`이 정의되어 있지만 친구에게는 이 상태가 공개되지 않으므로, 오프라인으로 관측된 Steam 친구를 `Invisible`로 추정하지 않는다. Valve 웹 문서의 상태 표에는 `Invisible`이 누락되어 있어 이 값은 프로젝트에서 사용하는 SDK 정의를 기준으로 한다.
 
-친구 상태와 게임 실행·방 참여 정보는 별개다. 다른 게임을 실행 중인 Steam 친구도 `Online`일 수 있지만 참여 대상 방은 반환하지 않는다. Ugsymous는 같은 UGS 프로젝트·환경의 Friends presence activity에서 공개 Session ID를 읽으며 `Online`, `Busy`, `Away`가 아니거나 방이 비공개이면 빈 문자열을 반환한다.
+친구 상태와 게임 실행·방 참여 정보는 별개다. 다른 게임을 실행 중인 Steam 친구도 `Online`일 수 있지만 참여 대상 방은 반환하지 않는다. Ugsymous는 같은 UGS 프로젝트·환경의 Friends presence activity에서 `Public` 또는 `FriendsOnly` Session ID를 읽으며 `Online`, `Busy`, `Away`가 아니거나 방이 `Private`이면 빈 문자열을 반환한다.
 
 ## 목록 조회
 
@@ -46,7 +46,7 @@ Anonymous는 서버에 접속 세션이 있으면 `Online`, 없으면 `Offline`�
 
 Anonymous와 Ugsymous는 기존 조회가 진행 중이면 새 Start의 첫 조회를 기다렸다가 실행한다. Stop·재시작·취소 이후 이전 반복 조회의 성공·오류 콜백은 전달하지 않는다. 이미 전송한 요청의 응답은 끝까지 수신한 뒤 다음 요청을 보내므로, 취소된 Start의 Task 완료는 진행 중인 응답 수신까지 지연될 수 있다. 아직 전송하지 않은 조회는 취소할 수 있다. Stop은 별도로 호출한 Refresh를 취소하지 않는다. 조회 오류를 `OnException`으로 전달한 뒤에는 같은 간격으로 반복 조회를 계속하며, 플랫폼 종료 시 반복 조회도 종료한다.
 
-`ResultInterface.OnOk(IEnumerable<MyNetFriendInterface> friends)`는 전체 스냅샷을 반환한다. 친구가 없으면 빈 목록이다. Anonymous와 Ugsymous에서 Refresh가 진행 중인 동안 다시 호출하면 `OnBusy`로 완료한다. `UseLocal` 값과 관계없이 Anonymous는 기존 로컬 서버에 요청하고 Steam은 Steam 클라이언트의 현재 친구 정보를 읽는다. Ugsymous는 현재 공개 Session ID를 자신의 presence에 게시한 뒤 UGS 관계 목록을 강제로 갱신한다. 플랫폼 조회 실패는 `OnException`으로 전달하며 빈 목록으로 숨기지 않는다.
+`ResultInterface.OnOk(IEnumerable<MyNetFriendInterface> friends)`는 전체 스냅샷을 반환한다. 친구가 없으면 빈 목록이다. Anonymous와 Ugsymous에서 Refresh가 진행 중인 동안 다시 호출하면 `OnBusy`로 완료한다. `UseLocal` 값과 관계없이 Anonymous는 기존 로컬 서버에 요청하고 Steam은 Steam 클라이언트의 현재 친구 정보를 읽는다. Ugsymous는 현재 `Public` 또는 `FriendsOnly` Session ID를 자신의 presence에 게시한 뒤 UGS 관계 목록을 강제로 갱신한다. 플랫폼 조회 실패는 `OnException`으로 전달하며 빈 목록으로 숨기지 않는다.
 
 ## 친구 추가 요청
 
@@ -93,7 +93,7 @@ Anonymous는 같은 Project Key·App ID로 접속한 대상에게만 초대를 �
 
 Anonymous와 Ugsymous는 플랫폼 초대 수락 UI가 없으므로 `OnJoinRequested`를 발생시키지 않는다. Ugsymous는 올바른 Oplat 초대 형식의 Friends 메시지만 `OnInvited`로 전달한다. 게임 UI는 `OnInvited`로 받은 방 ID를 보관하고 사용자가 수락하면 필요한 화면 준비를 끝낸 뒤 `Room.SwitchAsync`를 호출한다.
 
-Steam은 `LobbyInvite_t`를 게임에 전달하지 않고 Steam UI의 초대 알림과 수락 절차에 맡긴다. `RoomSwitchHandler`를 제공하면 실행 중 받은 `GameLobbyJoinRequested_t`와 시작 인자 `+connect_lobby`를 준비 처리기와 공통 방 전환으로 직접 연결한다. 처리기를 생략한 기존 게임에는 같은 요청을 기존 `OnJoinRequested`로 전달한다.
+Steam은 `LobbyInvite_t`를 게임에 전달하지 않고 Steam UI의 초대 알림과 수락 절차에 맡긴다. `Public` 또는 `FriendsOnly`이고 잠기지 않았으며 정원이 남은 Lobby에서는 `connect` Rich Presence를 게시해 Steam 친구 메뉴의 게임 참여를 활성화한다. `RoomSwitchHandler`를 제공하면 실행 중 받은 `GameLobbyJoinRequested_t`·`GameRichPresenceJoinRequested_t`와 시작 인자 `+connect_lobby`를 준비 처리기와 공통 방 전환으로 직접 연결한다. 처리기를 생략한 기존 게임에는 같은 요청을 기존 `OnJoinRequested`로 전달한다.
 
 공통 `SwitchAsync`는 현재 방 판정, 같은 방 성공, 다른 방 퇴장 또는 닫기, 대상 방 참가와 중복 요청의 `Busy` 처리를 담당한다. 기존 `JoinAsync`, `ExitAsync`, `OnInvited`, `OnJoinRequested` 계약은 변경하지 않는다. 플랫폼 자동 전환의 게임 준비와 결과 계약은 [`MyNetRoomSwitchHandlerInterface`](MyNetRoomSwitchHandlerInterface.md)를 참고한다.
 
@@ -112,9 +112,9 @@ Steam은 `LobbyInvite_t`를 게임에 전달하지 않고 Steam UI의 초대 알
 | 친구 추가 절차 시작 | `ActivateGameOverlayToUser("friendadd", steamId)` |
 | 초대 발송 | `InviteUserToLobby` |
 | 초대 도착 | Steam UI가 같은 게임의 `LobbyInvite_t`를 표시하며 게임 콜백으로 전달하지 않음 |
-| 참여 요청 | `GameLobbyJoinRequested_t`, 시작 인자 `+connect_lobby` |
+| 참여 요청 | `GameLobbyJoinRequested_t`, `GameRichPresenceJoinRequested_t`, 시작 인자 `+connect_lobby` |
 
-Steam의 Invisible 로비는 친구에게 일반 로비 정보로 노출되지 않으므로 비공개 방의 직접 참여 대상은 제공하지 않는다. 초대로 받은 방 ID는 기존 입장 경로로 전달한다.
+Steam의 `Private` 로비는 친구의 일반 참여 대상으로 제공하지 않는다. 초대로 받은 방 ID는 기존 입장 경로로 전달한다.
 
 Anonymous에서 공통 목록·초대 흐름을 검증할 수 있다. Steam의 친구 승인, Overlay, 게임 실행, 상태 공개 범위, 전달 지연은 Steam 클라이언트와 서로 다른 계정으로 별도로 확인해야 한다.
 
@@ -125,13 +125,13 @@ Anonymous에서 공통 목록·초대 흐름을 검증할 수 있다. Steam의 �
 | 공통 계약 | UGS Friends 구현 경로 |
 | --- | --- |
 | 친구 목록과 표시 이름 | `Friends`, `Member.Profile.Name` |
-| 접속 상태와 공개 방 | `Member.Presence`, presence activity의 `RoomId` |
+| 접속 상태와 친구 참여 가능 방 | `Member.Presence`, presence activity의 `RoomId` |
 | 친구 추가 절차 시작 | `AddFriendAsync` |
 | 초대 발송 | `MessageAsync` |
 | 초대 도착 | `MessageReceived` |
 | 참여 요청 | 플랫폼 UI가 없어 발생하지 않음 |
 
-Ugsymous 초기화는 presence와 profile을 포함해 UGS Friends를 시작한다. 공개 Session에 참가한 상태에서 친구 목록을 갱신하면 해당 Session ID를 자신의 presence activity에 게시한다. 비공개 Session ID는 목록에 공개하지 않지만 직접 초대 메시지에는 포함할 수 있다.
+Ugsymous 초기화는 presence와 profile을 포함해 UGS Friends를 시작한다. `Public` 또는 `FriendsOnly` Session에 참가한 상태에서 친구 목록을 갱신하면 해당 Session ID를 자신의 presence activity에 게시한다. `Private` Session ID는 목록에 공개하지 않지만 직접 초대 메시지에는 포함할 수 있다.
 
 UGS Friends 사용 전에는 Unity Dashboard에서 Friends를 활성화해야 한다. 친구 요청 한도, 친구 수 한도, presence 전달 지연과 메시지 전달 가능 상태는 UGS 서비스 정책을 따른다.
 

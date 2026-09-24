@@ -4,7 +4,7 @@ Steam 플랫폼 참여 요청을 게임 준비와 공통 방 전환에 연결하
 
 ## 준비
 
-`PrepareAsync(playerId, roomId, cancellationToken)`는 `GameLobbyJoinRequested_t` 또는 시작 인자 `+connect_lobby`를 받은 뒤 방 전환 전에 한 번 호출된다. 게임은 이 Task에서 로비 씬 이동, 로딩 완료 대기와 플레이어별 참가 설정 준비를 끝낸다. 시작 인자에서 보낸 사람을 알 수 없으면 `playerId`는 빈 문자열이다.
+`PrepareAsync(playerId, roomId, cancellationToken)`는 `GameLobbyJoinRequested_t`, `GameRichPresenceJoinRequested_t` 또는 시작 인자 `+connect_lobby`를 받은 뒤 방 전환 전에 한 번 호출된다. 게임은 이 Task에서 로비 씬 이동, 로딩 완료 대기와 플레이어별 참가 설정 준비를 끝낸다. 시작 인자에서 보낸 사람을 알 수 없으면 `playerId`는 빈 문자열이다.
 
 성공 시 `PreparationInterface`를 반환한다.
 

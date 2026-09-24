@@ -30,7 +30,8 @@ Steamworks App Admin에서 사용자별 byte quota와 file count를 설정하고
 - `StartAsync(config, result)`는 즉시 한 번 조회한 뒤 최소 1초 간격으로 반복하고 `Stop()`으로 중지한다. 방 참가 중에도 계속 조회하며 목록 중지는 초대 콜백을 중지하지 않는다.
 - `RequestAddAsync(config, result)`는 유효한 개인 Steam ID의 `friendadd` Overlay를 연다. `OnOk`는 Overlay 요청을 넘겼다는 뜻이며 실제 친구 승인 결과가 아니다. Overlay를 사용할 수 없거나 자기 자신을 지정하면 `NotPermitted`다.
 - `InviteAsync(config, result)`는 호출자가 현재 참가한 Lobby로 현재 Steam 친구를 초대한다. Steam이 발송 요청을 받았을 때만 `OnOk`를 호출하며 상대에게 도착하거나 수락했다는 보장은 없다.
-- `LobbyInvite_t`는 Steam UI가 초대 알림과 수락 절차를 제공하므로 게임에 `FriendResult.OnInvited`로 전달하지 않는다. `RoomSwitchHandler`가 있으면 실행 중의 `GameLobbyJoinRequested_t`와 새 실행의 `+connect_lobby`를 게임 준비, 현재 방 정리, 대상 방 참가와 최종 결과 흐름으로 처리한다. 처리기를 생략한 기존 게임에는 동일한 요청을 `FriendResult.OnJoinRequested`로 전달한다.
+- `Public` 또는 `FriendsOnly`이고 잠기지 않았으며 정원이 남은 Lobby에 승인된 동안 `connect` Rich Presence에 `+connect_lobby <Lobby SteamID>`를 게시한다. Steam 친구 메뉴의 게임 참여를 선택하면 실행 중에는 `GameRichPresenceJoinRequested_t`, 새 실행에는 시작 인자로 참가 요청이 전달된다. 방이 `Private`·잠금·만원 상태가 되거나 퇴장하면 `connect`를 제거한다.
+- `LobbyInvite_t`는 Steam UI가 초대 알림과 수락 절차를 제공하므로 게임에 `FriendResult.OnInvited`로 전달하지 않는다. `RoomSwitchHandler`가 있으면 실행 중의 `GameLobbyJoinRequested_t`·`GameRichPresenceJoinRequested_t`와 새 실행의 `+connect_lobby`를 게임 준비, 현재 방 정리, 대상 방 참가와 최종 결과 흐름으로 처리한다. 처리기를 생략한 기존 게임에는 동일한 요청을 `FriendResult.OnJoinRequested`로 전달한다.
 
 친구 서비스는 Unity 메인 스레드에서 호출한다. 친구 승인, Overlay 표시, 초대 표시·수락과 게임 재실행은 Steam 클라이언트와 서로 다른 두 계정으로 확인해야 한다.
 
@@ -38,7 +39,7 @@ Steamworks App Admin에서 사용자별 byte quota와 file count를 설정하고
 
 - 방은 Steam Lobby, 게임 요청과 응답은 `ISteamNetworkingMessages`의 reliable P2P 메시지로 처리한다.
 - 방 `Id`는 Lobby SteamID의 10진수 문자열이고 `Code`는 같은 값을 표현한 13자리 Base32 문자열이다.
-- `IsPrivate` 방은 `Invisible` Lobby로 만들어 일반 목록에서 제외하지만 보안 경계는 아니다.
+- `Visibility`는 `Public`, `FriendsOnly`, `Private`를 각각 같은 이름의 Steam Lobby 타입으로 매핑한다. `FriendsOnly`는 일반 목록에 나타나지 않지만 친구와 초대 대상이 참가할 수 있고, `Private`는 Steam 초대로만 참가할 수 있다. 일반 방 공개 범위에 특수 목적의 `Invisible` Lobby는 사용하지 않는다.
 - `IsLocked`이거나 정원이 찬 방은 Steam 검색 결과에서 제외된다. 한 번의 목록 조회는 최대 50개다.
 - Steam 클라이언트가 Steam 서버에 로그인되어 있지 않거나 Lobby 목록 요청이 I/O failure로 끝나면 반복 조회를 중지하고 `OnFailed(Disconnected)`를 호출한다.
 - 비밀번호는 참가 후 호스트가 확인하며, 강퇴는 클라이언트가 제어 메시지에 따라 나가는 협조형 동작이다. 변조된 클라이언트를 Lobby 자체에서 강제로 제거하지는 못한다.
@@ -50,7 +51,7 @@ Steamworks App Admin에서 사용자별 byte quota와 file count를 설정하고
 - 승인된 피어의 P2P 세션이 실패하면 이미 전송 수락된 메시지의 전달 여부를 확정할 수 없어 방을 나가고 오류를 알린다. 호스트에서 발생하면 방 전체를 닫는다.
 - 프레임당 최대 32개의 P2P 메시지를 수신 처리한다. 이미 꺼낸 정상 메시지는 누적 바이트 수 때문에 버리지 않는다.
 - Steam의 자동 호스트 이전은 지원하지 않는다. 원래 호스트가 나가거나 Lobby 소유자가 바뀌면 각 멤버가 Lobby를 나가고 `RoomResult.OnFailed(NotFoundRoom)`을 받는다.
-- 패키지 `1.7.3`부터 통신 프로토콜은 2다. 이전 프로토콜의 방은 검색·참가 대상에서 제외되므로 함께 플레이하는 모든 클라이언트를 업데이트해야 한다.
+- 패키지 `1.10.3`부터 통신 프로토콜은 3이며 방 공개 범위를 세 단계로 전달한다. 이전 프로토콜의 방은 검색·참가 대상에서 제외되므로 함께 플레이하는 모든 클라이언트를 업데이트해야 한다.
 
 Chat·Lobby·Room·Player 작업은 Unity 메인 스레드에서 호출한다. `Member.Send`와 `Host.Send`는 Steam에서 다른 스레드에서도 큐에 넣을 수 있지만, 플랫폼 간 이식성을 위해 공통 코드는 메인 스레드에서 호출하는 편이 안전하다.
 

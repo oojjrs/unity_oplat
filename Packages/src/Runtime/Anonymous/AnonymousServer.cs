@@ -238,7 +238,7 @@ namespace oojjrs.oplat.anonymous
                     if (TryGetFriendSession(session, friendId, out var friendSession))
                     {
                         friend.State = MyNetFriendInterface.StateEnum.Online;
-                        var room = RoomState.Rooms.Find(value => (value.Room.IsPrivate == false) && value.Room.Players.Any(player => player.Id == friendSession.Account));
+                        var room = RoomState.Rooms.Find(value => (value.Room.Visibility != MyNetRoomInterface.VisibilityEnum.Private) && value.Room.Players.Any(player => player.Id == friendSession.Account));
                         friend.RoomId = room?.Room.Id ?? string.Empty;
                     }
 
