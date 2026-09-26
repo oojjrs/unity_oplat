@@ -10,6 +10,7 @@ namespace oojjrs.oplat
         MyNetInterface Net { get; }
         string Nickname { get; }
         Sprite ProfileSprite { get; }
+        MyStatsServiceInterface Stats { get; }
         MyStorageServiceInterface Storage { get; }
         MyTimeServiceInterface Time { get; }
     }

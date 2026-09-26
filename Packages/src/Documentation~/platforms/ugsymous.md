@@ -21,6 +21,12 @@ Unity Dashboard에서 프로젝트를 연결하고 Authentication, Cloud Save, F
 
 패키지는 `com.unity.services.friends` 1.2.0에 의존한다. 초기화는 Core, Authentication 로그인, Friends, Vivox 순서로 진행하며 Friends 관계에는 presence와 profile을 포함한다.
 
+## 통계
+
+UGS에는 Steam 통계 스키마를 정의하는 별도 서비스가 없으므로 `service.Stats`는 개발용 JSON 목록으로 등록한 `INT`·`FLOAT`·`AVGRATE` 정의와 값을 Cloud Save Player Files의 `oplat_stats_v1` 키에 저장한다. `AddAsync`와 `UpdateAverageRateAsync`는 등록되지 않았거나 타입이 다른 항목을 오류로 처리한다. `ResetAsync`는 정의를 유지하고 전체 또는 지정한 항목을 등록된 기본값으로 되돌린다.
+
+통계는 Authentication Player와 UGS 환경별로 분리된다. Dashboard에서 Cloud Save를 활성화해야 한다.
+
 ## 시간
 
 UGS 클라이언트 SDK에는 공통 서버 시각 API가 없으므로 `service.Time`은 플랫폼 생성 시점의 `DateTime.UtcNow`를 기준점으로 잡고 이후 경과 시간을 monotonic clock으로 계산한다. Cloud Code를 필수 의존성으로 추가하지 않으며 `IsSynchronized`는 `false`다.

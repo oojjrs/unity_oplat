@@ -46,6 +46,7 @@ public sealed class PlatformBootstrap : MonoBehaviour, MyPlatformInitializer.Cal
 | --- | --- |
 | 계정과 프로필 | `service.Account`, `service.Nickname`, `service.ProfileSprite` |
 | UTC 시각 | `service.Time.UtcNow`, `service.Time.IsSynchronized` |
+| 사용자 통계 | `service.Stats`로 JSON 정의 목록 등록, `INT`·`FLOAT`·`AVGRATE` 갱신, 초기화 |
 | 파일 저장소 | `service.Storage.WriteAsync`, `ReadAsync`, `ListAsync`, `ExistsAsync`, `DeleteAsync` |
 | Lobby와 방 | `service.Net.Lobby`로 목록 조회, `service.Net.Room`으로 생성·참가·수정·퇴장 |
 | 플레이어와 채팅 | `service.Net.Player`로 플레이어 갱신, `service.Net.Chat`으로 채팅 참가·전송·퇴장 |

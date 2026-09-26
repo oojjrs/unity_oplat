@@ -1,0 +1,20 @@
+{
+  "stats": [
+    {
+      "key": "wins",
+      "type": "INT",
+      "defaultValue": 0
+    },
+    {
+      "key": "distance",
+      "type": "FLOAT",
+      "defaultValue": 0.0
+    },
+    {
+      "key": "points_per_hour",
+      "type": "AVGRATE",
+      "defaultValue": 0.0,
+      "windowSeconds": 72000.0
+    }
+  ]
+}

@@ -3,6 +3,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Unity.Services.Authentication;
+using Unity.Services.CloudSave;
 using Unity.Services.Core;
 using Unity.Services.Friends;
 using Unity.Services.Friends.Models;
@@ -14,10 +15,14 @@ namespace oojjrs.oplat.ugsymous
 {
     internal sealed class UgsymousPlatform : MonoBehaviour, MyPlatform.PlatformInterface
     {
+        private const string StatsStorageKey = "oplat_stats_v1";
+
+        private readonly UgsymousStorage _storage = new();
         private readonly MyTimeServiceInterface _time = MyPlatform.CreateTimeServiceFromLocalClock();
         private UgsymousNet _net;
         private string _nickname;
         private Sprite _profileSprite;
+        private MyStatsServiceInterface _stats;
 
         string MyPlatformServiceInterface.Account => AuthenticationService.Instance.PlayerId;
         bool MyPlatformServiceInterface.IsAlive => (this != null) && AuthenticationService.Instance.IsAuthorized;
@@ -25,7 +30,8 @@ namespace oojjrs.oplat.ugsymous
         MyNetInterface MyPlatformServiceInterface.Net => _net;
         string MyPlatformServiceInterface.Nickname => _nickname;
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
-        MyStorageServiceInterface MyPlatformServiceInterface.Storage { get; } = new UgsymousStorage();
+        MyStatsServiceInterface MyPlatformServiceInterface.Stats => _stats;
+        MyStorageServiceInterface MyPlatformServiceInterface.Storage => _storage;
         MyTimeServiceInterface MyPlatformServiceInterface.Time => _time;
 
         internal static string ToHex(byte[] bytes)
@@ -59,6 +65,7 @@ namespace oojjrs.oplat.ugsymous
             var authentication = AuthenticationService.Instance;
             _nickname = await authentication.GetPlayerNameAsync();
             _profileSprite = Resources.Load<Sprite>("AnonymousProfile");
+            _stats = MyPlatform.CreateStatsService(ReadStatsAsync, WriteStatsAsync);
             await FriendsService.Instance.InitializeAsync(new InitializeOptions().WithMemberPresence(true).WithMemberProfile(true));
             await FriendsService.Instance.SetPresenceAsync(Availability.Online, new UgsymousFriendActivity());
             await VivoxService.Instance.InitializeAsync();
@@ -67,6 +74,30 @@ namespace oojjrs.oplat.ugsymous
 
             cancellationToken.ThrowIfCancellationRequested();
             _net = new UgsymousNet(authentication.PlayerId, callback, _time);
+        }
+
+        private static async Task<(bool IsFound, byte[] Data)> ReadStatsAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var items = await CloudSaveService.Instance.Files.Player.ListAllAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var item in items)
+            {
+                if (item.Key != StatsStorageKey)
+                    continue;
+
+                var data = await CloudSaveService.Instance.Files.Player.LoadBytesAsync(StatsStorageKey);
+                cancellationToken.ThrowIfCancellationRequested();
+                return (true, data);
+            }
+
+            return (false, System.Array.Empty<byte>());
+        }
+
+        private static async Task WriteStatsAsync(byte[] data, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await CloudSaveService.Instance.Files.Player.SaveAsync(StatsStorageKey, data);
         }
 
         private async Task AuthenticateAsync(string profile)

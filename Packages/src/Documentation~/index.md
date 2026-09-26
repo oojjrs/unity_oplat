@@ -9,6 +9,12 @@
 | [`MyPlatformInitializer.CallbackInterface`](api/MyPlatformInitializer.CallbackInterface.md) | 플랫폼 설정, 결과 처리기 연결, 초기화 완료 처리 |
 | [`MyPlatformServiceInterface`](api/MyPlatformServiceInterface.md) | 계정·프로필·저장소·네트워크 진입점과 서비스 수명 |
 
+## 통계
+
+| 문서 | 설명 |
+| --- | --- |
+| [`MyStatsServiceInterface`](api/MyStatsServiceInterface.md) | JSON 정의 목록, `INT`·`FLOAT`·`AVGRATE` 갱신, 전체·키 초기화 |
+
 ## 시간
 
 | 문서 | 설명 |

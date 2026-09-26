@@ -29,6 +29,16 @@ Anonymous 저장소는 현재 Windows 계정의 다음 경로 아래에 파일�
 
 Unity 에디터의 `Tools > Oplat > Open Anonymous Storage Folder` 메뉴로 위 경로의 `v1` 폴더를 탐색기에서 연다. 플레이 모드나 로컬 서버 실행 여부와 관계없이 사용할 수 있으며, 폴더가 없으면 생성한다.
 
+## 통계
+
+Anonymous 통계 요청은 `127.0.0.1:45831`의 로컬 서버가 처리한다. 개발용 JSON 목록을 `EnsureAsync`에 전달하면 없는 `INT`·`FLOAT`·`AVGRATE` 항목을 등록하고 기존 정의가 같은지 확인한다. `AddAsync`와 `UpdateAverageRateAsync`는 등록되지 않았거나 타입이 다른 항목을 오류로 처리한다. 각 요청은 다음 계정별 파일에 즉시 저장된다.
+
+```text
+%LOCALAPPDATA%\oojjrs\Oplat\AnonymousServer\v1\AppId=<AppId>\users\Account=<Account>\stats.bin
+```
+
+파일은 Oplat 내부 형식이므로 직접 편집하지 않는다. `ResetAsync`는 정의를 유지하고 전체 또는 지정한 항목을 등록된 기본값으로 되돌린다. 목록 JSON 형식은 [`MyStatsServiceInterface`](../api/MyStatsServiceInterface.md)에 정의되어 있다.
+
 ## 네트워크
 
 Anonymous 네트워크는 `127.0.0.1:45831`의 로컬 서버를 사용한다. 채팅 메시지 한계는 `service.Net.Chat.MessageByteCountMax`에서 조회한다.

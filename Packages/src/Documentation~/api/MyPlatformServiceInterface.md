@@ -11,6 +11,7 @@
 | `Sprite ProfileSprite` | 프로필 이미지. 가져오지 못하면 `null`이다. |
 | `bool IsAlive` | 플랫폼 서비스가 초기화된 상태로 살아 있는지 여부 |
 | `bool IsRestartRequired` | Steam이 현재 프로세스의 종료와 재실행을 요청했는지 여부 |
+| `MyStatsServiceInterface Stats` | 계정별 `INT`·`FLOAT`·`AVGRATE` 통계 등록, 갱신, 초기화 |
 | `MyStorageServiceInterface Storage` | 사용자 파일 저장소 |
 | `MyNetInterface Net` | Lobby, 방, 플레이어, 채팅과 게임 메시지 서비스 |
 | `MyTimeServiceInterface Time` | monotonic 경과 시간으로 전진하는 UTC 시계와 동기화 상태 |
@@ -22,3 +23,5 @@
 Steam 재실행 흐름과 플랫폼 차이는 [Steam](../platforms/steam.md)과 [Anonymous](../platforms/anonymous.md)를 참고한다.
 
 시각 값과 플랫폼별 기준점은 [`MyTime`](MyTime.md)과 [`MyTimeServiceInterface`](MyTimeServiceInterface.md)를 참고한다.
+
+통계 사용법은 [`MyStatsServiceInterface`](MyStatsServiceInterface.md)를 참고한다.

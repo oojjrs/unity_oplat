@@ -18,6 +18,12 @@
 
 채팅 메시지는 발신자의 Steam 서버 기준 `MyTime`을 Lobby 메시지에 포함해 `sentAt`으로 전달한다.
 
+## 통계
+
+`service.Stats`는 Steamworks App Admin에 등록하고 게시한 `INT`·`FLOAT`·`AVGRATE` 통계의 API Name을 키로 사용한다. 개발용 JSON 목록을 `EnsureAsync`에 전달하면 각 키를 비파괴 조회한다. Steam 클라이언트 API는 `FLOAT`와 `AVGRATE` 설정 타입을 조회하는 메타데이터를 제공하지 않으므로 AVGRATE 타입은 첫 `UpdateAverageRateAsync` 성공 여부로 최종 확인한다.
+
+`AddAsync`, `UpdateAverageRateAsync`와 키 초기화는 내부에서 `StoreStats`를 호출하고 `UserStatsStored_t` 결과까지 기다린다. 전체 초기화는 `ResetAllStats(false)`를 사용하므로 업적을 유지한다. Steam은 단일 AVGRATE 초기화 API를 제공하지 않으므로 AVGRATE는 전체 초기화를 사용한다. 모든 통계 호출은 Unity 메인 스레드에서 시작한다.
+
 ## Steam Cloud
 
 Steamworks App Admin에서 사용자별 byte quota와 file count를 설정하고 Cloud 설정을 저장·게시해야 한다. Storage Task 완료는 현재 프로세스의 `ISteamRemoteStorage` 작업 완료를 뜻하며, 기기 간 업로드·다운로드는 Steam 클라이언트의 후속 동기화가 담당한다.

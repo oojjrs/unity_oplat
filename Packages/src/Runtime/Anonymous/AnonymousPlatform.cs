@@ -25,6 +25,7 @@ namespace oojjrs.oplat.anonymous
         MyNetInterface MyPlatformServiceInterface.Net => Net;
         string MyPlatformServiceInterface.Nickname => _nickname ?? GetNickname();
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
+        MyStatsServiceInterface MyPlatformServiceInterface.Stats => Net.Stats;
         MyStorageServiceInterface MyPlatformServiceInterface.Storage => _storage;
         MyTimeServiceInterface MyPlatformServiceInterface.Time => _time;
 

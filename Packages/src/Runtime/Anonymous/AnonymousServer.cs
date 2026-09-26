@@ -14,6 +14,13 @@ namespace oojjrs.oplat.anonymous
 {
     internal sealed class AnonymousServer
     {
+        public enum StatsTypeEnum : byte
+        {
+            AverageRate = 3,
+            Float = 2,
+            Int = 1,
+        }
+
         public record AddFriendRequestArgument
         {
             public string PlayerId { get; set; }
@@ -44,12 +51,24 @@ namespace oojjrs.oplat.anonymous
             public string RoomId { get; set; }
         }
 
+        public record StatsRequestArgument
+        {
+            public double AverageRateSessionLengthSeconds { get; set; }
+            public double AverageRateWindowSeconds { get; set; }
+            public float FloatValue { get; set; }
+            public int IntValue { get; set; }
+            public string Key { get; set; }
+            public StatsTypeEnum Type { get; set; }
+        }
+
         private readonly AnonymousServerChat.State ChatState = new();
         private readonly object _friendStorageLock = new();
         private readonly CancellationTokenSource LifetimeCancellationSource = new();
         private readonly TcpListener Listener = new(IPAddress.Loopback, AnonymousNet.Port);
         private readonly AnonymousServerRoom.State RoomState = new();
         private readonly Dictionary<string, AnonymousServerSession> Sessions = new();
+        private readonly Dictionary<(uint AppId, string Account), MyStatsServiceInterface> _statsServices = new();
+        private readonly object _statsServicesLock = new();
 
         private bool _isStarted;
 
@@ -112,6 +131,61 @@ namespace oojjrs.oplat.anonymous
                 throw new InvalidOperationException("The local application data path is unavailable.");
 
             return Path.Combine(localApplicationDataPath, "oojjrs", "Oplat", "AnonymousServer", "v1", $"AppId={appId.ToString(CultureInfo.InvariantCulture)}", "users", GetAccountDirectoryName(account), "friends.json");
+        }
+
+        private static string GetStatsStoragePath(AnonymousServerSession session)
+        {
+            var friendStoragePath = GetFriendStoragePath(session);
+            return Path.Combine(Path.GetDirectoryName(friendStoragePath), "stats.bin");
+        }
+
+        private static Task<(bool IsFound, byte[] Data)> ReadStatsAsync(string path, CancellationToken cancellationToken)
+        {
+            return Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    return (true, File.ReadAllBytes(path));
+                }
+                catch (FileNotFoundException)
+                {
+                    return (false, Array.Empty<byte>());
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    return (false, Array.Empty<byte>());
+                }
+            }, cancellationToken);
+        }
+
+        private static Task WriteStatsAsync(string path, byte[] data, CancellationToken cancellationToken)
+        {
+            return Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                var temporaryPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    using (var stream = File.Create(temporaryPath))
+                    {
+                        stream.Write(data, 0, data.Length);
+                        stream.Flush(true);
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (File.Exists(path))
+                        File.Replace(temporaryPath, path, null);
+                    else
+                        File.Move(temporaryPath, path);
+                }
+                finally
+                {
+                    if (File.Exists(temporaryPath))
+                        File.Delete(temporaryPath);
+                }
+            }, cancellationToken);
         }
 
         private static string[] ReadFriendAccounts(AnonymousServerSession session)
@@ -193,7 +267,9 @@ namespace oojjrs.oplat.anonymous
             var response = operation switch
             {
                 AnonymousNet.OperationEnum.AddFriend => await AddFriendAsync(content, session),
+                AnonymousNet.OperationEnum.AddStats => await HandleStatsAsync(operation, content, session),
                 AnonymousNet.OperationEnum.CreateRoom => await AnonymousServerCreateRoom.RunAsync(content, RoomState, session),
+                AnonymousNet.OperationEnum.EnsureStats => await HandleStatsAsync(operation, content, session),
                 AnonymousNet.OperationEnum.ExitChat => await AnonymousServerExitChat.RunAsync(content, ChatState, session),
                 AnonymousNet.OperationEnum.ExitRoom => await AnonymousServerExitRoom.RunAsync(content, ChatState, RoomState, Sessions, session),
                 AnonymousNet.OperationEnum.GetCurrentRoom => await AnonymousServerGetCurrentRoom.RunAsync(RoomState, session),
@@ -202,12 +278,93 @@ namespace oojjrs.oplat.anonymous
                 AnonymousNet.OperationEnum.InviteFriend => await InviteFriendAsync(content, session),
                 AnonymousNet.OperationEnum.JoinChat => await AnonymousServerJoinChat.RunAsync(content, ChatState, RoomState, session),
                 AnonymousNet.OperationEnum.JoinRoom => await AnonymousServerJoinRoom.RunAsync(content, RoomState, Sessions, session),
+                AnonymousNet.OperationEnum.ResetStat => await HandleStatsAsync(operation, content, session),
+                AnonymousNet.OperationEnum.ResetStats => await HandleStatsAsync(operation, content, session),
                 AnonymousNet.OperationEnum.SendChat => await AnonymousServerSendChat.RunAsync(content, ChatState, RoomState, Sessions, session),
+                AnonymousNet.OperationEnum.UpdateAverageRateStat => await HandleStatsAsync(operation, content, session),
                 AnonymousNet.OperationEnum.UpdatePlayer => await AnonymousServerUpdatePlayer.RunAsync(content, RoomState, Sessions, session),
                 AnonymousNet.OperationEnum.UpdateRoom => await AnonymousServerUpdateRoom.RunAsync(content, RoomState, Sessions, session),
                 _ => AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.UnsupportedOperation),
             };
             return (response, session);
+        }
+
+        private MyStatsServiceInterface GetStatsService(AnonymousServerSession session)
+        {
+            var key = (session.AppId, session.Account);
+            lock (_statsServicesLock)
+            {
+                if (_statsServices.TryGetValue(key, out var service))
+                    return service;
+
+                var path = GetStatsStoragePath(session);
+                service = MyPlatform.CreateStatsService(cancellationToken => ReadStatsAsync(path, cancellationToken), (data, cancellationToken) => WriteStatsAsync(path, data, cancellationToken));
+                _statsServices.Add(key, service);
+                return service;
+            }
+        }
+
+        private async Task<AnonymousServerResponse> HandleStatsAsync(AnonymousNet.OperationEnum operation, byte[] content, AnonymousServerSession session)
+        {
+            var cancellationToken = LifetimeCancellationSource.Token;
+            try
+            {
+                var service = GetStatsService(session);
+                if (operation == AnonymousNet.OperationEnum.ResetStats)
+                {
+                    await service.ResetAsync(cancellationToken);
+                    return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Success);
+                }
+
+                var argument = await DeserializeAsync<StatsRequestArgument>(content);
+                if (argument == null)
+                    return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
+
+                switch (operation)
+                {
+                    case AnonymousNet.OperationEnum.EnsureStats:
+                        switch (argument.Type)
+                        {
+                            case StatsTypeEnum.Int:
+                                await service.EnsureAsync(argument.Key, argument.IntValue, cancellationToken);
+                                break;
+                            case StatsTypeEnum.Float:
+                                await service.EnsureAsync(argument.Key, argument.FloatValue, cancellationToken);
+                                break;
+                            case StatsTypeEnum.AverageRate:
+                                await service.EnsureAverageRateAsync(argument.Key, argument.FloatValue, argument.AverageRateWindowSeconds, cancellationToken);
+                                break;
+                            default:
+                                return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
+                        }
+
+                        break;
+                    case AnonymousNet.OperationEnum.AddStats:
+                        if (argument.Type == StatsTypeEnum.Int)
+                            await service.AddAsync(argument.Key, argument.IntValue, cancellationToken);
+                        else if (argument.Type == StatsTypeEnum.Float)
+                            await service.AddAsync(argument.Key, argument.FloatValue, cancellationToken);
+                        else
+                            return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
+
+                        break;
+                    case AnonymousNet.OperationEnum.ResetStat:
+                        await service.ResetAsync(argument.Key, cancellationToken);
+                        break;
+                    case AnonymousNet.OperationEnum.UpdateAverageRateStat:
+                        await service.UpdateAverageRateAsync(argument.Key, argument.FloatValue, argument.AverageRateSessionLengthSeconds, cancellationToken);
+                        break;
+                    default:
+                        return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.UnsupportedOperation);
+                }
+
+                return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Success);
+            }
+            catch (Exception)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.ServerError);
+            }
         }
 
         private async Task<AnonymousServerResponse> GetFriendsAsync(AnonymousServerSession session)

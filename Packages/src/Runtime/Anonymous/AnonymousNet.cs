@@ -10,8 +10,10 @@ namespace oojjrs.oplat.anonymous
         internal enum OperationEnum : byte
         {
             AddFriend = 13,
+            AddStats = 16,
             Authenticate = 1,
             CreateRoom = 2,
+            EnsureStats = 15,
             ExitChat = 9,
             ExitRoom = 3,
             GetCurrentRoom = 8,
@@ -20,7 +22,10 @@ namespace oojjrs.oplat.anonymous
             InviteFriend = 14,
             JoinChat = 10,
             JoinRoom = 5,
+            ResetStat = 18,
+            ResetStats = 17,
             SendChat = 11,
+            UpdateAverageRateStat = 19,
             UpdatePlayer = 6,
             UpdateRoom = 7,
         }
@@ -315,6 +320,96 @@ namespace oojjrs.oplat.anonymous
             }
         }
 
+        private sealed class AnonymousStatsService : MyStatsServiceInterface
+        {
+            private readonly SemaphoreSlim _gate = new(1, 1);
+            private readonly AnonymousNet _net;
+
+            public AnonymousStatsService(AnonymousNet net)
+            {
+                _net = net;
+            }
+
+            Task MyStatsServiceInterface.AddAsync(string key, float value, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                return SendWithoutContentAsync(OperationEnum.AddStats, new AnonymousServer.StatsRequestArgument() { FloatValue = value, Key = key, Type = AnonymousServer.StatsTypeEnum.Float }, cancellationToken);
+            }
+
+            Task MyStatsServiceInterface.AddAsync(string key, int value, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                return SendWithoutContentAsync(OperationEnum.AddStats, new AnonymousServer.StatsRequestArgument() { IntValue = value, Key = key, Type = AnonymousServer.StatsTypeEnum.Int }, cancellationToken);
+            }
+
+            Task MyStatsServiceInterface.EnsureAsync(string definitionsJson, CancellationToken cancellationToken)
+            {
+                return MyPlatform.EnsureStatsAsync(this, definitionsJson, cancellationToken);
+            }
+
+            Task MyStatsServiceInterface.EnsureAsync(string key, float defaultValue, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                return SendWithoutContentAsync(OperationEnum.EnsureStats, new AnonymousServer.StatsRequestArgument() { FloatValue = defaultValue, Key = key, Type = AnonymousServer.StatsTypeEnum.Float }, cancellationToken);
+            }
+
+            Task MyStatsServiceInterface.EnsureAsync(string key, int defaultValue, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                return SendWithoutContentAsync(OperationEnum.EnsureStats, new AnonymousServer.StatsRequestArgument() { IntValue = defaultValue, Key = key, Type = AnonymousServer.StatsTypeEnum.Int }, cancellationToken);
+            }
+
+            Task MyStatsServiceInterface.EnsureAverageRateAsync(string key, float defaultValue, double windowSeconds, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                return SendWithoutContentAsync(OperationEnum.EnsureStats, new AnonymousServer.StatsRequestArgument() { AverageRateWindowSeconds = windowSeconds, FloatValue = defaultValue, Key = key, Type = AnonymousServer.StatsTypeEnum.AverageRate }, cancellationToken);
+            }
+
+            Task MyStatsServiceInterface.ResetAsync(CancellationToken cancellationToken)
+            {
+                return SendWithoutContentAsync(OperationEnum.ResetStats, null, cancellationToken);
+            }
+
+            Task MyStatsServiceInterface.ResetAsync(string key, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                return SendWithoutContentAsync(OperationEnum.ResetStat, new AnonymousServer.StatsRequestArgument() { Key = key }, cancellationToken);
+            }
+
+            Task MyStatsServiceInterface.UpdateAverageRateAsync(string key, float count, double sessionLengthSeconds, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                return SendWithoutContentAsync(OperationEnum.UpdateAverageRateStat, new AnonymousServer.StatsRequestArgument() { AverageRateSessionLengthSeconds = sessionLengthSeconds, FloatValue = count, Key = key, Type = AnonymousServer.StatsTypeEnum.AverageRate }, cancellationToken);
+            }
+
+            private async Task<AnonymousServerResponse> SendAsync(OperationEnum operation, object argument, CancellationToken callerCancellationToken)
+            {
+                using (var cancellationSource = _net.CreateCancellationSource(callerCancellationToken))
+                {
+                    var cancellationToken = cancellationSource.Token;
+                    await _gate.WaitAsync(cancellationToken);
+                    try
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await _net.SendAsync(operation, argument, _net.LifetimeCancellationToken);
+                        var response = await _net.ReceiveAsync(operation, _net.LifetimeCancellationToken);
+                        response.EnsureSuccess();
+                        cancellationToken.ThrowIfCancellationRequested();
+                        return response;
+                    }
+                    finally
+                    {
+                        _gate.Release();
+                    }
+                }
+            }
+
+            private async Task SendWithoutContentAsync(OperationEnum operation, object argument, CancellationToken cancellationToken)
+            {
+                await SendAsync(operation, argument, cancellationToken);
+            }
+        }
+
         internal const int Port = 45831;
 
         private readonly AnonymousClient Client;
@@ -329,6 +424,7 @@ namespace oojjrs.oplat.anonymous
         private readonly AnonymousNetPlayerService PlayerService;
         private readonly AnonymousNetRoomService RoomService;
         private readonly AnonymousServer Server = new();
+        private readonly AnonymousStatsService _statsService;
 
         private string _account;
         private uint _appId;
@@ -361,6 +457,7 @@ namespace oojjrs.oplat.anonymous
         internal MyNetMemberResultInterface MemberResult { get; private set; }
         internal MyNetPlayerServiceInterface.UpdateResultInterface PlayerResult { get; private set; }
         internal MyNetRoomServiceInterface.UpdateResultInterface RoomResult { get; private set; }
+        public MyStatsServiceInterface Stats => _statsService;
         internal MyTimeServiceInterface Time { get; private set; }
         internal bool UseLocal => _useLocal;
 
@@ -375,6 +472,7 @@ namespace oojjrs.oplat.anonymous
             MemberService = new(this);
             PlayerService = new AnonymousNetPlayerService(this);
             RoomService = new AnonymousNetRoomService(this);
+            _statsService = new(this);
         }
 
         internal async Task AuthenticateAsync(string account, string nickname, uint appId, CancellationToken callerCancellationToken)
