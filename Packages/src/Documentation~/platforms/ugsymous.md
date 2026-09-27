@@ -23,9 +23,15 @@ Unity Dashboard에서 프로젝트를 연결하고 Authentication, Cloud Save, F
 
 ## 통계
 
-UGS에는 Steam 통계 스키마를 정의하는 별도 서비스가 없으므로 `service.Stats`는 개발용 JSON 목록으로 등록한 `INT`·`FLOAT`·`AVGRATE` 정의와 값을 Cloud Save Player Files의 `oplat_stats_v1` 키에 저장한다. `AddAsync`와 `UpdateAverageRateAsync`는 등록되지 않았거나 타입이 다른 항목을 오류로 처리한다. `ResetAsync`는 정의를 유지하고 전체 또는 지정한 항목을 등록된 기본값으로 되돌린다.
+UGS에는 Steam 통계 스키마를 정의하는 별도 서비스가 없으므로 `service.Stats`는 개발용 JSON 목록으로 등록한 `INT`·`FLOAT`·`AVGRATE` 정의와 값을 Cloud Save Player Files의 `oplat_stats_v1` 키에 저장한다. 타입별 `GetIntAsync`·`GetFloatAsync`·`GetAverageRateAsync`는 저장된 현재값을 반환한다. 조회·갱신 대상이 등록되지 않았거나 타입이 다르면 오류가 난다. `ResetAsync`는 정의를 유지하고 전체 또는 지정한 항목을 등록된 기본값으로 되돌린다.
 
 통계는 Authentication Player와 UGS 환경별로 분리된다. Dashboard에서 Cloud Save를 활성화해야 한다.
+
+## 업적
+
+Ugsymous 업적은 공통 JSON 목록으로 등록한 정의와 달성 여부를 Cloud Save Player Files의 `oplat_achievements_v1` 키에 저장한다. 등록되지 않은 키의 조회·달성·초기화는 오류가 난다. `Achievements.ResetAsync`는 통계를 유지하고 업적만 초기화한다.
+
+`service.ResetAllProgressAsync`는 `oplat_stats_v1`과 `oplat_achievements_v1`을 차례로 갱신한다. 두 Player File 저장은 하나의 트랜잭션이 아니므로 중간 실패 시 오류를 처리하고 전체 초기화를 다시 호출한다. 업적도 Authentication Player와 UGS 환경별로 분리된다.
 
 ## 시간
 

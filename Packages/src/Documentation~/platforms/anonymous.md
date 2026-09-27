@@ -31,13 +31,23 @@ Unity 에디터의 `Tools > Oplat > Open Anonymous Storage Folder` 메뉴로 위
 
 ## 통계
 
-Anonymous 통계 요청은 `127.0.0.1:45831`의 로컬 서버가 처리한다. 개발용 JSON 목록을 `EnsureAsync`에 전달하면 없는 `INT`·`FLOAT`·`AVGRATE` 항목을 등록하고 기존 정의가 같은지 확인한다. `AddAsync`와 `UpdateAverageRateAsync`는 등록되지 않았거나 타입이 다른 항목을 오류로 처리한다. 각 요청은 다음 계정별 파일에 즉시 저장된다.
+Anonymous 통계 요청은 `127.0.0.1:45831`의 로컬 서버가 처리한다. 개발용 JSON 목록을 `EnsureAsync`에 전달하면 없는 `INT`·`FLOAT`·`AVGRATE` 항목을 등록하고 기존 정의가 같은지 확인한다. 타입별 `GetIntAsync`·`GetFloatAsync`·`GetAverageRateAsync`는 서버에 저장된 현재값을 반환한다. 조회·갱신 대상이 등록되지 않았거나 타입이 다르면 오류가 난다. 각 변경 요청은 다음 계정별 파일에 즉시 저장된다.
 
 ```text
 %LOCALAPPDATA%\oojjrs\Oplat\AnonymousServer\v1\AppId=<AppId>\users\Account=<Account>\stats.bin
 ```
 
 파일은 Oplat 내부 형식이므로 직접 편집하지 않는다. `ResetAsync`는 정의를 유지하고 전체 또는 지정한 항목을 등록된 기본값으로 되돌린다. 목록 JSON 형식은 [`MyStatsServiceInterface`](../api/MyStatsServiceInterface.md)에 정의되어 있다.
+
+## 업적
+
+Anonymous 업적도 로컬 서버가 처리한다. 공통 JSON 목록을 `Achievements.EnsureAsync`에 전달하면 없는 업적을 등록하고 기존 정의를 확인한다. 등록되지 않은 키의 조회·달성·초기화는 오류가 난다. 달성 여부는 다음 계정별 파일에 즉시 저장된다.
+
+```text
+%LOCALAPPDATA%\oojjrs\Oplat\AnonymousServer\v1\AppId=<AppId>\users\Account=<Account>\achievements.bin
+```
+
+`Achievements.ResetAsync`는 통계를 유지하고 업적만 초기화한다. `service.ResetAllProgressAsync`는 통계를 기본값으로 되돌린 뒤 모든 업적을 잠근다. 두 파일의 저장은 하나의 트랜잭션이 아니므로 중간 실패 시 오류를 처리하고 전체 초기화를 다시 호출한다. 목록과 사용법은 [`MyAchievementServiceInterface`](../api/MyAchievementServiceInterface.md)를 참고한다.
 
 ## 네트워크
 

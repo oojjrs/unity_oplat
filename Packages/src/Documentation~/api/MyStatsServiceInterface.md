@@ -46,7 +46,17 @@ await service.Stats.UpdateAverageRateAsync("points_per_hour", 77f, 810d, cancell
 
 `UpdateAverageRateAsync`의 `count`는 직전 호출 이후 누적량이고 `sessionLengthSeconds`는 같은 구간의 초 단위 길이다. Anonymous와 Ugsymous에서 등록되지 않은 키 또는 다른 타입의 키를 갱신하면 오류가 난다. Steam도 App Admin에 없거나 게시되지 않은 키 또는 다른 타입이면 오류가 난다.
 
-## 3. 통계 초기화
+## 3. 현재 통계 조회
+
+```csharp
+var wins = await service.Stats.GetIntAsync("wins", cancellationToken);
+var distance = await service.Stats.GetFloatAsync("distance", cancellationToken);
+var pointsPerHour = await service.Stats.GetAverageRateAsync("points_per_hour", cancellationToken);
+```
+
+반환 타입만으로 오버로드할 수 없으므로 통계 타입별 메서드를 사용한다. Anonymous와 Ugsymous는 등록되지 않았거나 요청한 타입과 다른 키를 오류로 처리한다. Steam은 없는 키와 `INT`·부동소수 계열 불일치를 오류로 처리한다. Steam의 `FLOAT`와 `AVGRATE`는 모두 `GetStat`의 `float` 값을 읽어 런타임에서 서로 구분할 수 없지만, 호출 의도를 구분하기 위해 공개 인터페이스는 별도 메서드를 제공한다.
+
+## 4. 통계 초기화
 
 ```csharp
 await service.Stats.ResetAsync(cancellationToken);

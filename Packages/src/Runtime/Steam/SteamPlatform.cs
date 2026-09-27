@@ -10,7 +10,7 @@ namespace oojjrs.oplat.steam
 {
     internal class SteamPlatform : MonoBehaviour, MyPlatform.PlatformInterface
     {
-        private sealed class SteamStatsService : MyStatsServiceInterface
+        private sealed class SteamProgressService : MyAchievementServiceInterface, MyStatsServiceInterface
         {
             private enum StatsTypeEnum
             {
@@ -35,23 +35,121 @@ namespace oojjrs.oplat.steam
                 }
             }
 
+            private readonly Dictionary<string, MyPlatform.AchievementDefinition> _achievementDefinitions = new(StringComparer.Ordinal);
+            private readonly Dictionary<string, StatDefinition> _statDefinitions = new(StringComparer.Ordinal);
             private readonly SemaphoreSlim _operationGate = new(1, 1);
-            private readonly Dictionary<string, StatDefinition> _definitions = new(StringComparer.Ordinal);
 
+            private Callback<UserStatsReceived_t> _statsReceivedCallback;
             private Callback<UserStatsStored_t> _statsStoredCallback;
             private uint _appId;
             private bool _isInitialized;
             private int _mainThreadId;
+            private TaskCompletionSource<bool> _statsReceivedSource;
             private TaskCompletionSource<bool> _storeSource;
+
+            Task MyAchievementServiceInterface.EnsureAsync(string definitionsJson, CancellationToken cancellationToken)
+            {
+                return MyPlatform.EnsureAchievementsAsync(definitionsJson, EnsureAchievementAsync, cancellationToken);
+            }
+
+            async Task<bool> MyAchievementServiceInterface.IsUnlockedAsync(string key, CancellationToken cancellationToken)
+            {
+                EnsureAchievementReady(key, cancellationToken);
+                await _operationGate.WaitAsync(cancellationToken);
+                try
+                {
+                    EnsureAchievementReady(key, cancellationToken);
+                    if (SteamUserStats.GetAchievement(key, out var isUnlocked) == false)
+                        throw new InvalidOperationException($"Steam achievement '{key}' does not exist or is not published in App Admin.");
+
+                    return isUnlocked;
+                }
+                finally
+                {
+                    _operationGate.Release();
+                }
+            }
+
+            async Task MyAchievementServiceInterface.ResetAsync(CancellationToken cancellationToken)
+            {
+                EnsureReady(cancellationToken);
+                await _operationGate.WaitAsync(cancellationToken);
+                try
+                {
+                    EnsureReady(cancellationToken);
+                    if (_achievementDefinitions.Count == 0)
+                        return;
+
+                    foreach (var key in _achievementDefinitions.Keys)
+                    {
+                        if (SteamUserStats.ClearAchievement(key) == false)
+                            throw new InvalidOperationException($"Steam failed to reset achievement '{key}'.");
+                    }
+
+                    await StoreAsync(cancellationToken);
+                }
+                finally
+                {
+                    _operationGate.Release();
+                }
+            }
+
+            async Task MyAchievementServiceInterface.ResetAsync(string key, CancellationToken cancellationToken)
+            {
+                EnsureAchievementReady(key, cancellationToken);
+                await _operationGate.WaitAsync(cancellationToken);
+                try
+                {
+                    EnsureAchievementReady(key, cancellationToken);
+                    if (SteamUserStats.GetAchievement(key, out var isUnlocked) == false)
+                        throw new InvalidOperationException($"Steam achievement '{key}' does not exist or is not published in App Admin.");
+
+                    if (isUnlocked == false)
+                        return;
+
+                    if (SteamUserStats.ClearAchievement(key) == false)
+                        throw new InvalidOperationException($"Steam failed to reset achievement '{key}'.");
+
+                    await StoreAsync(cancellationToken);
+                }
+                finally
+                {
+                    _operationGate.Release();
+                }
+            }
+
+            async Task MyAchievementServiceInterface.UnlockAsync(string key, CancellationToken cancellationToken)
+            {
+                EnsureAchievementReady(key, cancellationToken);
+                await _operationGate.WaitAsync(cancellationToken);
+                try
+                {
+                    EnsureAchievementReady(key, cancellationToken);
+                    if (SteamUserStats.GetAchievement(key, out var isUnlocked) == false)
+                        throw new InvalidOperationException($"Steam achievement '{key}' does not exist or is not published in App Admin.");
+
+                    if (isUnlocked)
+                        return;
+
+                    if (SteamUserStats.SetAchievement(key) == false)
+                        throw new InvalidOperationException($"Steam failed to unlock achievement '{key}'.");
+
+                    await StoreAsync(cancellationToken);
+                }
+                finally
+                {
+                    _operationGate.Release();
+                }
+            }
 
             async Task MyStatsServiceInterface.AddAsync(string key, float value, CancellationToken cancellationToken)
             {
-                EnsureReady(key, cancellationToken);
+                EnsureStatsReady(key, cancellationToken);
                 EnsureFinite(value, nameof(value));
                 await _operationGate.WaitAsync(cancellationToken);
                 try
                 {
-                    EnsureReady(key, cancellationToken);
+                    EnsureStatsReady(key, cancellationToken);
                     if (SteamUserStats.GetStat(key, out float currentValue) == false)
                         throw new InvalidOperationException($"Steam FLOAT stat '{key}' does not exist or is not published in App Admin.");
 
@@ -70,11 +168,11 @@ namespace oojjrs.oplat.steam
 
             async Task MyStatsServiceInterface.AddAsync(string key, int value, CancellationToken cancellationToken)
             {
-                EnsureReady(key, cancellationToken);
+                EnsureStatsReady(key, cancellationToken);
                 await _operationGate.WaitAsync(cancellationToken);
                 try
                 {
-                    EnsureReady(key, cancellationToken);
+                    EnsureStatsReady(key, cancellationToken);
                     if (SteamUserStats.GetStat(key, out int currentValue) == false)
                         throw new InvalidOperationException($"Steam INT stat '{key}' does not exist or is not published in App Admin.");
 
@@ -112,6 +210,60 @@ namespace oojjrs.oplat.steam
                 await EnsureAsync(key, new StatDefinition(StatsTypeEnum.AverageRate, 0, defaultValue, windowSeconds), cancellationToken);
             }
 
+            async Task<float> MyStatsServiceInterface.GetAverageRateAsync(string key, CancellationToken cancellationToken)
+            {
+                EnsureStatsReady(key, cancellationToken);
+                await _operationGate.WaitAsync(cancellationToken);
+                try
+                {
+                    EnsureStatsReady(key, cancellationToken);
+                    if (SteamUserStats.GetStat(key, out float value) == false)
+                        throw new InvalidOperationException($"Steam AVGRATE stat '{key}' does not exist, is not published, or has a different type in App Admin.");
+
+                    return value;
+                }
+                finally
+                {
+                    _operationGate.Release();
+                }
+            }
+
+            async Task<float> MyStatsServiceInterface.GetFloatAsync(string key, CancellationToken cancellationToken)
+            {
+                EnsureStatsReady(key, cancellationToken);
+                await _operationGate.WaitAsync(cancellationToken);
+                try
+                {
+                    EnsureStatsReady(key, cancellationToken);
+                    if (SteamUserStats.GetStat(key, out float value) == false)
+                        throw new InvalidOperationException($"Steam FLOAT stat '{key}' does not exist, is not published, or has a different type in App Admin.");
+
+                    return value;
+                }
+                finally
+                {
+                    _operationGate.Release();
+                }
+            }
+
+            async Task<int> MyStatsServiceInterface.GetIntAsync(string key, CancellationToken cancellationToken)
+            {
+                EnsureStatsReady(key, cancellationToken);
+                await _operationGate.WaitAsync(cancellationToken);
+                try
+                {
+                    EnsureStatsReady(key, cancellationToken);
+                    if (SteamUserStats.GetStat(key, out int value) == false)
+                        throw new InvalidOperationException($"Steam INT stat '{key}' does not exist, is not published, or has a different type in App Admin.");
+
+                    return value;
+                }
+                finally
+                {
+                    _operationGate.Release();
+                }
+            }
+
             async Task MyStatsServiceInterface.ResetAsync(CancellationToken cancellationToken)
             {
                 EnsureReady(cancellationToken);
@@ -120,6 +272,7 @@ namespace oojjrs.oplat.steam
                 {
                     EnsureReady(cancellationToken);
                     await StoreAsync(() => SteamUserStats.ResetAllStats(false), "Steam failed to reset stats.", cancellationToken);
+                    await RefreshStatsAsync(cancellationToken);
                 }
                 finally
                 {
@@ -129,11 +282,11 @@ namespace oojjrs.oplat.steam
 
             async Task MyStatsServiceInterface.ResetAsync(string key, CancellationToken cancellationToken)
             {
-                EnsureReady(key, cancellationToken);
+                EnsureStatsReady(key, cancellationToken);
                 await _operationGate.WaitAsync(cancellationToken);
                 try
                 {
-                    EnsureReady(key, cancellationToken);
+                    EnsureStatsReady(key, cancellationToken);
                     var definition = GetDefinition(key);
                     bool isSet;
                     if (definition.Type == StatsTypeEnum.Int)
@@ -156,13 +309,13 @@ namespace oojjrs.oplat.steam
 
             async Task MyStatsServiceInterface.UpdateAverageRateAsync(string key, float count, double sessionLengthSeconds, CancellationToken cancellationToken)
             {
-                EnsureReady(key, cancellationToken);
+                EnsureStatsReady(key, cancellationToken);
                 EnsureFinite(count, nameof(count));
                 EnsurePositiveFinite(sessionLengthSeconds, nameof(sessionLengthSeconds));
                 await _operationGate.WaitAsync(cancellationToken);
                 try
                 {
-                    EnsureReady(key, cancellationToken);
+                    EnsureStatsReady(key, cancellationToken);
                     if (SteamUserStats.UpdateAvgRateStat(key, count, sessionLengthSeconds) == false)
                         throw new InvalidOperationException($"Steam AVGRATE stat '{key}' does not exist, is not published, or has a different type in App Admin.");
 
@@ -174,14 +327,30 @@ namespace oojjrs.oplat.steam
                 }
             }
 
-            private async Task EnsureAsync(string key, StatDefinition definition, CancellationToken cancellationToken)
+            public async Task ResetAllProgressAsync(CancellationToken cancellationToken)
             {
-                EnsureReady(key, cancellationToken);
+                EnsureReady(cancellationToken);
                 await _operationGate.WaitAsync(cancellationToken);
                 try
                 {
-                    EnsureReady(key, cancellationToken);
-                    if (_definitions.TryGetValue(key, out var existingDefinition))
+                    EnsureReady(cancellationToken);
+                    await StoreAsync(() => SteamUserStats.ResetAllStats(true), "Steam failed to reset all progress.", cancellationToken);
+                    await RefreshStatsAsync(cancellationToken);
+                }
+                finally
+                {
+                    _operationGate.Release();
+                }
+            }
+
+            private async Task EnsureAsync(string key, StatDefinition definition, CancellationToken cancellationToken)
+            {
+                EnsureStatsReady(key, cancellationToken);
+                await _operationGate.WaitAsync(cancellationToken);
+                try
+                {
+                    EnsureStatsReady(key, cancellationToken);
+                    if (_statDefinitions.TryGetValue(key, out var existingDefinition))
                     {
                         EnsureDefinition(key, existingDefinition, definition);
                         return;
@@ -191,7 +360,33 @@ namespace oojjrs.oplat.steam
                     if (isFound == false)
                         throw new InvalidOperationException($"Steam {definition.Type} stat '{key}' does not exist or is not published in App Admin.");
 
-                    _definitions.Add(key, definition);
+                    _statDefinitions.Add(key, definition);
+                }
+                finally
+                {
+                    _operationGate.Release();
+                }
+            }
+
+            private async Task EnsureAchievementAsync(MyPlatform.AchievementDefinition definition, CancellationToken cancellationToken)
+            {
+                EnsureAchievementReady(definition.Key, cancellationToken);
+                await _operationGate.WaitAsync(cancellationToken);
+                try
+                {
+                    EnsureAchievementReady(definition.Key, cancellationToken);
+                    if (_achievementDefinitions.TryGetValue(definition.Key, out var existingDefinition))
+                    {
+                        if ((existingDefinition.StatKey != definition.StatKey) || (existingDefinition.TargetValue != definition.TargetValue))
+                            throw new InvalidOperationException($"Steam achievement '{definition.Key}' is already ensured with a different definition.");
+
+                        return;
+                    }
+
+                    if (SteamUserStats.GetAchievement(definition.Key, out _) == false)
+                        throw new InvalidOperationException($"Steam achievement '{definition.Key}' does not exist or is not published in App Admin.");
+
+                    _achievementDefinitions.Add(definition.Key, definition);
                 }
                 finally
                 {
@@ -229,7 +424,7 @@ namespace oojjrs.oplat.steam
 
             private StatDefinition GetDefinition(string key)
             {
-                if (_definitions.TryGetValue(key, out var definition))
+                if (_statDefinitions.TryGetValue(key, out var definition))
                     return definition;
 
                 throw new InvalidOperationException($"Steam stat '{key}' is not ensured. Call EnsureAsync first.");
@@ -239,13 +434,19 @@ namespace oojjrs.oplat.steam
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (_isInitialized == false)
-                    throw new InvalidOperationException("Steam stats are not initialized.");
+                    throw new InvalidOperationException("Steam progress services are not initialized.");
 
                 if (Environment.CurrentManagedThreadId != _mainThreadId)
-                    throw new InvalidOperationException("Steam stats must be used on the Unity main thread.");
+                    throw new InvalidOperationException("Steam progress services must be used on the Unity main thread.");
             }
 
-            private void EnsureReady(string key, CancellationToken cancellationToken)
+            private void EnsureAchievementReady(string key, CancellationToken cancellationToken)
+            {
+                EnsureReady(cancellationToken);
+                MyPlatform.EnsureAchievementKey(key);
+            }
+
+            private void EnsureStatsReady(string key, CancellationToken cancellationToken)
             {
                 EnsureReady(cancellationToken);
                 MyPlatform.EnsureStatsKey(key);
@@ -254,6 +455,28 @@ namespace oojjrs.oplat.steam
             private async Task StoreAsync(CancellationToken cancellationToken)
             {
                 await StoreAsync(SteamUserStats.StoreStats, "Steam failed to begin storing stats.", cancellationToken);
+            }
+
+            private async Task RefreshStatsAsync(CancellationToken cancellationToken)
+            {
+                EnsureReady(cancellationToken);
+                if (_statsReceivedSource != null)
+                    throw new InvalidOperationException("A Steam stats refresh is already in progress.");
+
+                var source = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _statsReceivedSource = source;
+                try
+                {
+                    if (SteamUserStats.RequestCurrentStats() == false)
+                        throw new InvalidOperationException("Steam failed to request current stats after reset.");
+
+                    await source.Task;
+                }
+                finally
+                {
+                    if (ReferenceEquals(_statsReceivedSource, source))
+                        _statsReceivedSource = null;
+                }
             }
 
             private async Task StoreAsync(Func<bool> beginStore, string failureMessage, CancellationToken cancellationToken)
@@ -285,8 +508,24 @@ namespace oojjrs.oplat.steam
 
                 _appId = appId;
                 _mainThreadId = Environment.CurrentManagedThreadId;
+                _statsReceivedCallback = Callback<UserStatsReceived_t>.Create(OnStatsReceived);
                 _statsStoredCallback = Callback<UserStatsStored_t>.Create(OnStatsStored);
                 _isInitialized = true;
+            }
+
+            private void OnStatsReceived(UserStatsReceived_t result)
+            {
+                if (result.m_nGameID != _appId)
+                    return;
+
+                var source = _statsReceivedSource;
+                if (source == null)
+                    return;
+
+                if (result.m_eResult == EResult.k_EResultOK)
+                    source.TrySetResult(true);
+                else
+                    source.TrySetException(new InvalidOperationException($"Steam failed to refresh stats after reset ({result.m_eResult})."));
             }
 
             private void OnStatsStored(UserStatsStored_t result)
@@ -307,9 +546,14 @@ namespace oojjrs.oplat.steam
             public void Shutdown()
             {
                 _isInitialized = false;
-                _definitions.Clear();
+                _achievementDefinitions.Clear();
+                _statDefinitions.Clear();
+                _statsReceivedSource?.TrySetCanceled();
+                _statsReceivedSource = null;
                 _storeSource?.TrySetCanceled();
                 _storeSource = null;
+                _statsReceivedCallback?.Dispose();
+                _statsReceivedCallback = null;
                 _statsStoredCallback?.Dispose();
                 _statsStoredCallback = null;
             }
@@ -318,7 +562,7 @@ namespace oojjrs.oplat.steam
         private const int ProfileSpriteLoadTimeoutMilliseconds = 5000;
 
         private readonly SteamNet _net = new();
-        private readonly SteamStatsService _stats = new();
+        private readonly SteamProgressService _progress = new();
         private readonly SteamStorage _storage = new();
 
         private Callback<AvatarImageLoaded_t> _avatarImageLoadedCallback;
@@ -330,14 +574,20 @@ namespace oojjrs.oplat.steam
         private MyTimeServiceInterface _time = MyPlatform.CreateTimeServiceFromLocalClock();
 
         string MyPlatformServiceInterface.Account => SteamUser.GetSteamID().ToString();
+        MyAchievementServiceInterface MyPlatformServiceInterface.Achievements => _progress;
         bool MyPlatformServiceInterface.IsAlive => (this != null) && _isInitialized;
         bool MyPlatformServiceInterface.IsRestartRequired => _isRestartRequired;
         MyNetInterface MyPlatformServiceInterface.Net => _net;
         string MyPlatformServiceInterface.Nickname => SteamFriends.GetPersonaName();
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
-        MyStatsServiceInterface MyPlatformServiceInterface.Stats => _stats;
+        MyStatsServiceInterface MyPlatformServiceInterface.Stats => _progress;
         MyStorageServiceInterface MyPlatformServiceInterface.Storage => _storage;
         MyTimeServiceInterface MyPlatformServiceInterface.Time => _time;
+
+        Task MyPlatformServiceInterface.ResetAllProgressAsync(CancellationToken cancellationToken)
+        {
+            return _progress.ResetAllProgressAsync(cancellationToken);
+        }
 
         private void OnDestroy()
         {
@@ -351,7 +601,7 @@ namespace oojjrs.oplat.steam
             {
                 try
                 {
-                    _stats.Shutdown();
+                    _progress.Shutdown();
                 }
                 finally
                 {
@@ -417,7 +667,7 @@ namespace oojjrs.oplat.steam
             if (actualAppId != callback.AppId)
                 throw new InvalidOperationException($"Steam initialized with App ID {actualAppId}, but {callback.AppId} was expected.");
 
-            _stats.Initialize(appId);
+            _progress.Initialize(appId);
             _time = MyPlatform.CreateTimeService(MyTime.FromUnixTimeSeconds(SteamUtils.GetServerRealTime()), true);
             _net.Initialize(callback.ChatResult, callback.FriendResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomSwitchHandler, callback.RoomResult, _time);
             _profileSprite = await LoadProfileSpriteAsync(cancellationToken);

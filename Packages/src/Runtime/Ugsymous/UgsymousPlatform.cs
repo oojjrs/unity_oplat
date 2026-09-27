@@ -15,16 +15,19 @@ namespace oojjrs.oplat.ugsymous
 {
     internal sealed class UgsymousPlatform : MonoBehaviour, MyPlatform.PlatformInterface
     {
+        private const string AchievementStorageKey = "oplat_achievements_v1";
         private const string StatsStorageKey = "oplat_stats_v1";
 
         private readonly UgsymousStorage _storage = new();
         private readonly MyTimeServiceInterface _time = MyPlatform.CreateTimeServiceFromLocalClock();
+        private MyAchievementServiceInterface _achievements;
         private UgsymousNet _net;
         private string _nickname;
         private Sprite _profileSprite;
         private MyStatsServiceInterface _stats;
 
         string MyPlatformServiceInterface.Account => AuthenticationService.Instance.PlayerId;
+        MyAchievementServiceInterface MyPlatformServiceInterface.Achievements => _achievements;
         bool MyPlatformServiceInterface.IsAlive => (this != null) && AuthenticationService.Instance.IsAuthorized;
         bool MyPlatformServiceInterface.IsRestartRequired => false;
         MyNetInterface MyPlatformServiceInterface.Net => _net;
@@ -33,6 +36,12 @@ namespace oojjrs.oplat.ugsymous
         MyStatsServiceInterface MyPlatformServiceInterface.Stats => _stats;
         MyStorageServiceInterface MyPlatformServiceInterface.Storage => _storage;
         MyTimeServiceInterface MyPlatformServiceInterface.Time => _time;
+
+        async Task MyPlatformServiceInterface.ResetAllProgressAsync(CancellationToken cancellationToken)
+        {
+            await _stats.ResetAsync(cancellationToken);
+            await _achievements.ResetAsync(cancellationToken);
+        }
 
         internal static string ToHex(byte[] bytes)
         {
@@ -65,6 +74,7 @@ namespace oojjrs.oplat.ugsymous
             var authentication = AuthenticationService.Instance;
             _nickname = await authentication.GetPlayerNameAsync();
             _profileSprite = Resources.Load<Sprite>("AnonymousProfile");
+            _achievements = MyPlatform.CreateAchievementService(ReadAchievementsAsync, WriteAchievementsAsync);
             _stats = MyPlatform.CreateStatsService(ReadStatsAsync, WriteStatsAsync);
             await FriendsService.Instance.InitializeAsync(new InitializeOptions().WithMemberPresence(true).WithMemberProfile(true));
             await FriendsService.Instance.SetPresenceAsync(Availability.Online, new UgsymousFriendActivity());
@@ -78,15 +88,25 @@ namespace oojjrs.oplat.ugsymous
 
         private static async Task<(bool IsFound, byte[] Data)> ReadStatsAsync(CancellationToken cancellationToken)
         {
+            return await ReadProgressAsync(StatsStorageKey, cancellationToken);
+        }
+
+        private static async Task<(bool IsFound, byte[] Data)> ReadAchievementsAsync(CancellationToken cancellationToken)
+        {
+            return await ReadProgressAsync(AchievementStorageKey, cancellationToken);
+        }
+
+        private static async Task<(bool IsFound, byte[] Data)> ReadProgressAsync(string key, CancellationToken cancellationToken)
+        {
             cancellationToken.ThrowIfCancellationRequested();
             var items = await CloudSaveService.Instance.Files.Player.ListAllAsync();
             cancellationToken.ThrowIfCancellationRequested();
             foreach (var item in items)
             {
-                if (item.Key != StatsStorageKey)
+                if (item.Key != key)
                     continue;
 
-                var data = await CloudSaveService.Instance.Files.Player.LoadBytesAsync(StatsStorageKey);
+                var data = await CloudSaveService.Instance.Files.Player.LoadBytesAsync(key);
                 cancellationToken.ThrowIfCancellationRequested();
                 return (true, data);
             }
@@ -96,8 +116,18 @@ namespace oojjrs.oplat.ugsymous
 
         private static async Task WriteStatsAsync(byte[] data, CancellationToken cancellationToken)
         {
+            await WriteProgressAsync(StatsStorageKey, data, cancellationToken);
+        }
+
+        private static async Task WriteAchievementsAsync(byte[] data, CancellationToken cancellationToken)
+        {
+            await WriteProgressAsync(AchievementStorageKey, data, cancellationToken);
+        }
+
+        private static async Task WriteProgressAsync(string key, byte[] data, CancellationToken cancellationToken)
+        {
             cancellationToken.ThrowIfCancellationRequested();
-            await CloudSaveService.Instance.Files.Player.SaveAsync(StatsStorageKey, data);
+            await CloudSaveService.Instance.Files.Player.SaveAsync(key, data);
         }
 
         private async Task AuthenticateAsync(string profile)

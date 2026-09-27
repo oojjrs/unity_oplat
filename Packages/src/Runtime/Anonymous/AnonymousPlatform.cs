@@ -20,6 +20,7 @@ namespace oojjrs.oplat.anonymous
         private Sprite _profileSprite;
 
         string MyPlatformServiceInterface.Account => _account ?? GetAccount(GetNickname());
+        MyAchievementServiceInterface MyPlatformServiceInterface.Achievements => Net.Achievements;
         bool MyPlatformServiceInterface.IsAlive => (this != null) && _isInitialized;
         bool MyPlatformServiceInterface.IsRestartRequired => false;
         MyNetInterface MyPlatformServiceInterface.Net => Net;
@@ -28,6 +29,11 @@ namespace oojjrs.oplat.anonymous
         MyStatsServiceInterface MyPlatformServiceInterface.Stats => Net.Stats;
         MyStorageServiceInterface MyPlatformServiceInterface.Storage => _storage;
         MyTimeServiceInterface MyPlatformServiceInterface.Time => _time;
+
+        Task MyPlatformServiceInterface.ResetAllProgressAsync(CancellationToken cancellationToken)
+        {
+            return Net.ResetAllProgressAsync(cancellationToken);
+        }
 
         private void OnDestroy()
         {

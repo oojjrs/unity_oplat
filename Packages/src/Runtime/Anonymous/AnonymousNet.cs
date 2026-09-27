@@ -13,21 +13,90 @@ namespace oojjrs.oplat.anonymous
             AddStats = 16,
             Authenticate = 1,
             CreateRoom = 2,
+            EnsureAchievement = 23,
             EnsureStats = 15,
             ExitChat = 9,
             ExitRoom = 3,
+            GetAverageRateStat = 20,
+            GetAchievement = 24,
             GetCurrentRoom = 8,
             GetFriends = 12,
+            GetFloatStat = 21,
+            GetIntStat = 22,
             GetRooms = 4,
             InviteFriend = 14,
             JoinChat = 10,
             JoinRoom = 5,
+            ResetAchievement = 25,
+            ResetAchievements = 26,
+            ResetAllProgress = 28,
             ResetStat = 18,
             ResetStats = 17,
             SendChat = 11,
+            UnlockAchievement = 27,
             UpdateAverageRateStat = 19,
             UpdatePlayer = 6,
             UpdateRoom = 7,
+        }
+
+        private sealed class AnonymousAchievementService : MyAchievementServiceInterface
+        {
+            private readonly AnonymousNet _net;
+
+            public AnonymousAchievementService(AnonymousNet net)
+            {
+                _net = net;
+            }
+
+            Task MyAchievementServiceInterface.EnsureAsync(string definitionsJson, CancellationToken cancellationToken)
+            {
+                return MyPlatform.EnsureAchievementsAsync(definitionsJson, EnsureAsync, cancellationToken);
+            }
+
+            async Task<bool> MyAchievementServiceInterface.IsUnlockedAsync(string key, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureAchievementKey(key);
+                var response = await _net.SendProgressAsync(OperationEnum.GetAchievement, new AnonymousServer.AchievementRequestArgument() { Key = key }, cancellationToken);
+                var argument = await response.GetContentAsync<AnonymousServer.AchievementResponseArgument>();
+                cancellationToken.ThrowIfCancellationRequested();
+                if (argument == null)
+                    throw new FormatException("Invalid anonymous achievement response.");
+
+                return argument.IsUnlocked;
+            }
+
+            Task MyAchievementServiceInterface.ResetAsync(CancellationToken cancellationToken)
+            {
+                return SendWithoutContentAsync(OperationEnum.ResetAchievements, null, cancellationToken);
+            }
+
+            Task MyAchievementServiceInterface.ResetAsync(string key, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureAchievementKey(key);
+                return SendWithoutContentAsync(OperationEnum.ResetAchievement, new AnonymousServer.AchievementRequestArgument() { Key = key }, cancellationToken);
+            }
+
+            Task MyAchievementServiceInterface.UnlockAsync(string key, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureAchievementKey(key);
+                return SendWithoutContentAsync(OperationEnum.UnlockAchievement, new AnonymousServer.AchievementRequestArgument() { Key = key }, cancellationToken);
+            }
+
+            private Task EnsureAsync(MyPlatform.AchievementDefinition definition, CancellationToken cancellationToken)
+            {
+                var argument = new AnonymousServer.AchievementRequestArgument()
+                {
+                    Key = definition.Key,
+                    StatKey = definition.StatKey,
+                    TargetValue = definition.TargetValue,
+                };
+                return SendWithoutContentAsync(OperationEnum.EnsureAchievement, argument, cancellationToken);
+            }
+
+            private async Task SendWithoutContentAsync(OperationEnum operation, object argument, CancellationToken cancellationToken)
+            {
+                await _net.SendProgressAsync(operation, argument, cancellationToken);
+            }
         }
 
         private enum RoomRoleEnum : byte
@@ -322,7 +391,6 @@ namespace oojjrs.oplat.anonymous
 
         private sealed class AnonymousStatsService : MyStatsServiceInterface
         {
-            private readonly SemaphoreSlim _gate = new(1, 1);
             private readonly AnonymousNet _net;
 
             public AnonymousStatsService(AnonymousNet net)
@@ -365,6 +433,42 @@ namespace oojjrs.oplat.anonymous
                 return SendWithoutContentAsync(OperationEnum.EnsureStats, new AnonymousServer.StatsRequestArgument() { AverageRateWindowSeconds = windowSeconds, FloatValue = defaultValue, Key = key, Type = AnonymousServer.StatsTypeEnum.AverageRate }, cancellationToken);
             }
 
+            async Task<float> MyStatsServiceInterface.GetAverageRateAsync(string key, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                var response = await SendAsync(OperationEnum.GetAverageRateStat, new AnonymousServer.StatsRequestArgument() { Key = key }, cancellationToken);
+                var argument = await response.GetContentAsync<AnonymousServer.StatsResponseArgument>();
+                cancellationToken.ThrowIfCancellationRequested();
+                if (argument == null)
+                    throw new FormatException("Invalid anonymous AVGRATE stat response.");
+
+                return argument.FloatValue;
+            }
+
+            async Task<float> MyStatsServiceInterface.GetFloatAsync(string key, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                var response = await SendAsync(OperationEnum.GetFloatStat, new AnonymousServer.StatsRequestArgument() { Key = key }, cancellationToken);
+                var argument = await response.GetContentAsync<AnonymousServer.StatsResponseArgument>();
+                cancellationToken.ThrowIfCancellationRequested();
+                if (argument == null)
+                    throw new FormatException("Invalid anonymous FLOAT stat response.");
+
+                return argument.FloatValue;
+            }
+
+            async Task<int> MyStatsServiceInterface.GetIntAsync(string key, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                var response = await SendAsync(OperationEnum.GetIntStat, new AnonymousServer.StatsRequestArgument() { Key = key }, cancellationToken);
+                var argument = await response.GetContentAsync<AnonymousServer.StatsResponseArgument>();
+                cancellationToken.ThrowIfCancellationRequested();
+                if (argument == null)
+                    throw new FormatException("Invalid anonymous INT stat response.");
+
+                return argument.IntValue;
+            }
+
             Task MyStatsServiceInterface.ResetAsync(CancellationToken cancellationToken)
             {
                 return SendWithoutContentAsync(OperationEnum.ResetStats, null, cancellationToken);
@@ -384,24 +488,7 @@ namespace oojjrs.oplat.anonymous
 
             private async Task<AnonymousServerResponse> SendAsync(OperationEnum operation, object argument, CancellationToken callerCancellationToken)
             {
-                using (var cancellationSource = _net.CreateCancellationSource(callerCancellationToken))
-                {
-                    var cancellationToken = cancellationSource.Token;
-                    await _gate.WaitAsync(cancellationToken);
-                    try
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        await _net.SendAsync(operation, argument, _net.LifetimeCancellationToken);
-                        var response = await _net.ReceiveAsync(operation, _net.LifetimeCancellationToken);
-                        response.EnsureSuccess();
-                        cancellationToken.ThrowIfCancellationRequested();
-                        return response;
-                    }
-                    finally
-                    {
-                        _gate.Release();
-                    }
-                }
+                return await _net.SendProgressAsync(operation, argument, callerCancellationToken);
             }
 
             private async Task SendWithoutContentAsync(OperationEnum operation, object argument, CancellationToken cancellationToken)
@@ -422,8 +509,10 @@ namespace oojjrs.oplat.anonymous
         internal readonly AnonymousNetLobbyService LobbyService;
         private readonly AnonymousNetMemberService MemberService;
         private readonly AnonymousNetPlayerService PlayerService;
+        private readonly SemaphoreSlim ProgressGate = new(1, 1);
         private readonly AnonymousNetRoomService RoomService;
         private readonly AnonymousServer Server = new();
+        private readonly AnonymousAchievementService _achievementService;
         private readonly AnonymousStatsService _statsService;
 
         private string _account;
@@ -450,6 +539,7 @@ namespace oojjrs.oplat.anonymous
         }
 
         internal string Account => _account;
+        public MyAchievementServiceInterface Achievements => _achievementService;
         internal MyNetChatResultInterface ChatResult { get; private set; }
         internal MyNetFriendResultInterface FriendResult { get; private set; }
         internal bool HasCurrentRoom => _roomRole != RoomRoleEnum.None;
@@ -472,6 +562,7 @@ namespace oojjrs.oplat.anonymous
             MemberService = new(this);
             PlayerService = new AnonymousNetPlayerService(this);
             RoomService = new AnonymousNetRoomService(this);
+            _achievementService = new(this);
             _statsService = new(this);
         }
 
@@ -609,6 +700,11 @@ namespace oojjrs.oplat.anonymous
             return Client.ReceiveAsync(operation, cancellationToken);
         }
 
+        internal async Task ResetAllProgressAsync(CancellationToken cancellationToken)
+        {
+            await SendProgressAsync(OperationEnum.ResetAllProgress, null, cancellationToken);
+        }
+
         internal async Task RunServiceLoopAsync(CancellationToken cancellationToken)
         {
             while (cancellationToken.IsCancellationRequested == false)
@@ -731,6 +827,28 @@ namespace oojjrs.oplat.anonymous
             var content = argument == null ? Array.Empty<byte>() : await Task.Run(() => MyNetSerializer.Serialize(argument));
             cancellationToken.ThrowIfCancellationRequested();
             Client.Send(operation, content);
+        }
+
+        private async Task<AnonymousServerResponse> SendProgressAsync(OperationEnum operation, object argument, CancellationToken callerCancellationToken)
+        {
+            using (var cancellationSource = CreateCancellationSource(callerCancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                await ProgressGate.WaitAsync(cancellationToken);
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await SendAsync(operation, argument, LifetimeCancellationToken);
+                    var response = await ReceiveAsync(operation, LifetimeCancellationToken);
+                    response.EnsureSuccess();
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return response;
+                }
+                finally
+                {
+                    ProgressGate.Release();
+                }
+            }
         }
 
         internal void SetCurrentRoom(MyNetRoomInterface room)

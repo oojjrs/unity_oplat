@@ -13,7 +13,8 @@
 
 | 문서 | 설명 |
 | --- | --- |
-| [`MyStatsServiceInterface`](api/MyStatsServiceInterface.md) | JSON 정의 목록, `INT`·`FLOAT`·`AVGRATE` 갱신, 전체·키 초기화 |
+| [`MyStatsServiceInterface`](api/MyStatsServiceInterface.md) | JSON 정의 목록, `INT`·`FLOAT`·`AVGRATE` 조회·갱신, 전체·키 초기화 |
+| [`MyAchievementServiceInterface`](api/MyAchievementServiceInterface.md) | JSON 업적 정의, 달성 여부 조회, 달성, 전체·키 초기화 |
 
 ## 시간
 

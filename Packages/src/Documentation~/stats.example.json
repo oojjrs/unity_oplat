@@ -16,5 +16,20 @@
       "defaultValue": 0.0,
       "windowSeconds": 72000.0
     }
+  ],
+  "achievements": [
+    {
+      "key": "first_win",
+      "statKey": "wins",
+      "targetValue": 1
+    },
+    {
+      "key": "win_10",
+      "statKey": "wins",
+      "targetValue": 10
+    },
+    {
+      "key": "find_secret"
+    }
   ]
 }

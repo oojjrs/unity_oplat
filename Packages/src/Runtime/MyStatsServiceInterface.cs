@@ -11,6 +11,9 @@ namespace oojjrs.oplat
         Task EnsureAsync(string key, float defaultValue, CancellationToken cancellationToken);
         Task EnsureAsync(string key, int defaultValue, CancellationToken cancellationToken);
         Task EnsureAverageRateAsync(string key, float defaultValue, double windowSeconds, CancellationToken cancellationToken);
+        Task<float> GetAverageRateAsync(string key, CancellationToken cancellationToken);
+        Task<float> GetFloatAsync(string key, CancellationToken cancellationToken);
+        Task<int> GetIntAsync(string key, CancellationToken cancellationToken);
         Task ResetAsync(CancellationToken cancellationToken);
         Task ResetAsync(string key, CancellationToken cancellationToken);
         Task UpdateAverageRateAsync(string key, float count, double sessionLengthSeconds, CancellationToken cancellationToken);

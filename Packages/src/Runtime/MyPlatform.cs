@@ -13,6 +13,20 @@ namespace oojjrs.oplat
 {
     internal static class MyPlatform
     {
+        internal sealed class AchievementDefinition
+        {
+            public string Key { get; }
+            public string StatKey { get; }
+            public double? TargetValue { get; }
+
+            public AchievementDefinition(string key, string statKey, double? targetValue)
+            {
+                Key = key;
+                StatKey = statKey;
+                TargetValue = targetValue;
+            }
+        }
+
         private enum StatsTypeEnum
         {
             AverageRate,
@@ -60,10 +74,302 @@ namespace oojjrs.oplat
         }
 
         [DataContract]
-        private sealed class StatsDefinitionFile
+        private sealed class AchievementDefinitionData
         {
-            [DataMember(Name = "stats", IsRequired = true)]
+            [DataMember(Name = "key", IsRequired = true)]
+            public string Key { get; set; }
+
+            [DataMember(Name = "statKey")]
+            public string StatKey { get; set; }
+
+            [DataMember(Name = "targetValue")]
+            public double? TargetValue { get; set; }
+        }
+
+        [DataContract]
+        private sealed class ProgressDefinitionFile
+        {
+            [DataMember(Name = "achievements")]
+            public AchievementDefinitionData[] Achievements { get; set; }
+
+            [DataMember(Name = "stats")]
             public StatsDefinitionData[] Stats { get; set; }
+        }
+
+        private sealed class StoredAchievementService : MyAchievementServiceInterface
+        {
+            private sealed class StoredAchievement
+            {
+                public bool IsUnlocked { get; set; }
+                public string StatKey { get; }
+                public double? TargetValue { get; }
+
+                public StoredAchievement(string statKey, double? targetValue, bool isUnlocked)
+                {
+                    StatKey = statKey;
+                    TargetValue = targetValue;
+                    IsUnlocked = isUnlocked;
+                }
+            }
+
+            private const int EntryCountMax = 100000;
+            private const int FormatMagic = 0x4F414331;
+            private const int FormatVersion = 1;
+
+            private readonly Dictionary<string, StoredAchievement> _entries = new(StringComparer.Ordinal);
+            private readonly SemaphoreSlim _gate = new(1, 1);
+            private readonly Func<CancellationToken, Task<(bool IsFound, byte[] Data)>> _readAsync;
+            private readonly Func<byte[], CancellationToken, Task> _writeAsync;
+
+            private bool _isLoaded;
+
+            public StoredAchievementService(Func<CancellationToken, Task<(bool IsFound, byte[] Data)>> readAsync, Func<byte[], CancellationToken, Task> writeAsync)
+            {
+                _readAsync = readAsync ?? throw new ArgumentNullException(nameof(readAsync));
+                _writeAsync = writeAsync ?? throw new ArgumentNullException(nameof(writeAsync));
+            }
+
+            Task MyAchievementServiceInterface.EnsureAsync(string definitionsJson, CancellationToken cancellationToken)
+            {
+                return EnsureAchievementsAsync(definitionsJson, EnsureAsync, cancellationToken);
+            }
+
+            async Task<bool> MyAchievementServiceInterface.IsUnlockedAsync(string key, CancellationToken cancellationToken)
+            {
+                EnsureAchievementKey(key);
+                await _gate.WaitAsync(cancellationToken);
+                try
+                {
+                    await LoadAsync(cancellationToken);
+                    return GetEntry(key).IsUnlocked;
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+            }
+
+            async Task MyAchievementServiceInterface.ResetAsync(CancellationToken cancellationToken)
+            {
+                await _gate.WaitAsync(cancellationToken);
+                try
+                {
+                    await LoadAsync(cancellationToken);
+                    var unlockedKeys = new List<string>();
+                    foreach (var pair in _entries)
+                    {
+                        if (pair.Value.IsUnlocked == false)
+                            continue;
+
+                        unlockedKeys.Add(pair.Key);
+                        pair.Value.IsUnlocked = false;
+                    }
+
+                    if (unlockedKeys.Count == 0)
+                        return;
+
+                    try
+                    {
+                        await WriteAsync(cancellationToken);
+                    }
+                    catch
+                    {
+                        foreach (var key in unlockedKeys)
+                            _entries[key].IsUnlocked = true;
+
+                        throw;
+                    }
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+            }
+
+            async Task MyAchievementServiceInterface.ResetAsync(string key, CancellationToken cancellationToken)
+            {
+                EnsureAchievementKey(key);
+                await _gate.WaitAsync(cancellationToken);
+                try
+                {
+                    await LoadAsync(cancellationToken);
+                    var entry = GetEntry(key);
+                    if (entry.IsUnlocked == false)
+                        return;
+
+                    entry.IsUnlocked = false;
+                    try
+                    {
+                        await WriteAsync(cancellationToken);
+                    }
+                    catch
+                    {
+                        entry.IsUnlocked = true;
+                        throw;
+                    }
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+            }
+
+            async Task MyAchievementServiceInterface.UnlockAsync(string key, CancellationToken cancellationToken)
+            {
+                EnsureAchievementKey(key);
+                await _gate.WaitAsync(cancellationToken);
+                try
+                {
+                    await LoadAsync(cancellationToken);
+                    var entry = GetEntry(key);
+                    if (entry.IsUnlocked)
+                        return;
+
+                    entry.IsUnlocked = true;
+                    try
+                    {
+                        await WriteAsync(cancellationToken);
+                    }
+                    catch
+                    {
+                        entry.IsUnlocked = false;
+                        throw;
+                    }
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+            }
+
+            private void Deserialize(byte[] data)
+            {
+                if (data == null)
+                    throw new InvalidDataException("Stored achievement data is missing.");
+
+                using (var stream = new MemoryStream(data, false))
+                using (var reader = new BinaryReader(stream, Encoding.UTF8, false))
+                {
+                    if (reader.ReadInt32() != FormatMagic)
+                        throw new InvalidDataException("Stored achievement data has an unsupported format.");
+
+                    if (reader.ReadInt32() != FormatVersion)
+                        throw new InvalidDataException("Stored achievement data has an unsupported format.");
+
+                    var count = reader.ReadInt32();
+                    if ((count < 0) || (count > EntryCountMax))
+                        throw new InvalidDataException("Stored achievement data has an invalid entry count.");
+
+                    for (var index = 0; index < count; ++index)
+                    {
+                        var key = reader.ReadString();
+                        EnsureAchievementKey(key);
+                        var hasProgress = reader.ReadBoolean();
+                        var statKey = hasProgress ? reader.ReadString() : null;
+                        double? targetValue = hasProgress ? reader.ReadDouble() : null;
+                        if (hasProgress)
+                        {
+                            EnsureStatsKey(statKey);
+                            if (double.IsNaN(targetValue.Value) || double.IsInfinity(targetValue.Value))
+                                throw new InvalidDataException($"Stored achievement '{key}' has an invalid target value.");
+                        }
+
+                        var entry = new StoredAchievement(statKey, targetValue, reader.ReadBoolean());
+                        if (_entries.TryAdd(key, entry) == false)
+                            throw new InvalidDataException($"Stored achievement data contains duplicate key '{key}'.");
+                    }
+
+                    if (stream.Position != stream.Length)
+                        throw new InvalidDataException("Stored achievement data contains trailing bytes.");
+                }
+            }
+
+            internal async Task EnsureAsync(AchievementDefinition definition, CancellationToken cancellationToken)
+            {
+                await _gate.WaitAsync(cancellationToken);
+                try
+                {
+                    await LoadAsync(cancellationToken);
+                    if (_entries.TryGetValue(definition.Key, out var entry))
+                    {
+                        if ((entry.StatKey != definition.StatKey) || (entry.TargetValue != definition.TargetValue))
+                            throw new InvalidOperationException($"Achievement '{definition.Key}' is already registered with a different definition.");
+
+                        return;
+                    }
+
+                    _entries.Add(definition.Key, new StoredAchievement(definition.StatKey, definition.TargetValue, false));
+                    try
+                    {
+                        await WriteAsync(cancellationToken);
+                    }
+                    catch
+                    {
+                        _entries.Remove(definition.Key);
+                        throw;
+                    }
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+            }
+
+            private StoredAchievement GetEntry(string key)
+            {
+                if (_entries.TryGetValue(key, out var entry))
+                    return entry;
+
+                throw new InvalidOperationException($"Achievement '{key}' is not registered. Call EnsureAsync first.");
+            }
+
+            private async Task LoadAsync(CancellationToken cancellationToken)
+            {
+                if (_isLoaded)
+                    return;
+
+                var result = await _readAsync(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (result.IsFound)
+                    Deserialize(result.Data);
+
+                _isLoaded = true;
+            }
+
+            private byte[] Serialize()
+            {
+                using (var stream = new MemoryStream())
+                using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
+                {
+                    writer.Write(FormatMagic);
+                    writer.Write(FormatVersion);
+                    writer.Write(_entries.Count);
+                    var keys = new List<string>(_entries.Keys);
+                    keys.Sort(StringComparer.Ordinal);
+                    foreach (var key in keys)
+                    {
+                        var entry = _entries[key];
+                        writer.Write(key);
+                        var hasProgress = entry.StatKey != null;
+                        writer.Write(hasProgress);
+                        if (hasProgress)
+                        {
+                            writer.Write(entry.StatKey);
+                            writer.Write(entry.TargetValue.Value);
+                        }
+
+                        writer.Write(entry.IsUnlocked);
+                    }
+
+                    writer.Flush();
+                    return stream.ToArray();
+                }
+            }
+
+            private async Task WriteAsync(CancellationToken cancellationToken)
+            {
+                await _writeAsync(Serialize(), cancellationToken);
+            }
         }
 
         private sealed class StoredStatsService : MyStatsServiceInterface
@@ -253,6 +559,51 @@ namespace oojjrs.oplat
                         _entries.Remove(key);
                         throw;
                     }
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+            }
+
+            async Task<float> MyStatsServiceInterface.GetAverageRateAsync(string key, CancellationToken cancellationToken)
+            {
+                EnsureStatsKey(key);
+                await _gate.WaitAsync(cancellationToken);
+                try
+                {
+                    await LoadAsync(cancellationToken);
+                    return GetEntry(key, StatsTypeEnum.AverageRate).FloatValue;
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+            }
+
+            async Task<float> MyStatsServiceInterface.GetFloatAsync(string key, CancellationToken cancellationToken)
+            {
+                EnsureStatsKey(key);
+                await _gate.WaitAsync(cancellationToken);
+                try
+                {
+                    await LoadAsync(cancellationToken);
+                    return GetEntry(key, StatsTypeEnum.Float).FloatValue;
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+            }
+
+            async Task<int> MyStatsServiceInterface.GetIntAsync(string key, CancellationToken cancellationToken)
+            {
+                EnsureStatsKey(key);
+                await _gate.WaitAsync(cancellationToken);
+                try
+                {
+                    await LoadAsync(cancellationToken);
+                    return GetEntry(key, StatsTypeEnum.Int).IntValue;
                 }
                 finally
                 {
@@ -619,9 +970,52 @@ namespace oojjrs.oplat
             throw new NotImplementedException();
         }
 
+        internal static MyAchievementServiceInterface CreateAchievementService(Func<CancellationToken, Task<(bool IsFound, byte[] Data)>> readAsync, Func<byte[], CancellationToken, Task> writeAsync)
+        {
+            return new StoredAchievementService(readAsync, writeAsync);
+        }
+
         public static MyStatsServiceInterface CreateStatsService(Func<CancellationToken, Task<(bool IsFound, byte[] Data)>> readAsync, Func<byte[], CancellationToken, Task> writeAsync)
         {
             return new StoredStatsService(readAsync, writeAsync);
+        }
+
+        internal static async Task EnsureAchievementsAsync(string definitionsJson, Func<AchievementDefinition, CancellationToken, Task> ensureAsync, CancellationToken cancellationToken)
+        {
+            if (ensureAsync == null)
+                throw new ArgumentNullException(nameof(ensureAsync));
+
+            var definitions = ParseAchievementDefinitions(definitionsJson);
+            foreach (var definition in definitions)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await ensureAsync(definition, cancellationToken);
+            }
+        }
+
+        internal static Task EnsureAchievementAsync(MyAchievementServiceInterface service, string key, string statKey, double? targetValue, CancellationToken cancellationToken)
+        {
+            if (service == null)
+                throw new ArgumentNullException(nameof(service));
+
+            if (service is not StoredAchievementService storedService)
+                throw new ArgumentException("The achievement service does not support direct registration.", nameof(service));
+
+            EnsureAchievementKey(key);
+            if ((statKey != null) && string.IsNullOrWhiteSpace(statKey))
+                throw new ArgumentException("An achievement stat key cannot be empty.", nameof(statKey));
+
+            if ((statKey != null) != targetValue.HasValue)
+                throw new ArgumentException("An achievement stat key and target value must be provided together.", nameof(statKey));
+
+            if (statKey != null)
+            {
+                EnsureStatsKey(statKey);
+                if (double.IsNaN(targetValue.Value) || double.IsInfinity(targetValue.Value))
+                    throw new ArgumentOutOfRangeException(nameof(targetValue));
+            }
+
+            return storedService.EnsureAsync(new AchievementDefinition(key, statKey, targetValue), cancellationToken);
         }
 
         public static async Task EnsureStatsAsync(MyStatsServiceInterface service, string definitionsJson, CancellationToken cancellationToken)
@@ -669,18 +1063,101 @@ namespace oojjrs.oplat
                 throw new ArgumentException("A stat key must be shorter than 128 UTF-8 bytes.", nameof(key));
         }
 
-        private static IReadOnlyList<StatsDefinition> ParseStatsDefinitions(string definitionsJson)
+        public static void EnsureAchievementKey(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                throw new ArgumentException("An achievement key is required.", nameof(key));
+
+            if (Encoding.UTF8.GetByteCount(key) >= 128)
+                throw new ArgumentException("An achievement key must be shorter than 128 UTF-8 bytes.", nameof(key));
+        }
+
+        private static IReadOnlyList<AchievementDefinition> ParseAchievementDefinitions(string definitionsJson)
+        {
+            var file = ParseProgressDefinitionFile(definitionsJson);
+            if (file?.Achievements == null)
+                throw new InvalidDataException("Progress definitions must contain an achievements array.");
+
+            var stats = ParseStatsDefinitions(file, false);
+            var statsByKey = new Dictionary<string, StatsDefinition>(stats.Count, StringComparer.Ordinal);
+            foreach (var stat in stats)
+                statsByKey.Add(stat.Key, stat);
+
+            var definitions = new List<AchievementDefinition>(file.Achievements.Length);
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var data in file.Achievements)
+            {
+                if (data == null)
+                    throw new InvalidDataException("Achievement definitions contain an empty item.");
+
+                EnsureAchievementKey(data.Key);
+                if (keys.Add(data.Key) == false)
+                    throw new InvalidDataException($"Achievement definitions contain duplicate key '{data.Key}'.");
+
+                if ((data.StatKey != null) && string.IsNullOrWhiteSpace(data.StatKey))
+                    throw new InvalidDataException($"Achievement '{data.Key}' has an invalid statKey.");
+
+                var hasStatKey = data.StatKey != null;
+                var hasTargetValue = data.TargetValue.HasValue;
+                if (hasStatKey != hasTargetValue)
+                    throw new InvalidDataException($"Achievement '{data.Key}' must define statKey and targetValue together.");
+
+                if (hasStatKey == false)
+                {
+                    definitions.Add(new AchievementDefinition(data.Key, null, null));
+                    continue;
+                }
+
+                EnsureStatsKey(data.StatKey);
+                if (statsByKey.TryGetValue(data.StatKey, out var stat) == false)
+                    throw new InvalidDataException($"Achievement '{data.Key}' references undefined stat '{data.StatKey}'.");
+
+                var targetValue = data.TargetValue.Value;
+                if (double.IsNaN(targetValue) || double.IsInfinity(targetValue))
+                    throw new InvalidDataException($"Achievement '{data.Key}' has an invalid targetValue.");
+
+                if (stat.Type == StatsTypeEnum.Int)
+                {
+                    if ((targetValue < int.MinValue) || (targetValue > int.MaxValue) || (targetValue != Math.Truncate(targetValue)))
+                        throw new InvalidDataException($"Achievement '{data.Key}' has a targetValue incompatible with INT stat '{data.StatKey}'.");
+                }
+                else
+                {
+                    var floatTargetValue = (float)targetValue;
+                    if (float.IsInfinity(floatTargetValue))
+                        throw new InvalidDataException($"Achievement '{data.Key}' has a targetValue incompatible with stat '{data.StatKey}'.");
+                }
+
+                definitions.Add(new AchievementDefinition(data.Key, data.StatKey, targetValue));
+            }
+
+            return definitions;
+        }
+
+        private static ProgressDefinitionFile ParseProgressDefinitionFile(string definitionsJson)
         {
             if (string.IsNullOrWhiteSpace(definitionsJson))
-                throw new ArgumentException("Stats definitions JSON is required.", nameof(definitionsJson));
+                throw new ArgumentException("Progress definitions JSON is required.", nameof(definitionsJson));
 
-            StatsDefinitionFile file;
             var bytes = Encoding.UTF8.GetBytes(definitionsJson);
             using (var stream = new MemoryStream(bytes, false))
-                file = (StatsDefinitionFile)new DataContractJsonSerializer(typeof(StatsDefinitionFile)).ReadObject(stream);
+                return (ProgressDefinitionFile)new DataContractJsonSerializer(typeof(ProgressDefinitionFile)).ReadObject(stream);
+        }
 
+        private static IReadOnlyList<StatsDefinition> ParseStatsDefinitions(string definitionsJson)
+        {
+            return ParseStatsDefinitions(ParseProgressDefinitionFile(definitionsJson), true);
+        }
+
+        private static IReadOnlyList<StatsDefinition> ParseStatsDefinitions(ProgressDefinitionFile file, bool isRequired)
+        {
             if (file?.Stats == null)
-                throw new InvalidDataException("Stats definitions must contain a stats array.");
+            {
+                if (isRequired)
+                    throw new InvalidDataException("Progress definitions must contain a stats array.");
+
+                return Array.Empty<StatsDefinition>();
+            }
 
             var definitions = new List<StatsDefinition>(file.Stats.Length);
             var keys = new HashSet<string>(StringComparer.Ordinal);

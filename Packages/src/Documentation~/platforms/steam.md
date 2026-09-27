@@ -20,9 +20,15 @@
 
 ## 통계
 
-`service.Stats`는 Steamworks App Admin에 등록하고 게시한 `INT`·`FLOAT`·`AVGRATE` 통계의 API Name을 키로 사용한다. 개발용 JSON 목록을 `EnsureAsync`에 전달하면 각 키를 비파괴 조회한다. Steam 클라이언트 API는 `FLOAT`와 `AVGRATE` 설정 타입을 조회하는 메타데이터를 제공하지 않으므로 AVGRATE 타입은 첫 `UpdateAverageRateAsync` 성공 여부로 최종 확인한다.
+`service.Stats`는 Steamworks App Admin에 등록하고 게시한 `INT`·`FLOAT`·`AVGRATE` 통계의 API Name을 키로 사용한다. 개발용 JSON 목록을 `EnsureAsync`에 전달하면 각 키를 비파괴 조회한다. `GetIntAsync`·`GetFloatAsync`·`GetAverageRateAsync`는 Steam `GetStat`으로 현재값을 읽는다. Steam 클라이언트 API는 `FLOAT`와 `AVGRATE` 설정 타입을 조회하는 메타데이터를 제공하지 않으므로 AVGRATE 타입은 첫 `UpdateAverageRateAsync` 성공 여부로 최종 확인한다.
 
 `AddAsync`, `UpdateAverageRateAsync`와 키 초기화는 내부에서 `StoreStats`를 호출하고 `UserStatsStored_t` 결과까지 기다린다. 전체 초기화는 `ResetAllStats(false)`를 사용하므로 업적을 유지한다. Steam은 단일 AVGRATE 초기화 API를 제공하지 않으므로 AVGRATE는 전체 초기화를 사용한다. 모든 통계 호출은 Unity 메인 스레드에서 시작한다.
+
+## 업적
+
+`service.Achievements`는 App Admin에 등록하고 게시한 업적 API Name을 사용한다. `EnsureAsync`는 각 업적을 `GetAchievement`로 확인한다. `IsUnlockedAsync`, `UnlockAsync`와 키 초기화는 각각 `GetAchievement`, `SetAchievement`, `ClearAchievement`를 사용하며 변경은 `StoreStats` 결과까지 기다린다.
+
+업적 전체 초기화는 같은 실행에서 `EnsureAsync`로 확인한 목록을 순회해 통계는 유지한다. `service.ResetAllProgressAsync`는 개발 테스트용 `ResetAllStats(true)`를 사용해 모든 통계와 업적을 초기화하고, 완료 후 `RequestCurrentStats`로 Steam 기본값을 다시 동기화한다. 모든 업적과 전체 진행도 호출은 Unity 메인 스레드에서 시작한다.
 
 ## Steam Cloud
 
