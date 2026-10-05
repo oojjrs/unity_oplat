@@ -28,7 +28,7 @@
 
 `service.Achievements`는 App Admin에 등록하고 게시한 업적 API Name을 사용한다. `EnsureAsync`는 각 업적을 `GetAchievement`로 확인한다. `IsUnlockedAsync`, `UnlockAsync`와 키 초기화는 각각 `GetAchievement`, `SetAchievement`, `ClearAchievement`를 사용하며 변경은 `StoreStats` 결과까지 기다린다.
 
-업적 전체 초기화는 같은 실행에서 `EnsureAsync`로 확인한 목록을 순회해 통계는 유지한다. `service.ResetAllProgressAsync`는 개발 테스트용 `ResetAllStats(true)`를 사용해 모든 통계와 업적을 초기화하고, 완료 후 `RequestCurrentStats`로 Steam 기본값을 다시 동기화한다. 모든 업적과 전체 진행도 호출은 Unity 메인 스레드에서 시작한다.
+업적 전체 초기화는 같은 실행에서 `EnsureAsync`로 확인한 목록을 순회해 통계는 유지한다. `service.ResetAllProgressAsync`는 개발 테스트용 `ResetAllStats(true)`를 사용해 모든 통계와 업적을 초기화하고, 완료 후 `RequestUserStats(SteamUser.GetSteamID())`로 현재 사용자의 통계를 요청하고 `UserStatsReceived_t` 호출 결과를 기다려 Steam 기본값을 다시 동기화한다. 모든 업적과 전체 진행도 호출은 Unity 메인 스레드에서 시작한다.
 
 ## Steam Cloud
 

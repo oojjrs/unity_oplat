@@ -39,7 +39,7 @@ namespace oojjrs.oplat.steam
             private readonly Dictionary<string, StatDefinition> _statDefinitions = new(StringComparer.Ordinal);
             private readonly SemaphoreSlim _operationGate = new(1, 1);
 
-            private Callback<UserStatsReceived_t> _statsReceivedCallback;
+            private CallResult<UserStatsReceived_t> _statsReceivedCallResult;
             private Callback<UserStatsStored_t> _statsStoredCallback;
             private uint _appId;
             private bool _isInitialized;
@@ -467,9 +467,11 @@ namespace oojjrs.oplat.steam
                 _statsReceivedSource = source;
                 try
                 {
-                    if (SteamUserStats.RequestCurrentStats() == false)
+                    var apiCall = SteamUserStats.RequestUserStats(SteamUser.GetSteamID());
+                    if (apiCall == SteamAPICall_t.Invalid)
                         throw new InvalidOperationException("Steam failed to request current stats after reset.");
 
+                    _statsReceivedCallResult.Set(apiCall);
                     await source.Task;
                 }
                 finally
@@ -508,21 +510,20 @@ namespace oojjrs.oplat.steam
 
                 _appId = appId;
                 _mainThreadId = Environment.CurrentManagedThreadId;
-                _statsReceivedCallback = Callback<UserStatsReceived_t>.Create(OnStatsReceived);
+                _statsReceivedCallResult = CallResult<UserStatsReceived_t>.Create(OnStatsReceived);
                 _statsStoredCallback = Callback<UserStatsStored_t>.Create(OnStatsStored);
                 _isInitialized = true;
             }
 
-            private void OnStatsReceived(UserStatsReceived_t result)
+            private void OnStatsReceived(UserStatsReceived_t result, bool ioFailure)
             {
-                if (result.m_nGameID != _appId)
-                    return;
-
                 var source = _statsReceivedSource;
                 if (source == null)
                     return;
 
-                if (result.m_eResult == EResult.k_EResultOK)
+                if (ioFailure)
+                    source.TrySetException(new InvalidOperationException("Steam failed while refreshing stats after reset."));
+                else if (result.m_eResult == EResult.k_EResultOK)
                     source.TrySetResult(true);
                 else
                     source.TrySetException(new InvalidOperationException($"Steam failed to refresh stats after reset ({result.m_eResult})."));
@@ -552,8 +553,8 @@ namespace oojjrs.oplat.steam
                 _statsReceivedSource = null;
                 _storeSource?.TrySetCanceled();
                 _storeSource = null;
-                _statsReceivedCallback?.Dispose();
-                _statsReceivedCallback = null;
+                _statsReceivedCallResult?.Dispose();
+                _statsReceivedCallResult = null;
                 _statsStoredCallback?.Dispose();
                 _statsStoredCallback = null;
             }
