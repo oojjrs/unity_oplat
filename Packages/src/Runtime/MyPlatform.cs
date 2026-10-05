@@ -17,13 +17,13 @@ namespace oojjrs.oplat
         {
             public string Key { get; }
             public string StatKey { get; }
-            public double? TargetValue { get; }
+            public double TargetValue { get; }
 
-            public AchievementDefinition(string key, string statKey, double? targetValue)
+            public AchievementDefinition(string key, string statKey, double targetValue)
             {
                 Key = key;
                 StatKey = statKey;
-                TargetValue = targetValue;
+                TargetValue = statKey == null ? 0 : targetValue;
             }
         }
 
@@ -102,9 +102,9 @@ namespace oojjrs.oplat
             {
                 public bool IsUnlocked { get; set; }
                 public string StatKey { get; }
-                public double? TargetValue { get; }
+                public double TargetValue { get; }
 
-                public StoredAchievement(string statKey, double? targetValue, bool isUnlocked)
+                public StoredAchievement(string statKey, double targetValue, bool isUnlocked)
                 {
                     StatKey = statKey;
                     TargetValue = targetValue;
@@ -266,11 +266,11 @@ namespace oojjrs.oplat
                         EnsureAchievementKey(key);
                         var hasProgress = reader.ReadBoolean();
                         var statKey = hasProgress ? reader.ReadString() : null;
-                        double? targetValue = hasProgress ? reader.ReadDouble() : null;
+                        var targetValue = hasProgress ? reader.ReadDouble() : 0;
                         if (hasProgress)
                         {
                             EnsureStatsKey(statKey);
-                            if (double.IsNaN(targetValue.Value) || double.IsInfinity(targetValue.Value))
+                            if (double.IsNaN(targetValue) || double.IsInfinity(targetValue))
                                 throw new InvalidDataException($"Stored achievement '{key}' has an invalid target value.");
                         }
 
@@ -355,7 +355,7 @@ namespace oojjrs.oplat
                         if (hasProgress)
                         {
                             writer.Write(entry.StatKey);
-                            writer.Write(entry.TargetValue.Value);
+                            writer.Write(entry.TargetValue);
                         }
 
                         writer.Write(entry.IsUnlocked);
@@ -993,7 +993,7 @@ namespace oojjrs.oplat
             }
         }
 
-        internal static Task EnsureAchievementAsync(MyAchievementServiceInterface service, string key, string statKey, double? targetValue, CancellationToken cancellationToken)
+        internal static Task EnsureAchievementAsync(MyAchievementServiceInterface service, string key, string statKey, double targetValue, CancellationToken cancellationToken)
         {
             if (service == null)
                 throw new ArgumentNullException(nameof(service));
@@ -1005,13 +1005,10 @@ namespace oojjrs.oplat
             if ((statKey != null) && string.IsNullOrWhiteSpace(statKey))
                 throw new ArgumentException("An achievement stat key cannot be empty.", nameof(statKey));
 
-            if ((statKey != null) != targetValue.HasValue)
-                throw new ArgumentException("An achievement stat key and target value must be provided together.", nameof(statKey));
-
             if (statKey != null)
             {
                 EnsureStatsKey(statKey);
-                if (double.IsNaN(targetValue.Value) || double.IsInfinity(targetValue.Value))
+                if (double.IsNaN(targetValue) || double.IsInfinity(targetValue))
                     throw new ArgumentOutOfRangeException(nameof(targetValue));
             }
 
@@ -1104,7 +1101,7 @@ namespace oojjrs.oplat
 
                 if (hasStatKey == false)
                 {
-                    definitions.Add(new AchievementDefinition(data.Key, null, null));
+                    definitions.Add(new AchievementDefinition(data.Key, null, 0));
                     continue;
                 }
 

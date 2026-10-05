@@ -30,7 +30,7 @@ namespace oojjrs.oplat.anonymous
         {
             public string Key { get; set; }
             public string StatKey { get; set; }
-            public double? TargetValue { get; set; }
+            public double TargetValue { get; set; }
         }
 
         public record AchievementResponseArgument

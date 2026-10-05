@@ -43,6 +43,8 @@ Anonymous 통계 요청은 `127.0.0.1:45831`의 로컬 서버가 처리한다. �
 
 Anonymous 업적도 로컬 서버가 처리한다. 공통 JSON 목록을 `Achievements.EnsureAsync`에 전달하면 없는 업적을 등록하고 기존 정의를 확인한다. 등록되지 않은 키의 조회·달성·초기화는 오류가 난다. 달성 여부는 다음 계정별 파일에 즉시 저장된다.
 
+패키지 `1.12.2`부터 업적 목표값을 일반 `double`로 전송한다. 이전 버전과 업적 요청 형식이 다르므로 클라이언트와 로컬 서버를 함께 업데이트하고 기존 서버를 종료한 뒤 다시 실행한다. 저장된 `achievements.bin` 형식은 유지된다.
+
 ```text
 %LOCALAPPDATA%\oojjrs\Oplat\AnonymousServer\v1\AppId=<AppId>\users\Account=<Account>\achievements.bin
 ```
