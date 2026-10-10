@@ -662,6 +662,24 @@ namespace oojjrs.oplat
                 }
             }
 
+            async Task<IReadOnlyDictionary<string, double>> MyStatsServiceInterface.GetValuesAsync(CancellationToken cancellationToken)
+            {
+                await _gate.WaitAsync(cancellationToken);
+                try
+                {
+                    await LoadAsync(cancellationToken);
+                    var values = new Dictionary<string, double>(_entries.Count, StringComparer.Ordinal);
+                    foreach (var entry in _entries)
+                        values.Add(entry.Key, entry.Value.Type == StatsTypeEnum.Int ? (double)entry.Value.IntValue : entry.Value.FloatValue);
+
+                    return values;
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+            }
+
             async Task MyStatsServiceInterface.ResetAsync(CancellationToken cancellationToken)
             {
                 await _gate.WaitAsync(cancellationToken);

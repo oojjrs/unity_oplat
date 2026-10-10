@@ -86,6 +86,7 @@ namespace oojjrs.oplat.anonymous
             public double GlobalFloatValue { get; set; }
             public long GlobalIntValue { get; set; }
             public int IntValue { get; set; }
+            public (string Key, double Value)[] Values { get; set; }
         }
 
         private readonly AnonymousServerChat.State ChatState = new();
@@ -305,6 +306,7 @@ namespace oojjrs.oplat.anonymous
                 AnonymousNet.OperationEnum.GetRooms => await AnonymousServerGetRooms.RunAsync(RoomState),
                 AnonymousNet.OperationEnum.GetStatDefinition => await HandleStatsAsync(operation, content, session),
                 AnonymousNet.OperationEnum.GetStatDefinitions => await HandleStatsAsync(operation, content, session),
+                AnonymousNet.OperationEnum.GetStatValues => await HandleStatsAsync(operation, content, session),
                 AnonymousNet.OperationEnum.InviteFriend => await InviteFriendAsync(content, session),
                 AnonymousNet.OperationEnum.JoinChat => await AnonymousServerJoinChat.RunAsync(content, ChatState, RoomState, session),
                 AnonymousNet.OperationEnum.JoinRoom => await AnonymousServerJoinRoom.RunAsync(content, RoomState, Sessions, session),
@@ -419,6 +421,9 @@ namespace oojjrs.oplat.anonymous
                         return await AnonymousServerResponse.CreateAsync(AnonymousServerResponse.ResultCodeEnum.Success, new StatsResponseArgument() { DefinitionsJson = new MyProgressDefinitions() { Stats = new[] { await service.GetDefinitionAsync(argument.Key, argument.Language, cancellationToken) } }.ToJson() });
                     case AnonymousNet.OperationEnum.GetStatDefinitions:
                         return await AnonymousServerResponse.CreateAsync(AnonymousServerResponse.ResultCodeEnum.Success, new StatsResponseArgument() { DefinitionsJson = new MyProgressDefinitions() { Stats = await service.GetDefinitionsAsync(argument.Language, cancellationToken) }.ToJson() });
+                    case AnonymousNet.OperationEnum.GetStatValues:
+                        return await AnonymousServerResponse.CreateAsync(AnonymousServerResponse.ResultCodeEnum.Success, new StatsResponseArgument() { Values = (await service.GetValuesAsync(cancellationToken)).Select(entry => (entry.Key, entry.Value)).ToArray() });
+
                     case AnonymousNet.OperationEnum.GetGlobalFloatStat:
                         return await AnonymousServerResponse.CreateAsync(AnonymousServerResponse.ResultCodeEnum.Success, new StatsResponseArgument() { GlobalFloatValue = await service.GetGlobalFloatAsync(argument.Key, cancellationToken) });
                     case AnonymousNet.OperationEnum.GetGlobalIntStat:

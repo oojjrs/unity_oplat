@@ -1,5 +1,7 @@
 ﻿using oojjrs.oplat.anonymous.controllers;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -30,6 +32,7 @@ namespace oojjrs.oplat.anonymous
             GetRooms = 4,
             GetStatDefinition = 32,
             GetStatDefinitions = 33,
+            GetStatValues = 36,
             InviteFriend = 14,
             JoinChat = 10,
             JoinRoom = 5,
@@ -511,6 +514,17 @@ namespace oojjrs.oplat.anonymous
                     throw new FormatException("Invalid anonymous INT stat response.");
 
                 return argument.IntValue;
+            }
+
+            async Task<IReadOnlyDictionary<string, double>> MyStatsServiceInterface.GetValuesAsync(CancellationToken cancellationToken)
+            {
+                var response = await SendAsync(OperationEnum.GetStatValues, new AnonymousServer.StatsRequestArgument(), cancellationToken);
+                var argument = await response.GetContentAsync<AnonymousServer.StatsResponseArgument>();
+                cancellationToken.ThrowIfCancellationRequested();
+                if (argument?.Values == null)
+                    throw new FormatException("Invalid anonymous stat values response.");
+
+                return argument.Values.ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal);
             }
 
             Task MyStatsServiceInterface.ResetAsync(CancellationToken cancellationToken)

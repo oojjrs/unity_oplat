@@ -31,6 +31,8 @@ Unity 에디터의 `Tools > Oplat > Open Anonymous Storage Folder` 메뉴로 위
 
 ## 통계
 
+1.13.1의 전체 값 조회는 로컬 서버도 같은 버전으로 재시작한 뒤 사용한다.
+
 Anonymous 통계 요청은 `127.0.0.1:45831`의 로컬 서버가 처리한다. 개발용 JSON 목록을 `EnsureAsync`에 전달하면 없는 `INT`·`FLOAT`·`AVGRATE` 항목을 등록하고 기존 정의가 같은지 확인한다. 타입별 `GetIntAsync`·`GetFloatAsync`·`GetAverageRateAsync`는 서버에 저장된 현재값을 반환한다. 조회·갱신 대상이 등록되지 않았거나 타입이 다르면 오류가 난다. 각 변경 요청은 다음 계정별 파일에 즉시 저장된다.
 
 ```text

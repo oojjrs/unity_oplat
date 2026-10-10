@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -18,6 +19,7 @@ namespace oojjrs.oplat
         Task<double> GetGlobalFloatAsync(string key, CancellationToken cancellationToken);
         Task<long> GetGlobalIntAsync(string key, CancellationToken cancellationToken);
         Task<int> GetIntAsync(string key, CancellationToken cancellationToken);
+        Task<IReadOnlyDictionary<string, double>> GetValuesAsync(CancellationToken cancellationToken);
         Task ResetAsync(CancellationToken cancellationToken);
         Task ResetAsync(string key, CancellationToken cancellationToken);
         Task SetAsync(string key, float value, CancellationToken cancellationToken);

@@ -382,6 +382,23 @@ namespace oojjrs.oplat.steam
                 }
             }
 
+            async Task<IReadOnlyDictionary<string, double>> MyStatsServiceInterface.GetValuesAsync(CancellationToken cancellationToken)
+            {
+                var service = (MyStatsServiceInterface)this;
+                var values = new Dictionary<string, double>(StringComparer.Ordinal);
+                foreach (var definition in await service.GetDefinitionsAsync(string.Empty, cancellationToken))
+                {
+                    if (definition.Type == "INT")
+                        values.Add(definition.Key, await service.GetIntAsync(definition.Key, cancellationToken));
+                    else if (definition.Type == "FLOAT")
+                        values.Add(definition.Key, await service.GetFloatAsync(definition.Key, cancellationToken));
+                    else
+                        values.Add(definition.Key, await service.GetAverageRateAsync(definition.Key, cancellationToken));
+                }
+
+                return values;
+            }
+
             async Task MyStatsServiceInterface.ResetAsync(CancellationToken cancellationToken)
             {
                 EnsureReady(cancellationToken);

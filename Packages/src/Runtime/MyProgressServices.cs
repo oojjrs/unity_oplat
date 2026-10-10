@@ -169,6 +169,11 @@ namespace oojjrs.oplat
                 return _state.RunAsync(() => _state.Stats.GetIntAsync(key, cancellationToken), cancellationToken);
             }
 
+            Task<IReadOnlyDictionary<string, double>> MyStatsServiceInterface.GetValuesAsync(CancellationToken cancellationToken)
+            {
+                return _state.Stats.GetValuesAsync(cancellationToken);
+            }
+
             Task MyStatsServiceInterface.ResetAsync(CancellationToken cancellationToken)
             {
                 return _state.RunAsync(async () =>

@@ -76,9 +76,12 @@ var distance = await service.Stats.GetFloatAsync("distance", cancellationToken);
 var pointsPerHour = await service.Stats.GetAverageRateAsync("points_per_hour", cancellationToken);
 var definition = await service.Stats.GetDefinitionAsync("wins", "koreana", cancellationToken);
 var definitions = await service.Stats.GetDefinitionsAsync("koreana", cancellationToken);
+var all = await service.Stats.GetValuesAsync(cancellationToken);
 var totalWins = await service.Stats.GetGlobalIntAsync("wins", cancellationToken);
 var totalDistance = await service.Stats.GetGlobalFloatAsync("distance", cancellationToken);
 ```
+
+GetValuesAsync는 저장값 전체를 변경 없이 반환하며 Steam은 이번 실행에 등록한 키만 반환한다.
 
 Aggregated 조회는 Anonymous의 같은 AppID에 저장된 계정 값을 합산하고 Steam은 `RequestGlobalStats`·`GetGlobalStat`을 사용하며, Ugsymous는 전역 집계 백엔드가 없어 지원하지 않는다.
 
