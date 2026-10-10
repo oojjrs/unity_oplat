@@ -307,6 +307,43 @@ namespace oojjrs.oplat.steam
                 }
             }
 
+            async Task MyStatsServiceInterface.SetAsync(string key, float value, CancellationToken cancellationToken)
+            {
+                EnsureStatsReady(key, cancellationToken);
+                EnsureFinite(value, nameof(value));
+                await _operationGate.WaitAsync(cancellationToken);
+                try
+                {
+                    EnsureStatsReady(key, cancellationToken);
+                    if (SteamUserStats.SetStat(key, value) == false)
+                        throw new InvalidOperationException($"Steam FLOAT stat '{key}' does not exist, is not published, or has a different type in App Admin.");
+
+                    await StoreAsync(cancellationToken);
+                }
+                finally
+                {
+                    _operationGate.Release();
+                }
+            }
+
+            async Task MyStatsServiceInterface.SetAsync(string key, int value, CancellationToken cancellationToken)
+            {
+                EnsureStatsReady(key, cancellationToken);
+                await _operationGate.WaitAsync(cancellationToken);
+                try
+                {
+                    EnsureStatsReady(key, cancellationToken);
+                    if (SteamUserStats.SetStat(key, value) == false)
+                        throw new InvalidOperationException($"Steam INT stat '{key}' does not exist, is not published, or has a different type in App Admin.");
+
+                    await StoreAsync(cancellationToken);
+                }
+                finally
+                {
+                    _operationGate.Release();
+                }
+            }
+
             async Task MyStatsServiceInterface.UpdateAverageRateAsync(string key, float count, double sessionLengthSeconds, CancellationToken cancellationToken)
             {
                 EnsureStatsReady(key, cancellationToken);

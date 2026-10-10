@@ -33,6 +33,7 @@ namespace oojjrs.oplat.anonymous
             ResetStat = 18,
             ResetStats = 17,
             SendChat = 11,
+            SetStats = 29,
             UnlockAchievement = 27,
             UpdateAverageRateStat = 19,
             UpdatePlayer = 6,
@@ -478,6 +479,18 @@ namespace oojjrs.oplat.anonymous
             {
                 MyPlatform.EnsureStatsKey(key);
                 return SendWithoutContentAsync(OperationEnum.ResetStat, new AnonymousServer.StatsRequestArgument() { Key = key }, cancellationToken);
+            }
+
+            Task MyStatsServiceInterface.SetAsync(string key, float value, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                return SendWithoutContentAsync(OperationEnum.SetStats, new AnonymousServer.StatsRequestArgument() { FloatValue = value, Key = key, Type = AnonymousServer.StatsTypeEnum.Float }, cancellationToken);
+            }
+
+            Task MyStatsServiceInterface.SetAsync(string key, int value, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                return SendWithoutContentAsync(OperationEnum.SetStats, new AnonymousServer.StatsRequestArgument() { IntValue = value, Key = key, Type = AnonymousServer.StatsTypeEnum.Int }, cancellationToken);
             }
 
             Task MyStatsServiceInterface.UpdateAverageRateAsync(string key, float count, double sessionLengthSeconds, CancellationToken cancellationToken)

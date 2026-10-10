@@ -666,6 +666,59 @@ namespace oojjrs.oplat
                 }
             }
 
+            async Task MyStatsServiceInterface.SetAsync(string key, float value, CancellationToken cancellationToken)
+            {
+                EnsureStatsKey(key);
+                EnsureFinite(value, nameof(value));
+                await _gate.WaitAsync(cancellationToken);
+                try
+                {
+                    await LoadAsync(cancellationToken);
+                    var entry = GetEntry(key, StatsTypeEnum.Float);
+                    var previousValue = entry.FloatValue;
+                    entry.FloatValue = value;
+                    try
+                    {
+                        await WriteAsync(cancellationToken);
+                    }
+                    catch
+                    {
+                        entry.FloatValue = previousValue;
+                        throw;
+                    }
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+            }
+
+            async Task MyStatsServiceInterface.SetAsync(string key, int value, CancellationToken cancellationToken)
+            {
+                EnsureStatsKey(key);
+                await _gate.WaitAsync(cancellationToken);
+                try
+                {
+                    await LoadAsync(cancellationToken);
+                    var entry = GetEntry(key, StatsTypeEnum.Int);
+                    var previousValue = entry.IntValue;
+                    entry.IntValue = value;
+                    try
+                    {
+                        await WriteAsync(cancellationToken);
+                    }
+                    catch
+                    {
+                        entry.IntValue = previousValue;
+                        throw;
+                    }
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+            }
+
             async Task MyStatsServiceInterface.UpdateAverageRateAsync(string key, float count, double sessionLengthSeconds, CancellationToken cancellationToken)
             {
                 EnsureStatsKey(key);

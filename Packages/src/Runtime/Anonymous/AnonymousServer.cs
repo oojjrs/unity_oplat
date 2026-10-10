@@ -315,6 +315,7 @@ namespace oojjrs.oplat.anonymous
                 AnonymousNet.OperationEnum.ResetStat => await HandleStatsAsync(operation, content, session),
                 AnonymousNet.OperationEnum.ResetStats => await HandleStatsAsync(operation, content, session),
                 AnonymousNet.OperationEnum.SendChat => await AnonymousServerSendChat.RunAsync(content, ChatState, RoomState, Sessions, session),
+                AnonymousNet.OperationEnum.SetStats => await HandleStatsAsync(operation, content, session),
                 AnonymousNet.OperationEnum.UnlockAchievement => await HandleAchievementAsync(operation, content, session),
                 AnonymousNet.OperationEnum.UpdateAverageRateStat => await HandleStatsAsync(operation, content, session),
                 AnonymousNet.OperationEnum.UpdatePlayer => await AnonymousServerUpdatePlayer.RunAsync(content, RoomState, Sessions, session),
@@ -448,6 +449,15 @@ namespace oojjrs.oplat.anonymous
                         return await AnonymousServerResponse.CreateAsync(AnonymousServerResponse.ResultCodeEnum.Success, new StatsResponseArgument() { IntValue = await service.GetIntAsync(argument.Key, cancellationToken) });
                     case AnonymousNet.OperationEnum.ResetStat:
                         await service.ResetAsync(argument.Key, cancellationToken);
+                        break;
+                    case AnonymousNet.OperationEnum.SetStats:
+                        if (argument.Type == StatsTypeEnum.Int)
+                            await service.SetAsync(argument.Key, argument.IntValue, cancellationToken);
+                        else if (argument.Type == StatsTypeEnum.Float)
+                            await service.SetAsync(argument.Key, argument.FloatValue, cancellationToken);
+                        else
+                            return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
+
                         break;
                     case AnonymousNet.OperationEnum.UpdateAverageRateStat:
                         await service.UpdateAverageRateAsync(argument.Key, argument.FloatValue, argument.AverageRateSessionLengthSeconds, cancellationToken);

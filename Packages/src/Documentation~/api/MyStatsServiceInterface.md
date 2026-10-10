@@ -38,6 +38,8 @@ await service.Stats.EnsureAverageRateAsync("points_per_hour", 0f, 72000d, cancel
 
 ## 2. 통계 갱신
 
+`SetAsync`는 `INT`·`FLOAT`의 현재값을 지정한다.
+
 ```csharp
 await service.Stats.AddAsync("wins", 1, cancellationToken);
 await service.Stats.AddAsync("distance", 12.5f, cancellationToken);

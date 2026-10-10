@@ -16,6 +16,8 @@ namespace oojjrs.oplat
         Task<int> GetIntAsync(string key, CancellationToken cancellationToken);
         Task ResetAsync(CancellationToken cancellationToken);
         Task ResetAsync(string key, CancellationToken cancellationToken);
+        Task SetAsync(string key, float value, CancellationToken cancellationToken);
+        Task SetAsync(string key, int value, CancellationToken cancellationToken);
         Task UpdateAverageRateAsync(string key, float count, double sessionLengthSeconds, CancellationToken cancellationToken);
     }
 }
