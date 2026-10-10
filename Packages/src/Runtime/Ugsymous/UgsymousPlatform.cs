@@ -16,6 +16,7 @@ namespace oojjrs.oplat.ugsymous
     internal sealed class UgsymousPlatform : MonoBehaviour, MyPlatform.PlatformInterface
     {
         private const string AchievementStorageKey = "oplat_achievements_v1";
+        private const string DefinitionsStorageKey = "oplat_progress_definitions_v1";
         private const string StatsStorageKey = "oplat_stats_v1";
 
         private readonly UgsymousStorage _storage = new();
@@ -23,6 +24,7 @@ namespace oojjrs.oplat.ugsymous
         private MyAchievementServiceInterface _achievements;
         private UgsymousNet _net;
         private string _nickname;
+        private MyProgressServices _progress;
         private Sprite _profileSprite;
         private MyStatsServiceInterface _stats;
 
@@ -37,10 +39,9 @@ namespace oojjrs.oplat.ugsymous
         MyStorageServiceInterface MyPlatformServiceInterface.Storage => _storage;
         MyTimeServiceInterface MyPlatformServiceInterface.Time => _time;
 
-        async Task MyPlatformServiceInterface.ResetAllProgressAsync(CancellationToken cancellationToken)
+        Task MyPlatformServiceInterface.ResetAllProgressAsync(CancellationToken cancellationToken)
         {
-            await _stats.ResetAsync(cancellationToken);
-            await _achievements.ResetAsync(cancellationToken);
+            return _progress.ResetAllAsync(cancellationToken);
         }
 
         internal static string ToHex(byte[] bytes)
@@ -74,8 +75,9 @@ namespace oojjrs.oplat.ugsymous
             var authentication = AuthenticationService.Instance;
             _nickname = await authentication.GetPlayerNameAsync();
             _profileSprite = Resources.Load<Sprite>("AnonymousProfile");
-            _achievements = MyPlatform.CreateAchievementService(ReadAchievementsAsync, WriteAchievementsAsync);
-            _stats = MyPlatform.CreateStatsService(ReadStatsAsync, WriteStatsAsync);
+            _progress = new MyProgressServices(ReadStatsAsync, WriteStatsAsync, ReadAchievementsAsync, WriteAchievementsAsync, cancellationToken => ReadProgressAsync(DefinitionsStorageKey, cancellationToken), (data, cancellationToken) => WriteProgressAsync(DefinitionsStorageKey, data, cancellationToken));
+            _achievements = _progress.Achievements;
+            _stats = _progress.Stats;
             await FriendsService.Instance.InitializeAsync(new InitializeOptions().WithMemberPresence(true).WithMemberProfile(true));
             await FriendsService.Instance.SetPresenceAsync(Availability.Online, new UgsymousFriendActivity());
             await VivoxService.Instance.InitializeAsync();

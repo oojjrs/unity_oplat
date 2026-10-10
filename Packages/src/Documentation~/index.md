@@ -13,8 +13,8 @@
 
 | 문서 | 설명 |
 | --- | --- |
-| [`MyStatsServiceInterface`](api/MyStatsServiceInterface.md) | JSON 정의 목록, `INT`·`FLOAT`·`AVGRATE` 조회·갱신, 전체·키 초기화 |
-| [`MyAchievementServiceInterface`](api/MyAchievementServiceInterface.md) | JSON 업적 정의, 달성 여부 조회, 달성, 전체·키 초기화 |
+| [`MyStatsServiceInterface`](api/MyStatsServiceInterface.md) | Steam 등록 항목에 대응하는 JSON 정의, 값 제약, 타입별 조회·갱신, 전역 합산, 초기화 |
+| [`MyAchievementServiceInterface`](api/MyAchievementServiceInterface.md) | JSON 정의, 다국어·숨김·아이콘 참조 조회, 통계 목표 자동 해제, 달성 및 초기화 |
 
 ## 시간
 

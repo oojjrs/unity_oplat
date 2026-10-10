@@ -46,8 +46,8 @@ public sealed class PlatformBootstrap : MonoBehaviour, MyPlatformInitializer.Cal
 | --- | --- |
 | 계정과 프로필 | `service.Account`, `service.Nickname`, `service.ProfileSprite` |
 | UTC 시각 | `service.Time.UtcNow`, `service.Time.IsSynchronized` |
-| 사용자 통계 | `service.Stats`로 JSON 정의 목록 등록, `INT`·`FLOAT`·`AVGRATE` 조회·갱신, 초기화 |
-| 업적 | `service.Achievements`로 등록 확인, 달성 여부 조회, 달성, 초기화 |
+| 사용자 통계 | `service.Stats`로 Steam 등록 항목에 대응하는 JSON 정의, 값 제약, `INT`·`FLOAT`·`AVGRATE` 조회·갱신, 전역 합산, 초기화 |
+| 업적 | `service.Achievements`로 JSON 정의, 다국어·숨김·아이콘 참조 조회, 통계 목표 자동 해제, 달성 및 초기화 |
 | 전체 진행도 초기화 | `service.ResetAllProgressAsync`로 통계와 업적을 함께 초기화 |
 | 파일 저장소 | `service.Storage.WriteAsync`, `ReadAsync`, `ListAsync`, `ExistsAsync`, `DeleteAsync` |
 | Lobby와 방 | `service.Net.Lobby`로 목록 조회, `service.Net.Room`으로 생성·참가·수정·퇴장 |
@@ -55,4 +55,4 @@ public sealed class PlatformBootstrap : MonoBehaviour, MyPlatformInitializer.Cal
 | 게임 메시지 | `service.Net.Member.Send(request)`로 요청, `service.Net.Host.Send(response)`로 응답 |
 | 로컬 전송 | `service.Net.UseLocal = true`로 현재 프로세스의 결과 처리기에 직접 전달 |
 
-인터페이스별 설정값, 결과 처리, 플랫폼 차이와 제약은 [패키지 문서](Packages/src/Documentation~/index.md)를 참고한다.
+인터페이스별 설정값, 결과 처리, 플랫폼 차이와 제약은 [패키지 문서](Packages/src/Documentation~/index.md), 업적·통계 JSON 구조는 [전체 예제](Packages/src/Documentation~/stats.example.json)를 참고한다.

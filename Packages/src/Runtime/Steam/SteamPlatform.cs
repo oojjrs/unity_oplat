@@ -36,20 +36,70 @@ namespace oojjrs.oplat.steam
             }
 
             private readonly Dictionary<string, MyPlatform.AchievementDefinition> _achievementDefinitions = new(StringComparer.Ordinal);
+            private readonly Dictionary<string, MyProgressDefinitions.Achievement> _achievementMetadata = new(StringComparer.Ordinal);
             private readonly Dictionary<string, StatDefinition> _statDefinitions = new(StringComparer.Ordinal);
+            private readonly Dictionary<string, MyProgressDefinitions.Stat> _statMetadata = new(StringComparer.Ordinal);
             private readonly SemaphoreSlim _operationGate = new(1, 1);
 
             private CallResult<UserStatsReceived_t> _statsReceivedCallResult;
+            private CallResult<GlobalStatsReceived_t> _globalStatsCallResult;
             private Callback<UserStatsStored_t> _statsStoredCallback;
             private uint _appId;
             private bool _isInitialized;
             private int _mainThreadId;
             private TaskCompletionSource<bool> _statsReceivedSource;
+            private TaskCompletionSource<bool> _globalStatsSource;
             private TaskCompletionSource<bool> _storeSource;
 
-            Task MyAchievementServiceInterface.EnsureAsync(string definitionsJson, CancellationToken cancellationToken)
+            async Task MyAchievementServiceInterface.EnsureAsync(string definitionsJson, CancellationToken cancellationToken)
             {
-                return MyPlatform.EnsureAchievementsAsync(definitionsJson, EnsureAchievementAsync, cancellationToken);
+                var definitions = MyProgressDefinitions.Parse(definitionsJson, false);
+                if (definitions.Achievements == null)
+                    throw new System.IO.InvalidDataException("Progress definitions must contain an achievements array.");
+
+                foreach (var definition in definitions.Achievements)
+                {
+                    await EnsureAchievementAsync(new MyPlatform.AchievementDefinition(definition.Key, definition.StatKey, definition.TargetValue.GetValueOrDefault()), cancellationToken);
+                    _achievementMetadata[definition.Key] = definition;
+                }
+            }
+
+            async Task<MyProgressDefinitions.Achievement> MyAchievementServiceInterface.GetDefinitionAsync(string key, string language, CancellationToken cancellationToken)
+            {
+                EnsureAchievementReady(key, cancellationToken);
+                await _operationGate.WaitAsync(cancellationToken);
+                try
+                {
+                    EnsureAchievementReady(key, cancellationToken);
+                    if (SteamUserStats.GetAchievement(key, out _) == false)
+                        throw new InvalidOperationException($"Steam achievement '{key}' does not exist or is not published.");
+
+                    var definition = _achievementMetadata.TryGetValue(key, out var configured) ? configured.Localize(language) : new MyProgressDefinitions.Achievement() { Key = key };
+                    definition.DisplayName = SteamUserStats.GetAchievementDisplayAttribute(key, "name");
+                    definition.Description = SteamUserStats.GetAchievementDisplayAttribute(key, "desc");
+                    definition.Hidden = SteamUserStats.GetAchievementDisplayAttribute(key, "hidden") == "1";
+                    return definition;
+                }
+                finally
+                {
+                    _operationGate.Release();
+                }
+            }
+
+            async Task<MyProgressDefinitions.Achievement[]> MyAchievementServiceInterface.GetDefinitionsAsync(string language, bool includeHidden, CancellationToken cancellationToken)
+            {
+                EnsureReady(cancellationToken);
+                var result = new List<MyProgressDefinitions.Achievement>();
+                var count = SteamUserStats.GetNumAchievements();
+                for (var index = 0u; index < count; ++index)
+                {
+                    var key = SteamUserStats.GetAchievementName(index);
+                    var definition = await ((MyAchievementServiceInterface)this).GetDefinitionAsync(key, language, cancellationToken);
+                    if (includeHidden || (definition.Hidden == false) || await ((MyAchievementServiceInterface)this).IsUnlockedAsync(key, cancellationToken))
+                        result.Add(definition);
+                }
+
+                return result.ToArray();
             }
 
             async Task<bool> MyAchievementServiceInterface.IsUnlockedAsync(string key, CancellationToken cancellationToken)
@@ -187,9 +237,77 @@ namespace oojjrs.oplat.steam
                 }
             }
 
-            Task MyStatsServiceInterface.EnsureAsync(string definitionsJson, CancellationToken cancellationToken)
+            async Task MyStatsServiceInterface.EnsureAsync(string definitionsJson, CancellationToken cancellationToken)
             {
-                return MyPlatform.EnsureStatsAsync(this, definitionsJson, cancellationToken);
+                var definitions = MyProgressDefinitions.Parse(definitionsJson, false);
+                if (definitions.Stats == null)
+                    throw new System.IO.InvalidDataException("Progress definitions must contain a stats array.");
+
+                foreach (var definition in definitions.Stats)
+                {
+                    if (definition.Type == "INT")
+                        await ((MyStatsServiceInterface)this).EnsureAsync(definition.Key, (int)definition.DefaultValue, cancellationToken);
+                    else if (definition.Type == "FLOAT")
+                        await ((MyStatsServiceInterface)this).EnsureAsync(definition.Key, (float)definition.DefaultValue, cancellationToken);
+                    else
+                        await ((MyStatsServiceInterface)this).EnsureAverageRateAsync(definition.Key, (float)definition.DefaultValue, definition.Window.Value, cancellationToken);
+
+                    _statMetadata[definition.Key] = definition;
+                }
+            }
+
+            Task<MyProgressDefinitions.Stat> MyStatsServiceInterface.GetDefinitionAsync(string key, string language, CancellationToken cancellationToken)
+            {
+                EnsureStatsReady(key, cancellationToken);
+                return Task.FromResult(GetStatMetadata(key).Localize(language));
+            }
+
+            Task<MyProgressDefinitions.Stat[]> MyStatsServiceInterface.GetDefinitionsAsync(string language, CancellationToken cancellationToken)
+            {
+                EnsureReady(cancellationToken);
+                var result = new List<MyProgressDefinitions.Stat>();
+                foreach (var key in _statDefinitions.Keys)
+                    result.Add(GetStatMetadata(key).Localize(language));
+
+                return Task.FromResult(result.ToArray());
+            }
+
+            async Task<double> MyStatsServiceInterface.GetGlobalFloatAsync(string key, CancellationToken cancellationToken)
+            {
+                EnsureStatsReady(key, cancellationToken);
+                await _operationGate.WaitAsync(cancellationToken);
+                try
+                {
+                    await RequestGlobalStatsAsync(cancellationToken);
+                    EnsureStatsReady(key, cancellationToken);
+                    if (SteamUserStats.GetGlobalStat(key, out double value) == false)
+                        throw new InvalidOperationException($"Steam stat '{key}' is not an aggregated FLOAT stat.");
+
+                    return value;
+                }
+                finally
+                {
+                    _operationGate.Release();
+                }
+            }
+
+            async Task<long> MyStatsServiceInterface.GetGlobalIntAsync(string key, CancellationToken cancellationToken)
+            {
+                EnsureStatsReady(key, cancellationToken);
+                await _operationGate.WaitAsync(cancellationToken);
+                try
+                {
+                    await RequestGlobalStatsAsync(cancellationToken);
+                    EnsureStatsReady(key, cancellationToken);
+                    if (SteamUserStats.GetGlobalStat(key, out long value) == false)
+                        throw new InvalidOperationException($"Steam stat '{key}' is not an aggregated INT stat.");
+
+                    return value;
+                }
+                finally
+                {
+                    _operationGate.Release();
+                }
             }
 
             async Task MyStatsServiceInterface.EnsureAsync(string key, float defaultValue, CancellationToken cancellationToken)
@@ -353,7 +471,8 @@ namespace oojjrs.oplat.steam
                 try
                 {
                     EnsureStatsReady(key, cancellationToken);
-                    if (SteamUserStats.UpdateAvgRateStat(key, count, sessionLengthSeconds) == false)
+                    var secondsPerUnit = _statMetadata.TryGetValue(key, out var metadata) ? metadata.SecondsPerUnit.GetValueOrDefault(1d) : 1d;
+                    if (SteamUserStats.UpdateAvgRateStat(key, count, sessionLengthSeconds / secondsPerUnit) == false)
                         throw new InvalidOperationException($"Steam AVGRATE stat '{key}' does not exist, is not published, or has a different type in App Admin.");
 
                     await StoreAsync(cancellationToken);
@@ -438,6 +557,37 @@ namespace oojjrs.oplat.steam
 
                 if ((existingDefinition.DefaultIntValue != definition.DefaultIntValue) || (existingDefinition.DefaultFloatValue != definition.DefaultFloatValue) || (existingDefinition.AverageRateWindowSeconds != definition.AverageRateWindowSeconds))
                     throw new InvalidOperationException($"Steam stat '{key}' is already ensured with a different definition.");
+            }
+
+            private MyProgressDefinitions.Stat GetStatMetadata(string key)
+            {
+                if (_statMetadata.TryGetValue(key, out var metadata))
+                    return metadata;
+
+                var definition = GetDefinition(key);
+                return new MyProgressDefinitions.Stat() { Key = key, Type = definition.Type == StatsTypeEnum.Int ? "INT" : definition.Type == StatsTypeEnum.Float ? "FLOAT" : "AVGRATE", DefaultValue = definition.Type == StatsTypeEnum.Int ? (double)definition.DefaultIntValue : definition.DefaultFloatValue, Window = definition.Type == StatsTypeEnum.AverageRate ? definition.AverageRateWindowSeconds : (double?)null, SecondsPerUnit = definition.Type == StatsTypeEnum.AverageRate ? 1d : (double?)null, SetBy = "Client" };
+            }
+
+            private async Task RequestGlobalStatsAsync(CancellationToken cancellationToken)
+            {
+                EnsureReady(cancellationToken);
+                var source = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _globalStatsSource = source;
+                try
+                {
+                    var call = SteamUserStats.RequestGlobalStats(0);
+                    if (call == SteamAPICall_t.Invalid)
+                        throw new InvalidOperationException("Steam failed to request global stats.");
+
+                    _globalStatsCallResult.Set(call);
+                    using (cancellationToken.Register(() => source.TrySetCanceled()))
+                        await source.Task;
+                }
+                finally
+                {
+                    _globalStatsCallResult?.Cancel();
+                    _globalStatsSource = null;
+                }
             }
 
             private static void EnsureFinite(double value, string parameterName)
@@ -548,8 +698,20 @@ namespace oojjrs.oplat.steam
                 _appId = appId;
                 _mainThreadId = Environment.CurrentManagedThreadId;
                 _statsReceivedCallResult = CallResult<UserStatsReceived_t>.Create(OnStatsReceived);
+                _globalStatsCallResult = CallResult<GlobalStatsReceived_t>.Create(OnGlobalStatsReceived);
                 _statsStoredCallback = Callback<UserStatsStored_t>.Create(OnStatsStored);
                 _isInitialized = true;
+            }
+
+            private void OnGlobalStatsReceived(GlobalStatsReceived_t result, bool ioFailure)
+            {
+                if (_globalStatsSource == null)
+                    return;
+
+                if (ioFailure || (result.m_eResult != EResult.k_EResultOK) || (result.m_nGameID != _appId))
+                    _globalStatsSource.TrySetException(new InvalidOperationException("Steam failed to receive global stats."));
+                else
+                    _globalStatsSource.TrySetResult(true);
             }
 
             private void OnStatsReceived(UserStatsReceived_t result, bool ioFailure)
@@ -585,6 +747,12 @@ namespace oojjrs.oplat.steam
             {
                 _isInitialized = false;
                 _achievementDefinitions.Clear();
+                _achievementMetadata.Clear();
+                _statMetadata.Clear();
+                _globalStatsSource?.TrySetCanceled();
+                _globalStatsSource = null;
+                _globalStatsCallResult?.Dispose();
+                _globalStatsCallResult = null;
                 _statDefinitions.Clear();
                 _statsReceivedSource?.TrySetCanceled();
                 _statsReceivedSource = null;

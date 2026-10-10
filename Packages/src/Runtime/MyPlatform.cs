@@ -134,6 +134,16 @@ namespace oojjrs.oplat
                 return EnsureAchievementsAsync(definitionsJson, EnsureAsync, cancellationToken);
             }
 
+            Task<MyProgressDefinitions.Achievement> MyAchievementServiceInterface.GetDefinitionAsync(string key, string language, CancellationToken cancellationToken)
+            {
+                throw new NotSupportedException("Use the configured progress service to query definitions.");
+            }
+
+            Task<MyProgressDefinitions.Achievement[]> MyAchievementServiceInterface.GetDefinitionsAsync(string language, bool includeHidden, CancellationToken cancellationToken)
+            {
+                throw new NotSupportedException("Use the configured progress service to query definitions.");
+            }
+
             async Task<bool> MyAchievementServiceInterface.IsUnlockedAsync(string key, CancellationToken cancellationToken)
             {
                 EnsureAchievementKey(key);
@@ -473,6 +483,47 @@ namespace oojjrs.oplat
                 return EnsureStatsAsync(this, definitionsJson, cancellationToken);
             }
 
+            Task<MyProgressDefinitions.Stat> MyStatsServiceInterface.GetDefinitionAsync(string key, string language, CancellationToken cancellationToken)
+            {
+                throw new NotSupportedException("Use the configured progress service to query definitions.");
+            }
+
+            Task<MyProgressDefinitions.Stat[]> MyStatsServiceInterface.GetDefinitionsAsync(string language, CancellationToken cancellationToken)
+            {
+                throw new NotSupportedException("Use the configured progress service to query definitions.");
+            }
+
+            Task<double> MyStatsServiceInterface.GetGlobalFloatAsync(string key, CancellationToken cancellationToken)
+            {
+                throw new NotSupportedException("Use the configured progress service to query global stats.");
+            }
+
+            Task<long> MyStatsServiceInterface.GetGlobalIntAsync(string key, CancellationToken cancellationToken)
+            {
+                throw new NotSupportedException("Use the configured progress service to query global stats.");
+            }
+
+            public async Task<(bool IsFound, int IntValue, float FloatValue)> TryReadAsync(string key, bool isInt, CancellationToken cancellationToken)
+            {
+                EnsureStatsKey(key);
+                await _gate.WaitAsync(cancellationToken);
+                try
+                {
+                    await LoadAsync(cancellationToken);
+                    if (_entries.ContainsKey(key) == false)
+                        return (false, 0, 0f);
+
+                    var entry = _entries[key];
+                    if (isInt ? entry.Type != StatsTypeEnum.Int : entry.Type == StatsTypeEnum.Int)
+                        throw new InvalidOperationException($"Stat '{key}' has a different numeric type.");
+                    return (true, entry.IntValue, entry.FloatValue);
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+            }
+
             async Task MyStatsServiceInterface.EnsureAsync(string key, float defaultValue, CancellationToken cancellationToken)
             {
                 EnsureStatsKey(key);
@@ -719,7 +770,12 @@ namespace oojjrs.oplat
                 }
             }
 
-            async Task MyStatsServiceInterface.UpdateAverageRateAsync(string key, float count, double sessionLengthSeconds, CancellationToken cancellationToken)
+            Task MyStatsServiceInterface.UpdateAverageRateAsync(string key, float count, double sessionLengthSeconds, CancellationToken cancellationToken)
+            {
+                return UpdateAverageRateAsync(key, count, sessionLengthSeconds, null, cancellationToken);
+            }
+
+            public async Task UpdateAverageRateAsync(string key, float count, double sessionLengthSeconds, MyProgressDefinitions.Stat definition, CancellationToken cancellationToken)
             {
                 EnsureStatsKey(key);
                 EnsureFinite(count, nameof(count));
@@ -739,6 +795,9 @@ namespace oojjrs.oplat
                     EnsureFinite(averageRate, nameof(count));
                     var averageRateValue = (float)averageRate;
                     EnsureFinite(averageRateValue, nameof(count));
+                    if (definition != null)
+                        MyProgressDefinitions.ValidateChange(definition, previousValue, averageRateValue);
+
                     entry.FloatValue = averageRateValue;
                     entry.AverageRateSampleLengthSeconds = combinedLengthSeconds;
                     try
@@ -1031,6 +1090,19 @@ namespace oojjrs.oplat
         public static MyStatsServiceInterface CreateStatsService(Func<CancellationToken, Task<(bool IsFound, byte[] Data)>> readAsync, Func<byte[], CancellationToken, Task> writeAsync)
         {
             return new StoredStatsService(readAsync, writeAsync);
+        }
+
+        public static Task UpdateConstrainedAverageAsync(MyStatsServiceInterface service, MyProgressDefinitions.Stat definition, float count, double sessionLengthSeconds, CancellationToken cancellationToken)
+        {
+            if (service is not StoredStatsService storedService)
+                throw new ArgumentException("Constrained averages require a stored stats service.", nameof(service));
+
+            return storedService.UpdateAverageRateAsync(definition.Key, count, sessionLengthSeconds, definition, cancellationToken);
+        }
+
+        public static Task<(bool IsFound, int IntValue, float FloatValue)> ReadStoredStatAsync(Func<CancellationToken, Task<(bool IsFound, byte[] Data)>> readAsync, string key, bool isInt, CancellationToken cancellationToken)
+        {
+            return new StoredStatsService(readAsync, (data, token) => throw new InvalidOperationException("A stored stat read cannot write user data.")).TryReadAsync(key, isInt, cancellationToken);
         }
 
         internal static async Task EnsureAchievementsAsync(string definitionsJson, Func<AchievementDefinition, CancellationToken, Task> ensureAsync, CancellationToken cancellationToken)

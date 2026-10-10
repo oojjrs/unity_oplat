@@ -3,33 +3,80 @@
     {
       "key": "wins",
       "type": "INT",
-      "defaultValue": 0
+      "id": 0,
+      "displayName": "Wins",
+      "setBy": "Client",
+      "incrementOnly": true,
+      "maxChange": 1,
+      "minValue": 0,
+      "maxValue": 1000000,
+      "defaultValue": 0,
+      "aggregated": true,
+      "localizations": [
+        { "language": "koreana", "displayName": "승리 횟수" }
+      ]
     },
     {
       "key": "distance",
       "type": "FLOAT",
-      "defaultValue": 0.0
+      "displayName": "Distance",
+      "setBy": "Client",
+      "defaultValue": 0.0,
+      "minValue": 0.0,
+      "aggregated": true
     },
     {
       "key": "points_per_hour",
       "type": "AVGRATE",
       "defaultValue": 0.0,
-      "windowSeconds": 72000.0
+      "window": 20.0,
+      "secondsPerUnit": 3600.0
+    },
+    {
+      "key": "server_wins",
+      "type": "INT",
+      "setBy": "GameServer",
+      "defaultValue": 0
+    },
+    {
+      "key": "official_wins",
+      "type": "INT",
+      "setBy": "OfficialGameServer",
+      "defaultValue": 0
     }
   ],
   "achievements": [
     {
+      "id": 0,
       "key": "first_win",
+      "displayName": "First Win",
+      "description": "Win a game.",
+      "setBy": "Client",
+      "hidden": false,
+      "achievedIcon": "Achievements/first_win",
+      "unachievedIcon": "Achievements/first_win_locked",
+      "localizations": [
+        { "language": "english", "displayName": "First Win", "description": "Win a game." },
+        { "language": "koreana", "displayName": "첫 승리", "description": "게임에서 승리하세요." }
+      ],
       "statKey": "wins",
       "targetValue": 1
     },
     {
       "key": "win_10",
+      "displayName": "Ten Wins",
+      "description": "Win ten games.",
       "statKey": "wins",
       "targetValue": 10
     },
     {
-      "key": "find_secret"
+      "key": "find_secret",
+      "displayName": "Secret Found",
+      "description": "Find the secret.",
+      "setBy": "Client",
+      "hidden": true,
+      "achievedIcon": "Achievements/find_secret",
+      "unachievedIcon": "Achievements/hidden"
     }
   ]
 }

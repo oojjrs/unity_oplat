@@ -19,11 +19,17 @@ namespace oojjrs.oplat.anonymous
             ExitRoom = 3,
             GetAverageRateStat = 20,
             GetAchievement = 24,
+            GetAchievementDefinition = 30,
+            GetAchievementDefinitions = 31,
             GetCurrentRoom = 8,
             GetFriends = 12,
             GetFloatStat = 21,
+            GetGlobalFloatStat = 34,
+            GetGlobalIntStat = 35,
             GetIntStat = 22,
             GetRooms = 4,
+            GetStatDefinition = 32,
+            GetStatDefinitions = 33,
             InviteFriend = 14,
             JoinChat = 10,
             JoinRoom = 5,
@@ -51,7 +57,23 @@ namespace oojjrs.oplat.anonymous
 
             Task MyAchievementServiceInterface.EnsureAsync(string definitionsJson, CancellationToken cancellationToken)
             {
-                return MyPlatform.EnsureAchievementsAsync(definitionsJson, EnsureAsync, cancellationToken);
+                MyProgressDefinitions.Parse(definitionsJson, false);
+                return SendWithoutContentAsync(OperationEnum.EnsureAchievement, new AnonymousServer.AchievementRequestArgument() { DefinitionsJson = definitionsJson }, cancellationToken);
+            }
+
+            async Task<MyProgressDefinitions.Achievement> MyAchievementServiceInterface.GetDefinitionAsync(string key, string language, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureAchievementKey(key);
+                var response = await _net.SendProgressAsync(OperationEnum.GetAchievementDefinition, new AnonymousServer.AchievementRequestArgument() { Key = key, Language = language }, cancellationToken);
+                var argument = await response.GetContentAsync<AnonymousServer.AchievementResponseArgument>();
+                return MyProgressDefinitions.Parse(argument.DefinitionsJson).Achievements[0];
+            }
+
+            async Task<MyProgressDefinitions.Achievement[]> MyAchievementServiceInterface.GetDefinitionsAsync(string language, bool includeHidden, CancellationToken cancellationToken)
+            {
+                var response = await _net.SendProgressAsync(OperationEnum.GetAchievementDefinitions, new AnonymousServer.AchievementRequestArgument() { IncludeHidden = includeHidden, Language = language }, cancellationToken);
+                var argument = await response.GetContentAsync<AnonymousServer.AchievementResponseArgument>();
+                return MyProgressDefinitions.Parse(argument.DefinitionsJson).Achievements;
             }
 
             async Task<bool> MyAchievementServiceInterface.IsUnlockedAsync(string key, CancellationToken cancellationToken)
@@ -81,17 +103,6 @@ namespace oojjrs.oplat.anonymous
             {
                 MyPlatform.EnsureAchievementKey(key);
                 return SendWithoutContentAsync(OperationEnum.UnlockAchievement, new AnonymousServer.AchievementRequestArgument() { Key = key }, cancellationToken);
-            }
-
-            private Task EnsureAsync(MyPlatform.AchievementDefinition definition, CancellationToken cancellationToken)
-            {
-                var argument = new AnonymousServer.AchievementRequestArgument()
-                {
-                    Key = definition.Key,
-                    StatKey = definition.StatKey,
-                    TargetValue = definition.TargetValue,
-                };
-                return SendWithoutContentAsync(OperationEnum.EnsureAchievement, argument, cancellationToken);
             }
 
             private async Task SendWithoutContentAsync(OperationEnum operation, object argument, CancellationToken cancellationToken)
@@ -413,7 +424,8 @@ namespace oojjrs.oplat.anonymous
 
             Task MyStatsServiceInterface.EnsureAsync(string definitionsJson, CancellationToken cancellationToken)
             {
-                return MyPlatform.EnsureStatsAsync(this, definitionsJson, cancellationToken);
+                MyProgressDefinitions.Parse(definitionsJson, false);
+                return SendWithoutContentAsync(OperationEnum.EnsureStats, new AnonymousServer.StatsRequestArgument() { DefinitionsJson = definitionsJson }, cancellationToken);
             }
 
             Task MyStatsServiceInterface.EnsureAsync(string key, float defaultValue, CancellationToken cancellationToken)
@@ -432,6 +444,37 @@ namespace oojjrs.oplat.anonymous
             {
                 MyPlatform.EnsureStatsKey(key);
                 return SendWithoutContentAsync(OperationEnum.EnsureStats, new AnonymousServer.StatsRequestArgument() { AverageRateWindowSeconds = windowSeconds, FloatValue = defaultValue, Key = key, Type = AnonymousServer.StatsTypeEnum.AverageRate }, cancellationToken);
+            }
+
+            async Task<MyProgressDefinitions.Stat> MyStatsServiceInterface.GetDefinitionAsync(string key, string language, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                var response = await SendAsync(OperationEnum.GetStatDefinition, new AnonymousServer.StatsRequestArgument() { Key = key, Language = language }, cancellationToken);
+                var argument = await response.GetContentAsync<AnonymousServer.StatsResponseArgument>();
+                return MyProgressDefinitions.Parse(argument.DefinitionsJson).Stats[0];
+            }
+
+            async Task<MyProgressDefinitions.Stat[]> MyStatsServiceInterface.GetDefinitionsAsync(string language, CancellationToken cancellationToken)
+            {
+                var response = await SendAsync(OperationEnum.GetStatDefinitions, new AnonymousServer.StatsRequestArgument() { Language = language }, cancellationToken);
+                var argument = await response.GetContentAsync<AnonymousServer.StatsResponseArgument>();
+                return MyProgressDefinitions.Parse(argument.DefinitionsJson).Stats;
+            }
+
+            async Task<double> MyStatsServiceInterface.GetGlobalFloatAsync(string key, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                var response = await SendAsync(OperationEnum.GetGlobalFloatStat, new AnonymousServer.StatsRequestArgument() { Key = key }, cancellationToken);
+                var argument = await response.GetContentAsync<AnonymousServer.StatsResponseArgument>();
+                return argument.GlobalFloatValue;
+            }
+
+            async Task<long> MyStatsServiceInterface.GetGlobalIntAsync(string key, CancellationToken cancellationToken)
+            {
+                MyPlatform.EnsureStatsKey(key);
+                var response = await SendAsync(OperationEnum.GetGlobalIntStat, new AnonymousServer.StatsRequestArgument() { Key = key }, cancellationToken);
+                var argument = await response.GetContentAsync<AnonymousServer.StatsResponseArgument>();
+                return argument.GlobalIntValue;
             }
 
             async Task<float> MyStatsServiceInterface.GetAverageRateAsync(string key, CancellationToken cancellationToken)
