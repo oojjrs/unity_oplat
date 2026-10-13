@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <SteamworksAssembly>$(MSBuildThisFileDirectory)..\..\..\..\Library\ScriptAssemblies\com.rlabrecque.steamworks.net.dll</SteamworksAssembly>
+    <DefineConstants Condition="Exists('$(SteamworksAssembly)')">$(DefineConstants);STEAMWORKS_NET</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ChunkedStorageChecks.cs" />
+    <Compile Include="../../Runtime/ChunkedMyStorageService.cs" />
+    <Compile Include="../../Runtime/MyStorage.cs" />
+    <Compile Include="../../Runtime/MyStorageServiceInterface.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="Exists('$(SteamworksAssembly)')">
+    <Compile Include="../../Runtime/Steam/SteamStorage.cs" />
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>$(SteamworksAssembly)</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

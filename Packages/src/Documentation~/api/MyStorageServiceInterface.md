@@ -16,13 +16,14 @@ if (read.IsFound)
 
 직렬화 형식, 버전 관리와 재시도 정책은 소비 프로젝트가 정한다.
 
-서로 다른 파일의 작업은 동시에 진행할 수 있다. 완료되지 않은 같은 파일의 `ReadAsync`를 다시 호출하면 `InvalidOperationException`이 발생한다. 그 밖의 같은 파일 동시 작업도 순서를 보장하지 않으므로 소비 프로젝트가 직렬화한다.
+서로 다른 파일의 작업은 동시에 진행할 수 있다. Steam은 같은 논리 파일의 작업을 직렬화한다.
+그 외 플랫폼의 같은 파일 동시 작업은 소비 프로젝트가 직렬화한다.
 
 ## 멤버
 
 | 멤버 | 설명 |
 | --- | --- |
-| `int FileByteCountMax` | 파일 하나의 최대 크기. 현재 100 MiB다. |
+| `int FileByteCountMax` | 논리 파일 최대 크기. Steam은 `int.MaxValue`, 그 외는 100 MiB다. |
 | `WriteAsync(fileName, data, token)` | 새 파일을 쓰거나 기존 파일 전체를 덮어쓴다. 빈 배열은 0-byte 파일로 저장한다. |
 | `ReadAsync(fileName, token)` | 파일 존재 여부와 전체 데이터를 반환한다. |
 | `ExistsAsync(fileName, token)` | 파일 존재 여부를 반환한다. |
@@ -41,5 +42,6 @@ if (read.IsFound)
 - `/`를 구분자로 사용하는 상대 경로여야 한다.
 - 절대 경로, `\`, 빈 구간, `.`과 `..`, 끝의 공백·마침표, 지원 플랫폼에서 금지된 문자와 예약 이름은 사용할 수 없다.
 - `data`는 `null`일 수 없고 `FileByteCountMax`를 넘을 수 없다.
+- Steam의 `__oplat_storage_chunks_v1` 경로는 내부 조각용으로 예약된다.
 
 저장 위치, Cloud 동기화와 스레드 제약은 [Anonymous](../platforms/anonymous.md), [Steam](../platforms/steam.md), [Ugsymous](../platforms/ugsymous.md)를 참고한다.

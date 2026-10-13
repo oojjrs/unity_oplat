@@ -804,7 +804,7 @@ namespace oojjrs.oplat.steam
         string MyPlatformServiceInterface.Nickname => SteamFriends.GetPersonaName();
         Sprite MyPlatformServiceInterface.ProfileSprite => _profileSprite;
         MyStatsServiceInterface MyPlatformServiceInterface.Stats => _progress;
-        MyStorageServiceInterface MyPlatformServiceInterface.Storage => _storage;
+        MyStorageServiceInterface MyPlatformServiceInterface.Storage => _storage.Files;
         MyTimeServiceInterface MyPlatformServiceInterface.Time => _time;
 
         Task MyPlatformServiceInterface.ResetAllProgressAsync(CancellationToken cancellationToken)

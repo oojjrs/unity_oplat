@@ -11,11 +11,20 @@ namespace oojjrs.oplat.steam
     {
         private static readonly byte[] EmptyNativeData = new byte[1];
 
+        private readonly MyStorageServiceInterface _files;
+
         private bool _isInitialized;
         private CancellationTokenSource _lifetimeSource;
         private int _mainThreadId;
 
         int MyStorageServiceInterface.FileByteCountMax => MyStorage.FileByteCountMax;
+
+        public MyStorageServiceInterface Files => _files;
+
+        public SteamStorage()
+        {
+            _files = new ChunkedMyStorageService(this);
+        }
 
         private static byte[] CreateDataSnapshot(byte[] data)
         {
