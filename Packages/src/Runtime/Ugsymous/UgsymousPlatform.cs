@@ -73,6 +73,9 @@ namespace oojjrs.oplat.ugsymous
             cancellationToken.ThrowIfCancellationRequested();
 
             var authentication = AuthenticationService.Instance;
+            callback.OnAccount(authentication.PlayerId);
+            cancellationToken.ThrowIfCancellationRequested();
+
             _nickname = await authentication.GetPlayerNameAsync();
             _profileSprite = Resources.Load<Sprite>("AnonymousProfile");
             _progress = new MyProgressServices(ReadStatsAsync, WriteStatsAsync, ReadAchievementsAsync, WriteAchievementsAsync, cancellationToken => ReadProgressAsync(DefinitionsStorageKey, cancellationToken), (data, cancellationToken) => WriteProgressAsync(DefinitionsStorageKey, data, cancellationToken));

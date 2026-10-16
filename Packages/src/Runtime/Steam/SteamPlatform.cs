@@ -890,6 +890,9 @@ namespace oojjrs.oplat.steam
             if (actualAppId != callback.AppId)
                 throw new InvalidOperationException($"Steam initialized with App ID {actualAppId}, but {callback.AppId} was expected.");
 
+            callback.OnAccount(SteamUser.GetSteamID().ToString());
+            cancellationToken.ThrowIfCancellationRequested();
+
             _progress.Initialize(appId);
             _time = MyPlatform.CreateTimeService(MyTime.FromUnixTimeSeconds(SteamUtils.GetServerRealTime()), true);
             _net.Initialize(callback.ChatResult, callback.FriendResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomSwitchHandler, callback.RoomResult, _time);

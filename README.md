@@ -26,10 +26,16 @@ using UnityEngine;
 [RequireComponent(typeof(MyPlatformInitializer))]
 public sealed class PlatformBootstrap : MonoBehaviour, MyPlatformInitializer.CallbackInterface
 {
+    public string Account { get; private set; }
     public MyPlatformServiceInterface Platform { get; private set; }
 
     uint MyPlatformInitializer.CallbackInterface.AppId => 1;
     MyPlatformTypeEnum MyPlatformInitializer.CallbackInterface.InitialType => MyPlatformTypeEnum.Anonymous;
+
+    void MyPlatformInitializer.CallbackInterface.OnAccount(string account)
+    {
+        Account = account;
+    }
 
     void MyPlatformInitializer.CallbackInterface.OnResult(MyPlatformServiceInterface service)
     {

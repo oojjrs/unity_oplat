@@ -19,6 +19,7 @@ namespace oojjrs.oplat
             MyNetRoomSwitchHandlerInterface RoomSwitchHandler => null;
             MyNetRoomServiceInterface.UpdateResultInterface RoomResult => EmptyResult;
 
+            void OnAccount(string account);
             void OnResult(MyPlatformServiceInterface service);
         }
 

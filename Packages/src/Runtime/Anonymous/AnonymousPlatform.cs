@@ -179,6 +179,9 @@ namespace oojjrs.oplat.anonymous
             _appId = appId;
             _nickname = nickname;
 
+            callback.OnAccount(_account);
+            cancellationToken.ThrowIfCancellationRequested();
+
             var profileSpriteRequest = Resources.LoadAsync<Sprite>("AnonymousProfile");
             await Awaitable.FromAsyncOperation(profileSpriteRequest, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
