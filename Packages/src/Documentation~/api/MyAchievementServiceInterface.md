@@ -59,6 +59,9 @@ var visible = await service.Achievements.GetDefinitionsAsync("koreana", false, c
 var iconReference = isUnlocked ? definition.AchievedIcon : definition.UnachievedIcon;
 ```
 
+새 달성 저장 성공 시 `서비스명> ACHIEVEMENT UNLOCKED : 키`를 출력한다.
+Anonymous 로그는 로컬 서버를 실행한 프로세스에 남는다.
+
 로컬 목록 조회는 미달성 Hidden 업적을 제외하며 `includeHidden = true`로 포함하고, 언어는 요청값·`english`·기본 문자열 순으로 선택한다; Steam 표시 문자열은 Steam의 현재 게임 언어를 따른다.
 
 ## 3. 통계 기반 진행도

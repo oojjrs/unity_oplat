@@ -246,6 +246,8 @@ namespace oojjrs.oplat
                         entry.IsUnlocked = false;
                         throw;
                     }
+
+                    UnityEngine.Debug.Log($"{GetType().Name}> ACHIEVEMENT UNLOCKED : {key}");
                 }
                 finally
                 {

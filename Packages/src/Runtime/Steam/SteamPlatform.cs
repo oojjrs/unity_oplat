@@ -43,6 +43,7 @@ namespace oojjrs.oplat.steam
 
             private CallResult<UserStatsReceived_t> _statsReceivedCallResult;
             private CallResult<GlobalStatsReceived_t> _globalStatsCallResult;
+            private Callback<UserAchievementStored_t> _achievementStoredCallback;
             private Callback<UserStatsStored_t> _statsStoredCallback;
             private uint _appId;
             private bool _isInitialized;
@@ -716,8 +717,15 @@ namespace oojjrs.oplat.steam
                 _mainThreadId = Environment.CurrentManagedThreadId;
                 _statsReceivedCallResult = CallResult<UserStatsReceived_t>.Create(OnStatsReceived);
                 _globalStatsCallResult = CallResult<GlobalStatsReceived_t>.Create(OnGlobalStatsReceived);
+                _achievementStoredCallback = Callback<UserAchievementStored_t>.Create(OnAchievementStored);
                 _statsStoredCallback = Callback<UserStatsStored_t>.Create(OnStatsStored);
                 _isInitialized = true;
+            }
+
+            private void OnAchievementStored(UserAchievementStored_t result)
+            {
+                if ((result.m_nGameID == _appId) && (result.m_nCurProgress == 0) && (result.m_nMaxProgress == 0))
+                    Debug.Log($"{GetType().Name}> ACHIEVEMENT UNLOCKED : {result.m_rgchAchievementName}");
             }
 
             private void OnGlobalStatsReceived(GlobalStatsReceived_t result, bool ioFailure)
@@ -763,6 +771,8 @@ namespace oojjrs.oplat.steam
             public void Shutdown()
             {
                 _isInitialized = false;
+                _achievementStoredCallback?.Dispose();
+                _achievementStoredCallback = null;
                 _achievementDefinitions.Clear();
                 _achievementMetadata.Clear();
                 _statMetadata.Clear();
