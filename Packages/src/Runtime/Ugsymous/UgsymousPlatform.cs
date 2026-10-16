@@ -63,6 +63,13 @@ namespace oojjrs.oplat.ugsymous
 
         private void Update() => _net?.Update();
 
+        Task MyPlatform.PlatformInterface.LoadProfileAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _profileSprite = Resources.Load<Sprite>("AnonymousProfile");
+            return Task.CompletedTask;
+        }
+
         async Task MyPlatform.PlatformInterface.RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken)
         {
             var profile = string.IsNullOrWhiteSpace(callback.AnonymousInstanceId) ? "default" : ToProfile(callback.AnonymousInstanceId);
@@ -73,11 +80,7 @@ namespace oojjrs.oplat.ugsymous
             cancellationToken.ThrowIfCancellationRequested();
 
             var authentication = AuthenticationService.Instance;
-            callback.OnAccount(authentication.PlayerId);
-            cancellationToken.ThrowIfCancellationRequested();
-
             _nickname = await authentication.GetPlayerNameAsync();
-            _profileSprite = Resources.Load<Sprite>("AnonymousProfile");
             _progress = new MyProgressServices(ReadStatsAsync, WriteStatsAsync, ReadAchievementsAsync, WriteAchievementsAsync, cancellationToken => ReadProgressAsync(DefinitionsStorageKey, cancellationToken), (data, cancellationToken) => WriteProgressAsync(DefinitionsStorageKey, data, cancellationToken));
             _achievements = _progress.Achievements;
             _stats = _progress.Stats;

@@ -1,6 +1,6 @@
 # `MyPlatformServiceInterface`
 
-초기화된 계정 정보, 저장소와 네트워크 서비스의 최상위 진입점이다.
+`OnAccount`에서 받는 계정, 저장소와 네트워크 서비스의 최상위 진입점이다.
 
 ## 멤버
 
@@ -9,7 +9,7 @@
 | `string Account` | 플랫폼 계정 식별 문자열 |
 | `MyAchievementServiceInterface Achievements` | 계정별 업적 등록 확인, 달성 여부 조회, 달성, 초기화 |
 | `string Nickname` | 표시 이름 |
-| `Sprite ProfileSprite` | 프로필 이미지. 가져오지 못하면 `null`이다. |
+| `Sprite ProfileSprite` | 프로필 이미지. 로딩 전이나 가져오지 못하면 `null`이다. |
 | `bool IsAlive` | 플랫폼 서비스가 초기화된 상태로 살아 있는지 여부 |
 | `bool IsRestartRequired` | Steam이 현재 프로세스의 종료와 재실행을 요청했는지 여부 |
 | `MyStatsServiceInterface Stats` | 계정별 `INT`·`FLOAT`·`AVGRATE` 통계 등록, 조회, 갱신, 초기화 |

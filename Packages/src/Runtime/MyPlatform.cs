@@ -36,6 +36,7 @@ namespace oojjrs.oplat
 
         internal interface PlatformInterface : MyPlatformServiceInterface
         {
+            Task LoadProfileAsync(CancellationToken cancellationToken);
             Task RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken);
         }
 

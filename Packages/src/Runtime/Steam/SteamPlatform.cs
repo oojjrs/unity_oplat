@@ -864,11 +864,17 @@ namespace oojjrs.oplat.steam
             _net.Update();
         }
 
-        async Task MyPlatform.PlatformInterface.RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken)
+        async Task MyPlatform.PlatformInterface.LoadProfileAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _profileSprite = await LoadProfileSpriteAsync(cancellationToken);
+        }
+
+        Task MyPlatform.PlatformInterface.RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (_isInitialized)
-                return;
+                return Task.CompletedTask;
 
             var appId = callback.AppId;
             if (appId == 0)
@@ -878,7 +884,7 @@ namespace oojjrs.oplat.steam
             {
                 _isRestartRequired = SteamAPI.RestartAppIfNecessary(new AppId_t(appId));
                 if (_isRestartRequired)
-                    return;
+                    return Task.CompletedTask;
             }
 
             var result = SteamAPI.InitEx(out var errorMessage);
@@ -890,15 +896,13 @@ namespace oojjrs.oplat.steam
             if (actualAppId != callback.AppId)
                 throw new InvalidOperationException($"Steam initialized with App ID {actualAppId}, but {callback.AppId} was expected.");
 
-            callback.OnAccount(SteamUser.GetSteamID().ToString());
-            cancellationToken.ThrowIfCancellationRequested();
-
             _progress.Initialize(appId);
             _time = MyPlatform.CreateTimeService(MyTime.FromUnixTimeSeconds(SteamUtils.GetServerRealTime()), true);
             _net.Initialize(callback.ChatResult, callback.FriendResult, callback.HostResult, callback.MemberResult, callback.PlayerResult, callback.RoomSwitchHandler, callback.RoomResult, _time);
-            _profileSprite = await LoadProfileSpriteAsync(cancellationToken);
             _storage.Initialize();
             _net.PrepareLaunchJoinRequest();
+
+            return Task.CompletedTask;
         }
 
         private Sprite CreateProfileSprite(int imageHandle)

@@ -166,6 +166,16 @@ namespace oojjrs.oplat.anonymous
         }
 #endif
 
+        async Task MyPlatform.PlatformInterface.LoadProfileAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var profileSpriteRequest = Resources.LoadAsync<Sprite>("AnonymousProfile");
+            await Awaitable.FromAsyncOperation(profileSpriteRequest, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            _profileSprite = profileSpriteRequest.asset as Sprite;
+        }
+
         async Task MyPlatform.PlatformInterface.RunAsync(MyPlatformInitializer.CallbackInterface callback, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -178,15 +188,6 @@ namespace oojjrs.oplat.anonymous
             _account = account;
             _appId = appId;
             _nickname = nickname;
-
-            callback.OnAccount(_account);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var profileSpriteRequest = Resources.LoadAsync<Sprite>("AnonymousProfile");
-            await Awaitable.FromAsyncOperation(profileSpriteRequest, cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            _profileSprite = profileSpriteRequest.asset as Sprite;
 
             await Net.AuthenticateAsync(_account, _nickname, appId, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();

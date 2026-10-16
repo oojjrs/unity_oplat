@@ -6,7 +6,7 @@
 
 1. GameObject에 `MyPlatformInitializer`를 추가한다.
 2. 같은 GameObject의 컴포넌트에서 `CallbackInterface`를 구현한다.
-3. `AppId`, `InitialType`, `OnAccount`, `OnResult`를 구현한다.
+3. `AppId`, `InitialType`, `OnAccount`, `OnProfile`를 구현한다.
 4. 필요한 네트워크 결과 처리기만 선택적으로 제공한다.
 
 초기화기는 `Awake`에서 같은 GameObject의 `CallbackInterface`를 찾는다. 생략한 선택 항목은 기본값 또는 no-op 처리기를 사용한다.
@@ -25,14 +25,15 @@
 | `MyNetPlayerServiceInterface.UpdateResultInterface PlayerResult` | 선택 사항. 다른 구성원의 플레이어 갱신 알림 처리기 |
 | `MyNetRoomSwitchHandlerInterface RoomSwitchHandler` | 선택 사항. Steam 플랫폼 참여 요청의 게임 준비와 최종 전환 결과 처리기 |
 | `MyNetRoomServiceInterface.UpdateResultInterface RoomResult` | 선택 사항. 다른 구성원의 방 갱신 알림 처리기 |
-| `void OnAccount(string account)` | 계정 ID 확보 직후 호출되며 전체 초기화 완료를 뜻하지 않는다. |
-| `void OnResult(MyPlatformServiceInterface service)` | 초기화 또는 Steam 재실행 판단이 끝나면 호출된다. |
+| `void OnAccount(MyPlatformServiceInterface service)` | 초기화 완료 또는 Steam 재실행 판단을 전달한다. |
+| `void OnProfile(Sprite profileSprite)` | 프로필 이미지 로딩 결과. 없거나 실패하면 `null`이다. |
 
-`OnAccount`는 Anonymous의 ID 결정, Steam의 App ID 확인, Ugsymous 인증 직후 호출된다.
-Steam 재실행이나 ID 확보 전 실패에는 호출되지 않으며, 호출 후에도 초기화는 실패할 수 있다.
-Core보다 먼저 실행됨을 보장하지 않으며, 초기화기 제거는 `OnResult`까지 기다린다.
+`OnAccount`에서 계정, 저장소와 네트워크를 사용할 수 있다.
+프로필은 별도로 로딩하며, 실패해도 초기화된 서비스를 유지한다.
+Core보다 먼저 실행됨을 보장하지 않는다.
 
-`OnResult` 이후 초기화기 컴포넌트는 제거해도 된다. 실제 플랫폼 구현은 별도 `DontDestroyOnLoad` GameObject에서 유지된다.
+`OnAccount` 이후 초기화기를 제거해도 서비스는 별도 오브젝트에서 유지된다.
+프로필을 받으려면 `OnProfile`까지 초기화기를 유지한다.
 
 Steam 플레이어 빌드에서 `service.IsRestartRequired`가 `true`이면 `Account`, `Net`, `Storage` 등에 접근하지 말고 `Application.Quit()` 등으로 현재 프로세스를 종료한다.
 

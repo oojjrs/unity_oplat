@@ -19,8 +19,8 @@ namespace oojjrs.oplat
             MyNetRoomSwitchHandlerInterface RoomSwitchHandler => null;
             MyNetRoomServiceInterface.UpdateResultInterface RoomResult => EmptyResult;
 
-            void OnAccount(string account);
-            void OnResult(MyPlatformServiceInterface service);
+            void OnAccount(MyPlatformServiceInterface service);
+            void OnProfile(Sprite profileSprite);
         }
 
         private sealed class EmptyNetResult : MyNetChatResultInterface, MyNetFriendResultInterface, MyNetHostResultInterface, MyNetMemberResultInterface, MyNetPlayerServiceInterface.UpdateResultInterface, MyNetRoomServiceInterface.UpdateResultInterface
@@ -116,7 +116,26 @@ namespace oojjrs.oplat
                 return;
             }
 
-            _callback.OnResult(platform);
+            _callback.OnAccount(platform);
+            if (platform.IsRestartRequired || cancellationToken.IsCancellationRequested || (callbackObject == null))
+                return;
+
+            try
+            {
+                await platform.LoadProfileAsync(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+
+            if ((callbackObject != null) && (cancellationToken.IsCancellationRequested == false))
+                _callback.OnProfile(platform.ProfileSprite);
         }
     }
 }
