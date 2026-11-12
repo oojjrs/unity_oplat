@@ -43,7 +43,7 @@ namespace oojjrs.oplat.anonymous.controllers
                 if (room.IsLocked)
                     return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.RoomLocked);
 
-                if ((string.IsNullOrEmpty(secret.Password) == false) && (secret.Password != requestArgument.Password))
+                if ((secret.InvitedPlayerIds.Contains(session.Account) == false) && (string.IsNullOrEmpty(secret.Password) == false) && (secret.Password != requestArgument.Password))
                     return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.IncorrectPassword);
 
                 if (players.Length >= room.MaxPlayers)
@@ -56,6 +56,7 @@ namespace oojjrs.oplat.anonymous.controllers
                     IsHost = false,
                     Nickname = requestArgument.PlayerNickname,
                 }).ToArray();
+                secret.InvitedPlayerIds.Remove(session.Account);
                 await AnonymousServerRoom.NotifyUpdatedAsync(room, sessions, session.Account);
             }
 

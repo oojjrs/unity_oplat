@@ -557,6 +557,9 @@ namespace oojjrs.oplat.anonymous
                     return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
 
                 targetSession.Messages.Send(AnonymousTransport.Message.CreateFriendInvited(MyNetSerializer.Serialize(new FriendInviteData() { PlayerId = session.Account, RoomId = argument.RoomId })));
+                if ((room.Room.Players ?? Array.Empty<AnonymousServerRoom.PlayerData>()).Any(player => player.Id == targetSession.Account) == false)
+                    room.InvitedPlayerIds.Add(targetSession.Account);
+
                 return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Success);
             }
             catch (Exception)

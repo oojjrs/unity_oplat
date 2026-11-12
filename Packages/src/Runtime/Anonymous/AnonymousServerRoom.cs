@@ -131,6 +131,7 @@ namespace oojjrs.oplat.anonymous
 
         internal sealed class RoomSecret
         {
+            public HashSet<string> InvitedPlayerIds { get; } = new();
             internal string Password { get; }
             internal RoomData Room { get; }
 

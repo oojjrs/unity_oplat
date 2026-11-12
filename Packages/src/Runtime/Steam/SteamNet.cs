@@ -28,6 +28,12 @@ namespace oojjrs.oplat.steam
             PlayerDataAccepted = 10,
             PlayerDataRejected = 11,
             PlayerUpdated = 12,
+            InvitationRequest = 13,
+            InvitationAccepted = 14,
+            InvitationRejected = 15,
+            InvitationSent = 16,
+            InvitationRecorded = 17,
+            InvitationCanceled = 18,
         }
 
         private enum StateEnum
@@ -167,7 +173,7 @@ namespace oojjrs.oplat.steam
         private const int MetadataValueByteCountMax = Constants.k_cubChatMetadataMax - 1;
         private const int MinimumPollingDelaySeconds = 1;
         private const int PlayerCountMax = 250;
-        private const int ProtocolVersion = 4;
+        private const int ProtocolVersion = 5;
         private const int RosterChunkCharacterCount = 7000;
         private const int RosterChunkCountMax = 16;
         private const uint ChatMagic = 0x4f504c48;
@@ -197,13 +203,16 @@ namespace oojjrs.oplat.steam
         private readonly HashSet<ulong> _failedSendPlayerIds = new();
         private readonly Queue<MyNetRequest> IncomingRequests = new();
         private readonly Queue<MyNetResponse> IncomingResponses = new();
+        private readonly HashSet<ulong> _invitedPlayerIds = new();
         private readonly Dictionary<ulong, RosterPlayerData> LogicalPlayers = new();
         private readonly object OutgoingRequestLock = new();
         private readonly Queue<MyNetRequest> OutgoingRequests = new();
         private readonly object OutgoingResponseLock = new();
         private readonly Queue<MyNetResponse> OutgoingResponses = new();
         private readonly SemaphoreSlim OperationGate = new(1, 1);
+        private readonly Dictionary<ulong, byte[]> _pendingAdmissions = new();
         private readonly Queue<PendingBroadcast> _pendingBroadcasts = new();
+        private readonly Dictionary<Guid, (ulong InviterId, ulong PlayerId)> _pendingInvitations = new();
         private readonly Dictionary<ulong, TaskCompletionSource<bool>> PendingLobbyData = new();
 
         private TaskCompletionSource<MyNetInterface.CatchInterface.FailureEnum?> _admissionSource;
@@ -219,6 +228,8 @@ namespace oojjrs.oplat.steam
         private Callback<GameRichPresenceJoinRequested_t> _gameRichPresenceJoinRequestedCallback;
         private bool _hasPassword;
         private MyNetHostResultInterface _hostResult;
+        private TaskCompletionSource<bool> _invitationCompletionSource;
+        private TaskCompletionSource<bool> _invitationSource;
         private bool _isInitialized;
         private bool _isLobbyOperation;
         private bool _isLobbyPolling;
@@ -244,6 +255,7 @@ namespace oojjrs.oplat.steam
         private ulong _nextPlayerUpdateId;
         private ulong _originalHostId;
         private string _password;
+        private Guid _pendingInvitationId;
         private ulong _pendingLaunchLobbyId;
         private ulong _pendingPlayerUpdateId;
         private MyNetPlayerServiceInterface.UpdateResultInterface _playerResult;
@@ -418,7 +430,7 @@ namespace oojjrs.oplat.steam
             UpdateJoinRichPresence();
         }
 
-        internal Task InviteFriendAsync(MyNetFriendServiceInterface.InviteConfigInterface config, MyNetFriendServiceInterface.InviteResultInterface result)
+        internal async Task InviteFriendAsync(MyNetFriendServiceInterface.InviteConfigInterface config, MyNetFriendServiceInterface.InviteResultInterface result)
         {
             EnsureInitialized();
             var playerId = config.PlayerId;
@@ -426,13 +438,13 @@ namespace oojjrs.oplat.steam
             if (string.IsNullOrWhiteSpace(playerId))
             {
                 result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyPlayerId);
-                return Task.CompletedTask;
+                return;
             }
 
             if (string.IsNullOrWhiteSpace(roomId))
             {
                 result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyRoomId);
-                return Task.CompletedTask;
+                return;
             }
 
             using (var cancellationSource = CreateCancellationSource(config.CancellationToken))
@@ -442,37 +454,109 @@ namespace oojjrs.oplat.steam
                 if ((TryParsePlayerId(playerId, out var player) == false) || (player.m_SteamID == _localSteamId) || (SteamFriends.HasFriend(player, EFriendFlags.k_EFriendFlagImmediate) == false))
                 {
                     result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
-                    return Task.CompletedTask;
+                    return;
                 }
 
                 if (TryParseLobbyId(roomId, out var lobby) == false)
                 {
                     result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
-                    return Task.CompletedTask;
+                    return;
                 }
 
-                if ((_currentLobby != lobby) || (AcceptedPlayerIds.Contains(_localSteamId) == false))
+                if ((_currentLobby != lobby) || (AcceptedPlayerIds.Contains(_localSteamId) == false) || ((_state != StateEnum.Host) && (_state != StateEnum.Member)))
                 {
                     result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
-                    return Task.CompletedTask;
+                    return;
                 }
 
+                if (await OperationGate.WaitAsync(0, cancellationToken) == false)
+                {
+                    result.OnBusy();
+                    return;
+                }
+
+                var epoch = _epoch;
+                var invitationId = Guid.NewGuid();
+                var completed = false;
+                MyNetInterface.CatchInterface.FailureEnum? failure = null;
+                Exception caughtException = null;
                 try
                 {
-                    if (SteamMatchmaking.InviteUserToLobby(lobby, player) == false)
+                    if (_state == StateEnum.Member)
                     {
-                        result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
-                        return Task.CompletedTask;
+                        _pendingInvitationId = invitationId;
+                        _invitationSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                        _invitationCompletionSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                        if (SendMessage(_originalHostId, MessageKind.InvitationRequest, EncodeInvitation(invitationId, player.m_SteamID)) == false)
+                            throw new InvalidOperationException("Steam rejected the invitation authorization request.");
+
+                        if (await WaitForInvitationAsync(_invitationSource.Task, cancellationToken) == false)
+                            throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
                     }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if ((_currentLobby != lobby) || (_epoch != epoch))
+                        throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
+
+                    if (SteamMatchmaking.InviteUserToLobby(lobby, player) == false)
+                        throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
+
+                    if (_state == StateEnum.Host)
+                    {
+                        if (AcceptedPlayerIds.Contains(player.m_SteamID) == false)
+                            _invitedPlayerIds.Add(player.m_SteamID);
+                    }
+                    else
+                    {
+                        if (SendMessage(_originalHostId, MessageKind.InvitationSent, invitationId.ToByteArray()) == false)
+                            throw new InvalidOperationException("Steam rejected the invitation confirmation.");
+
+                        if (await WaitForInvitationAsync(_invitationCompletionSource.Task, cancellationToken) == false)
+                            throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
+                    }
+
+                    completed = true;
+                }
+                catch (FailureException exception)
+                {
+                    failure = exception.Failure;
                 }
                 catch (Exception exception)
                 {
-                    result.OnException(new MyNetSessionException("Failed to send Steam friend invitation.", exception));
-                    return Task.CompletedTask;
+                    caughtException = exception;
+                }
+                finally
+                {
+                    try
+                    {
+                        if ((completed == false) && (_state == StateEnum.Member) && (_currentLobby == lobby) && (_epoch == epoch))
+                        {
+                            if (SendMessage(_originalHostId, MessageKind.InvitationCanceled, invitationId.ToByteArray()) == false)
+                                throw new InvalidOperationException("Steam rejected the pending invitation cancellation.");
+                        }
+                    }
+                    catch (Exception exception)
+                    {
+                        caughtException = caughtException == null ? exception : new AggregateException(caughtException, exception);
+                    }
+                    finally
+                    {
+                        _pendingInvitationId = Guid.Empty;
+                        _invitationSource = null;
+                        _invitationCompletionSource = null;
+                        OperationGate.Release();
+                    }
                 }
 
-                result.OnOk(roomId, playerId);
-                return Task.CompletedTask;
+                if (completed == false)
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                if (caughtException != null)
+                    result.OnException(new MyNetSessionException("Failed to send Steam friend invitation.", caughtException));
+                else if (failure.HasValue)
+                    result.OnFailed(failure.Value);
+                else
+                    result.OnOk(roomId, playerId);
             }
         }
 
@@ -1618,6 +1702,16 @@ namespace oojjrs.oplat.steam
             return PlayerUpdateOutcomeEnum.Unknown;
         }
 
+        private async Task<bool> WaitForInvitationAsync(Task<bool> invitationTask, CancellationToken cancellationToken)
+        {
+            var timeoutTask = Task.Delay(AdmissionTimeoutMilliseconds, cancellationToken);
+            if (await Task.WhenAny(invitationTask, timeoutTask) == invitationTask)
+                return await invitationTask;
+
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new TimeoutException("Steam invitation authorization timed out.");
+        }
+
         private static CSteamID ParseLobby(string roomId, string code)
         {
             ulong value;
@@ -1969,6 +2063,11 @@ namespace oojjrs.oplat.steam
 
             _admissionSource?.TrySetResult(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
             _admissionSource = null;
+            _invitationSource?.TrySetResult(false);
+            _invitationCompletionSource?.TrySetResult(false);
+            _pendingAdmissions.Clear();
+            _pendingInvitations.Clear();
+            _invitedPlayerIds.Clear();
             _playerUpdateSource?.TrySetResult(PlayerUpdateOutcomeEnum.Unknown);
             _playerUpdateSource = null;
             _pendingPlayerUpdateId = 0;
@@ -2307,6 +2406,13 @@ namespace oojjrs.oplat.steam
                     return;
 
                 var playerId = callback.m_ulSteamIDUserChanged;
+                _pendingAdmissions.Remove(playerId);
+                foreach (var invitation in _pendingInvitations.Where(value => value.Value.InviterId == playerId).ToArray())
+                {
+                    _pendingInvitations.Remove(invitation.Key);
+                    ResumePendingAdmission(invitation.Value.PlayerId);
+                }
+
                 BlockedPlayerIds.Remove(playerId);
                 var wasAccepted = AcceptedPlayerIds.Remove(playerId);
                 LogicalPlayers.Remove(playerId);
@@ -2534,6 +2640,35 @@ namespace oojjrs.oplat.steam
                     if (_state == StateEnum.Host)
                         HandleAdmissionRequest(senderId, payload);
                     break;
+                case MessageKind.InvitationRequest:
+                    if ((_state == StateEnum.Host) && AcceptedPlayerIds.Contains(senderId) && IsRawLobbyMember(senderId))
+                        HandleInvitationRequest(senderId, payload);
+                    break;
+                case MessageKind.InvitationAccepted:
+                case MessageKind.InvitationRejected:
+                case MessageKind.InvitationRecorded:
+                    if ((_state == StateEnum.Member) && (senderId == _originalHostId) && (new Guid(payload) == _pendingInvitationId))
+                    {
+                        if (kind == MessageKind.InvitationAccepted)
+                        {
+                            _invitationSource?.TrySetResult(true);
+                        }
+                        else if (kind == MessageKind.InvitationRecorded)
+                        {
+                            _invitationCompletionSource?.TrySetResult(true);
+                        }
+                        else
+                        {
+                            _invitationSource?.TrySetResult(false);
+                            _invitationCompletionSource?.TrySetResult(false);
+                        }
+                    }
+                    break;
+                case MessageKind.InvitationSent:
+                case MessageKind.InvitationCanceled:
+                    if ((_state == StateEnum.Host) && AcceptedPlayerIds.Contains(senderId) && IsRawLobbyMember(senderId))
+                        CompleteInvitation(senderId, new Guid(payload), kind == MessageKind.InvitationSent);
+                    break;
                 case MessageKind.AdmissionAccepted:
                     if ((_state == StateEnum.AwaitingAdmission) && (senderId == _originalHostId))
                     {
@@ -2700,8 +2835,16 @@ namespace oojjrs.oplat.steam
                 failure = MyNetInterface.CatchInterface.FailureEnum.RoomLocked;
             else if (AcceptedPlayerIds.Count >= _maxPlayers)
                 failure = MyNetInterface.CatchInterface.FailureEnum.RoomFull;
-            else if (suppliedPassword != (_password ?? string.Empty))
+            else if ((_invitedPlayerIds.Contains(senderId) == false) && (suppliedPassword != (_password ?? string.Empty)))
+            {
+                if (_pendingInvitations.Values.Any(value => value.PlayerId == senderId))
+                {
+                    _pendingAdmissions[senderId] = payload;
+                    return;
+                }
+
                 failure = MyNetInterface.CatchInterface.FailureEnum.IncorrectPassword;
+            }
 
             if (failure.HasValue)
             {
@@ -2720,6 +2863,8 @@ namespace oojjrs.oplat.steam
 
                 BroadcastRoster();
                 NotifyRoomChanged();
+                _invitedPlayerIds.Remove(senderId);
+                _pendingAdmissions.Remove(senderId);
             }
             catch (Exception exception)
             {
@@ -2740,6 +2885,86 @@ namespace oojjrs.oplat.steam
                 }
 
                 Debug.LogWarning($"Rejected Steam room admission: {exception.Message}");
+            }
+        }
+
+        private void CompleteInvitation(ulong senderId, Guid invitationId, bool wasSent)
+        {
+            if (_pendingInvitations.TryGetValue(invitationId, out var invitation) && (invitation.InviterId == senderId))
+            {
+                _pendingInvitations.Remove(invitationId);
+                if (wasSent)
+                {
+                    if (AcceptedPlayerIds.Contains(invitation.PlayerId) == false)
+                        _invitedPlayerIds.Add(invitation.PlayerId);
+
+                    SendMessage(senderId, MessageKind.InvitationRecorded, invitationId.ToByteArray());
+                }
+
+                ResumePendingAdmission(invitation.PlayerId);
+            }
+            else if (wasSent)
+            {
+                SendMessage(senderId, MessageKind.InvitationRejected, invitationId.ToByteArray());
+            }
+        }
+
+        private static byte[] EncodeInvitation(Guid invitationId, ulong playerId)
+        {
+            using (var stream = new MemoryStream())
+            {
+                using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
+                {
+                    writer.Write(invitationId.ToByteArray());
+                    writer.Write(playerId);
+                }
+
+                return stream.ToArray();
+            }
+        }
+
+        private void HandleInvitationRequest(ulong senderId, byte[] payload)
+        {
+            if (payload.Length != 24)
+                throw new FormatException("Invalid Steam invitation request payload.");
+
+            Guid invitationId;
+            ulong playerId;
+            using (var stream = new MemoryStream(payload, false))
+            {
+                using (var reader = new BinaryReader(stream, Encoding.UTF8))
+                {
+                    invitationId = new Guid(reader.ReadBytes(16));
+                    playerId = reader.ReadUInt64();
+                }
+            }
+
+            if ((invitationId == Guid.Empty) || (playerId == senderId) || (TryParsePlayerId(playerId.ToString(), out _) == false) || (_pendingInvitations.TryGetValue(invitationId, out var existing) && ((existing.InviterId != senderId) || (existing.PlayerId != playerId))))
+            {
+                SendMessage(senderId, MessageKind.InvitationRejected, invitationId.ToByteArray());
+                return;
+            }
+
+            foreach (var previous in _pendingInvitations.Where(value => (value.Key != invitationId) && (value.Value.InviterId == senderId)).ToArray())
+            {
+                _pendingInvitations.Remove(previous.Key);
+                ResumePendingAdmission(previous.Value.PlayerId);
+            }
+
+            _pendingInvitations[invitationId] = (senderId, playerId);
+            if (SendMessage(senderId, MessageKind.InvitationAccepted, invitationId.ToByteArray()) == false)
+            {
+                _pendingInvitations.Remove(invitationId);
+                ResumePendingAdmission(playerId);
+            }
+        }
+
+        private void ResumePendingAdmission(ulong playerId)
+        {
+            if ((_state == StateEnum.Host) && _pendingAdmissions.TryGetValue(playerId, out var payload))
+            {
+                _pendingAdmissions.Remove(playerId);
+                HandleAdmissionRequest(playerId, payload);
             }
         }
 
@@ -2930,7 +3155,7 @@ namespace oojjrs.oplat.steam
                         return false;
 
                     kind = (MessageKind)reader.ReadByte();
-                    if ((kind < MessageKind.AdmissionRequest) || (kind > MessageKind.PlayerUpdated))
+                    if ((kind < MessageKind.AdmissionRequest) || (kind > MessageKind.InvitationCanceled))
                         return false;
 
                     lobbyId = reader.ReadUInt64();
