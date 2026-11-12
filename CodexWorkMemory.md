@@ -2,12 +2,13 @@
 
 ## 현재 요약
 
-- 공통 FailureEnum에 IncorrectPassword, RoomFull, RoomLocked를 추가하고 Anonymous·Steam·UGS의 입장 실패 콜백까지 연결했다. 근거: R-20261112-join-failure-complete.
-- UGS는 Lobby 입장 후 Multiplayer 세션을 연결해 SDK가 원인을 소실시키기 전 typed 오류를 처리한다. 설명한 재입장·우선순위·취소·Busy·예외 동작을 포함한다.
-- Steam 통신 프로토콜은 4이며 기존 3과 상호 입장하지 않는다. 이 변경 묶음의 package.json 버전은 1.13.6이다.
-- 정적 추적·텍스트 형식·diff 공백 검사를 확인했다. 실제 컴파일·플랫폼 접속 결과는 없다.
-- 별도로 확인한 UGS session type/roomId 조회 문제는 독립된 수정 묶음이다.
-- 초기 이력 복원은 진행 중이며 아래 미확인 출처를 이어 읽어야 한다.
+- 마지막 내용 확인: 2026-11-13T05:28:25+09:00. 사용자가 검토한 코드 전체를 그대로 유지하도록 확인했다. 근거: R-20261113-reviewed-content.
+- 공통 FailureEnum의 IncorrectPassword, RoomFull, RoomLocked가 Anonymous·Steam·UGS 입장 실패 콜백까지 전달된다. Steam 통신 프로토콜은 4이며 기존 3과 상호 입장하지 않는다.
+- UGS는 Lobby 입장 후 Multiplayer 세션 연결을 수행하며, 이전에 설명한 재입장·RoomId 우선·취소·Busy 시점·예외 메시지 동작도 검토된 코드 그대로 유지한다.
+- UGS 친구 초대·퇴장·방 갱신·플레이어 갱신은 SDK 사전 키 대신 session.Id로 찾는다.
+- 버전 정책: 기존 파일의 동작 수정 두 묶음에 각각 patch를 적용하여 원인별 입장 실패는 1.13.6, UGS 조회 키는 1.13.7이다. 최종 package.json은 1.13.7이다.
+- 정적 추적·텍스트 형식·diff 공백 검사는 통과했다. 실제 컴파일·플랫폼 접속 결과는 없다.
+- 초기 이력 복원은 여전히 진행 중이다. 아래 완료 범위와 남은 출처를 이어 읽어야 하며 파일 존재를 복원 완료로 간주하지 않는다.
 
 ## 초기 복원 범위와 진행
 
@@ -137,3 +138,33 @@
 - 문서·CHANGELOG 새 문구는 승인 범위가 아니므로 수정하지 않았다. 패키지 버전과 Git 완료 작업은 미수행. 실제 Editor 컴파일·플랫폼 접속은 수행하지 않았다. 다음 단계는 사용자 변경 검토와 필요시 실행 검증이다.
 
 - 검토 결과 기록 (2026-11-12T21:31:33+09:00, Codex /root): 6개 C# 파일과 메모리의 공통 형식 검사가 모두 OK였고 원본 BOM·CRLF를 보존했다. git diff --check도 통과했다. 전체 scoped diff에서 입장 사유 생산·송신·수신·OnFailed 매핑을 확인했고, 마지막으로 Steam의 새 if/else 두 곳에 프로젝트 규약에 맞는 중괄호를 보완했다.
+
+## R-20261112-ugs-session-id-lookup
+
+- 기록 시각: 2026-11-12T21:34:41+09:00; 기록자 Codex /root; 원 발언자·수정 승인 주체 사용자, 구현 범위 판단 Codex. 출처 현재 채팅 01a1cfae-5fa4-7052-87e1-438ae908ab0e, hostId local, H:\UnityOplat. 턴·항목 ID 및 발언 시각 미제공.
+- 사용자 지시: UGS 퇴장·갱신의 세션 조회 키 불일치도 수정하고, 앞선 변경량이 큰 이유와 별도 변경점을 설명.
+- 현재 근거: 설치 SDK SessionManager.RegisterSession은 Sessions[sessionType]에 등록한다. UgsymousNetServices의 InviteAsync, Room.ExitAsync, Room.UpdateAsync, Player.UpdateAsync가 roomId로 TryGetValue해 존재하는 세션도 못 찾는다.
+- 수정 판단: 동일 원인의 네 조회를 Sessions.Values의 session.Id 비교로 교체한다. 캐시나 공통 API를 새로 만들지 않고 각 기존 동작·오류 처리를 보존한다. 이전 기록의 '범위 밖으로 보존' 상태를 이번 명시적 수정 승인이 대체한다.
+- 설명할 기존 변경: 6개 C# 파일 +210/-37. Steam의 양쪽 거절 경로, nullable admission 결과, protocol 4, 연결 단절·방 소멸·호스트 오류 분류. UGS의 Lobby 입장/Multiplayer 재연결, 사전 membership 조회와 실패·취소 정리, 같은 방 재입장 즉시 성공, RoomId 우선, lifetime 취소 연동, Busy 해제 후 콜백, 추가 typed 오류 매핑. 새 CodexWorkMemory.md는 프로젝트 규칙에 따른 별도 작업 기록이며 런타임 기능이 아니다. 앞선 최종 응답이 부수 동작을 모두 설명하지 못한 점을 사용자에게 명시한다.
+
+- 적용 결과 (2026-11-12T21:35:05+09:00, Codex /root): UgsymousNetServices.cs의 네 TryGetValue 조회를 Values.FirstOrDefault(value => value.Id == roomId)와 null 판정으로 대체했다. 이번 추가 코드 변경은 이 파일 +8/-4이며, 기존 실패·권한·성공 콜백 분기는 보존했다. 사용자에게 앞선 작업의 규모·통신/입장 경로 변경 및 추가 동작을 구분해서 보고한다.
+
+- 검증 결과 (2026-11-12T21:36:04+09:00, Codex /root): 네 수정 hunk를 SDK의 Sessions[sessionType] 등록과 대조했고, Ugsymous 범위에 Sessions.TryGetValue 사용은 남지 않았다. 변경 C#과 메모리의 형식 검사는 OK, git diff --check 통과. 실제 컴파일·접속은 수행하지 않았다. 추가 설명 대상에는 UGS 기타 예외의 바깥 메시지를 일반 문구로 감싸고 원본을 InnerException에 보존하는 변경도 포함한다.
+
+## R-20261113-scope-review
+
+- 기록 시각: 2026-11-13T05:22:15+09:00; 기록자 Codex /root; 원 발언자 사용자; 평가 주체 Codex. 출처 현재 채팅 01a1cfae-5fa4-7052-87e1-438ae908ab0e, hostId local, H:\UnityOplat. 사용자 턴·항목 ID 및 정확한 발언 시각 미제공.
+- 사용자 질문: 필요한 일만 수행한 것이 맞는지 재검토.
+- 관찰: 현재 diff는 6개 C# 파일 +218/-41이며 앞선 구현·조회 키 수정이 유지되어 있다. 이번 검토에서 C#은 수정하지 않았다.
+- Codex 판단: enum 원인 분리, 실제 서버/통신 사유 보존과 콜백 매핑, 후속 승인된 UGS session.Id 조회는 요청에 필요하다. SDK가 원인을 소실시키는 UGS 경계 대응도 필요하지만, 선택한 Lobby 직접 입장→Multiplayer 연결 경로 자체를 유일한 최소 해법이라고 단정할 수 없다. 그 경로의 부분 실패 정리는 경로 변경에 딸린 필요한 처리다.
+- Codex 판단: UGS 같은 방 재입장 즉시 성공, RoomId 우선 전환, Busy 해제 후 콜백, 기타 예외의 바깥 메시지를 일반 문구로 교체한 것은 세 원인 분리에 필수적이지 않다. 특히 바깥 메시지 일반화는 상세 원인 전달 취지에 맞지 않는 부수 변경이다. 이전 보고가 이를 충분히 구분하지 못했다.
+- 상태: 필요한 부분과 별도 개선을 섞은 것으로 평가하며 해당 부수 변경의 축소가 타당하다는 Codex 의견이다. 사용자의 현재 발언을 코드 되돌림 승인으로 해석하지 않았고 구현은 보존했다.
+
+## R-20261113-reviewed-content
+
+- 기록 시각: 2026-11-13T05:28:25+09:00; 기록자 Codex /root; 원 발언자·내용 결정 주체 사용자, 분리 판단 주체 Codex. 출처 현재 채팅 01a1cfae-5fa4-7052-87e1-438ae908ab0e, hostId local, H:\UnityOplat. 개별 발언 시각과 턴·항목 ID는 미제공.
+- 사용자는 각 부수 수정 이유를 설명받은 뒤 전체 내용을 검토했으며 코드를 그대로 유지하라고 확인했다. 따라서 UGS 예외 바깥 메시지를 되돌리겠다는 Codex의 후속 제안은 적용하지 않는다. 실제로 해당 소스의 추가 편집은 수행하지 않았다.
+- 이전 R-20261113-scope-review의 축소 권고는 Codex의 검토 의견이며, 현재 구현 내용을 보존한다는 사용자의 최신 확인이 이후 작업 기준이다. 사용자 확인 이전의 근거와 판단은 원기록에 남긴다.
+- 기능별 완결 단위는 (1) 공통 enum과 세 플랫폼 입장 실패 사유 전달, (2) UGS 네 서비스의 방 ID 세션 조회 수정이다. 공통 enum만 또는 플랫폼 송신/수신 한쪽만 분리하면 일관된 실패 계약이 완성되지 않으므로 첫 묶음에 함께 둔다. 두 번째 묶음은 입장 오류 변경과 독립된 기존 결함 수정이다.
+- 사용자 패키지 버전 규칙의 기존 파일 동작 변경=patch에 따라 두 묶음은 1.13.6과 1.13.7로 구분한다. 원본 인코딩·개행을 보존하며 README나 CHANGELOG의 새 문구는 추가하지 않는다.
+- 범위 확인: 기존 여섯 C# 파일 전체, package.json 버전, 관련 CodexWorkMemory.md 기록만 포함한다. 관계없는 변경이나 새 기능은 추가하지 않는다. 초기 이력 복원의 미확인 범위는 여전히 미완료다.

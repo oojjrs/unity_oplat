@@ -165,7 +165,8 @@ namespace oojjrs.oplat.ugsymous
                 try
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    if (MultiplayerService.Instance.Sessions.TryGetValue(roomId, out var session) == false)
+                    var session = MultiplayerService.Instance.Sessions.Values.FirstOrDefault(value => value.Id == roomId);
+                    if (session == null)
                         failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
                     else if ((session.CurrentPlayer == null) || (session.CurrentPlayer.Id != _net.Account))
                         failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
@@ -587,7 +588,8 @@ namespace oojjrs.oplat.ugsymous
 
             await RunAsync(async () =>
             {
-                if (MultiplayerService.Instance.Sessions.TryGetValue(config.RoomId, out var session) == false)
+                var session = MultiplayerService.Instance.Sessions.Values.FirstOrDefault(value => value.Id == config.RoomId);
+                if (session == null)
                 {
                     result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
                     return;
@@ -628,7 +630,8 @@ namespace oojjrs.oplat.ugsymous
         {
             await RunAsync(async () =>
             {
-                if (MultiplayerService.Instance.Sessions.TryGetValue(config.RoomId, out var session) == false)
+                var session = MultiplayerService.Instance.Sessions.Values.FirstOrDefault(value => value.Id == config.RoomId);
+                if (session == null)
                 {
                     result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
                     return;
@@ -793,7 +796,8 @@ namespace oojjrs.oplat.ugsymous
             _isBusy = true;
             try
             {
-                if (MultiplayerService.Instance.Sessions.TryGetValue(config.RoomId, out var session) == false) { result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom); return; }
+                var session = MultiplayerService.Instance.Sessions.Values.FirstOrDefault(value => value.Id == config.RoomId);
+                if (session == null) { result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom); return; }
                 if (session.CurrentPlayer.Id != config.PlayerId) { result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.NotPermitted); return; }
                 session.CurrentPlayer.SetProperties(UgsymousNet.ToPlayerProperties(config.PlayerFields));
                 await session.SaveCurrentPlayerDataAsync();
