@@ -40,11 +40,14 @@ namespace oojjrs.oplat.anonymous.controllers
             var players = room.Players ?? Array.Empty<AnonymousServerRoom.PlayerData>();
             if (players.Any(player => player.Id == session.Account) == false)
             {
-                if (room.IsLocked || (string.IsNullOrEmpty(secret.Password) == false && secret.Password != requestArgument.Password))
-                    return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Forbidden);
+                if (room.IsLocked)
+                    return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.RoomLocked);
+
+                if ((string.IsNullOrEmpty(secret.Password) == false) && (secret.Password != requestArgument.Password))
+                    return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.IncorrectPassword);
 
                 if (players.Length >= room.MaxPlayers)
-                    return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.Conflict);
+                    return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.RoomFull);
 
                 room.Players = players.Append(new AnonymousServerRoom.PlayerData()
                 {

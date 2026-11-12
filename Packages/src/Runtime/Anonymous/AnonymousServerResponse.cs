@@ -15,6 +15,9 @@ namespace oojjrs.oplat.anonymous
             Conflict = 5,
             UnsupportedOperation = 6,
             ServerError = 7,
+            IncorrectPassword = 8,
+            RoomFull = 9,
+            RoomLocked = 10,
         }
 
         internal AnonymousServerResponse(ResultCodeEnum resultCode, byte[] content)

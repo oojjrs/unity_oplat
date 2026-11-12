@@ -139,6 +139,15 @@ namespace oojjrs.oplat.anonymous
                     var response = await Net.ReceiveAsync(AnonymousNet.OperationEnum.JoinRoom, cancellationToken);
                     switch (response.ResultCode)
                     {
+                        case AnonymousServerResponse.ResultCodeEnum.IncorrectPassword:
+                            failure = MyNetInterface.CatchInterface.FailureEnum.IncorrectPassword;
+                            break;
+                        case AnonymousServerResponse.ResultCodeEnum.RoomFull:
+                            failure = MyNetInterface.CatchInterface.FailureEnum.RoomFull;
+                            break;
+                        case AnonymousServerResponse.ResultCodeEnum.RoomLocked:
+                            failure = MyNetInterface.CatchInterface.FailureEnum.RoomLocked;
+                            break;
                         case AnonymousServerResponse.ResultCodeEnum.NotFound:
                             failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
                             break;

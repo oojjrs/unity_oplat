@@ -153,6 +153,7 @@ namespace oojjrs.oplat.steam
             }
         }
 
+        private const byte AdmissionError = byte.MaxValue;
         private const int AdmissionTimeoutMilliseconds = 15000;
         private const int FieldCountMax = 128;
         private const int FieldKeyByteCountMax = 256;
@@ -166,7 +167,7 @@ namespace oojjrs.oplat.steam
         private const int MetadataValueByteCountMax = Constants.k_cubChatMetadataMax - 1;
         private const int MinimumPollingDelaySeconds = 1;
         private const int PlayerCountMax = 250;
-        private const int ProtocolVersion = 3;
+        private const int ProtocolVersion = 4;
         private const int RosterChunkCharacterCount = 7000;
         private const int RosterChunkCountMax = 16;
         private const uint ChatMagic = 0x4f504c48;
@@ -205,7 +206,7 @@ namespace oojjrs.oplat.steam
         private readonly Queue<PendingBroadcast> _pendingBroadcasts = new();
         private readonly Dictionary<ulong, TaskCompletionSource<bool>> PendingLobbyData = new();
 
-        private TaskCompletionSource<bool> _admissionSource;
+        private TaskCompletionSource<MyNetInterface.CatchInterface.FailureEnum?> _admissionSource;
         private MyNetChatResultInterface _chatResult;
         private string _chatRoomId;
         private CSteamID _currentLobby;
@@ -1446,14 +1447,14 @@ namespace oojjrs.oplat.steam
                 BlockedPlayerIds.Clear();
                 PublishLocalPlayerData();
                 _state = StateEnum.AwaitingAdmission;
-                var admissionSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var admissionSource = new TaskCompletionSource<MyNetInterface.CatchInterface.FailureEnum?>(TaskCreationOptions.RunContinuationsAsynchronously);
                 _admissionSource = admissionSource;
                 if (SendMessage(_originalHostId, MessageKind.AdmissionRequest, admissionPayload) == false)
                     throw new InvalidOperationException("Steam rejected the room admission request.");
 
-                var admitted = await WaitForAdmissionAsync(admissionSource.Task, cancellationToken);
-                if (admitted == false)
-                    throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
+                var failure = await WaitForAdmissionAsync(admissionSource.Task, cancellationToken);
+                if (failure.HasValue)
+                    throw new FailureException(failure.Value);
 
                 cancellationToken.ThrowIfCancellationRequested();
                 _admissionSource = null;
@@ -1494,7 +1495,7 @@ namespace oojjrs.oplat.steam
                 RemovePendingPlayer(targetId);
                 PublishRoster();
                 BroadcastRoster();
-                SendLobbyControl(MessageKind.PlayerKicked, targetId);
+                SendLobbyControl(MessageKind.PlayerKicked, targetId, Array.Empty<byte>());
                 SendMessage(targetId, MessageKind.PlayerKicked, EncodeUInt64(targetId));
                 NotifyRoomChanged();
                 return;
@@ -1532,8 +1533,9 @@ namespace oojjrs.oplat.steam
             {
                 case EChatRoomEnterResponse.k_EChatRoomEnterResponseDoesntExist:
                     throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
-                case EChatRoomEnterResponse.k_EChatRoomEnterResponseNotAllowed:
                 case EChatRoomEnterResponse.k_EChatRoomEnterResponseFull:
+                    throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.RoomFull);
+                case EChatRoomEnterResponse.k_EChatRoomEnterResponseNotAllowed:
                 case EChatRoomEnterResponse.k_EChatRoomEnterResponseBanned:
                 case EChatRoomEnterResponse.k_EChatRoomEnterResponseLimited:
                 case EChatRoomEnterResponse.k_EChatRoomEnterResponseClanDisabled:
@@ -1596,7 +1598,7 @@ namespace oojjrs.oplat.steam
             }
         }
 
-        private async Task<bool> WaitForAdmissionAsync(Task<bool> admissionTask, CancellationToken cancellationToken)
+        private async Task<MyNetInterface.CatchInterface.FailureEnum?> WaitForAdmissionAsync(Task<MyNetInterface.CatchInterface.FailureEnum?> admissionTask, CancellationToken cancellationToken)
         {
             var timeoutTask = Task.Delay(AdmissionTimeoutMilliseconds, cancellationToken);
             if (await Task.WhenAny(admissionTask, timeoutTask) == admissionTask)
@@ -1645,7 +1647,7 @@ namespace oojjrs.oplat.steam
                 throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
 
             if (ReadBooleanLobbyData(lobby, MetadataIsLocked))
-                throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotPermitted);
+                throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.RoomLocked);
 
             var hostText = SteamMatchmaking.GetLobbyData(lobby, MetadataHost);
             var epoch = SteamMatchmaking.GetLobbyData(lobby, MetadataEpoch);
@@ -1935,7 +1937,7 @@ namespace oojjrs.oplat.steam
             {
                 SteamMatchmaking.SetLobbyJoinable(_currentLobby, false);
                 SetLobbyData(MetadataClosed, "1");
-                SendLobbyControl(MessageKind.RoomClosed, 0);
+                SendLobbyControl(MessageKind.RoomClosed, 0, Array.Empty<byte>());
                 foreach (var playerId in AcceptedPlayerIds)
                 {
                     if (playerId != _localSteamId)
@@ -1965,7 +1967,7 @@ namespace oojjrs.oplat.steam
             if (_originalHostId != 0)
                 peers.Add(_originalHostId);
 
-            _admissionSource?.TrySetResult(false);
+            _admissionSource?.TrySetResult(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
             _admissionSource = null;
             _playerUpdateSource?.TrySetResult(PlayerUpdateOutcomeEnum.Unknown);
             _playerUpdateSource = null;
@@ -2377,11 +2379,19 @@ namespace oojjrs.oplat.steam
                     var kind = (MessageKind)reader.ReadByte();
                     var targetId = reader.ReadUInt64();
                     var epoch = reader.ReadString();
+                    var payload = reader.ReadBytes(kind == MessageKind.AdmissionRejected ? 1 : 0);
                     if ((epoch != _epoch) || (stream.Position != stream.Length))
                         return;
 
-                    if ((kind == MessageKind.RoomClosed) || (((kind == MessageKind.PlayerKicked) || (kind == MessageKind.AdmissionRejected)) && (targetId == _localSteamId)))
+                    if ((kind == MessageKind.AdmissionRejected) && (targetId == _localSteamId) && (_state == StateEnum.AwaitingAdmission))
+                    {
+                        CompleteAdmissionRejection(payload);
                         ExitCurrentRoom(true);
+                    }
+                    else if ((kind == MessageKind.RoomClosed) || ((kind == MessageKind.PlayerKicked) && (targetId == _localSteamId)))
+                    {
+                        ExitCurrentRoom(true);
+                    }
                 }
             }
             catch (Exception exception)
@@ -2409,7 +2419,16 @@ namespace oojjrs.oplat.steam
             }
         }
 
-        private bool SendLobbyControl(MessageKind kind, ulong targetId)
+        private void SendAdmissionRejection(ulong playerId, MyNetInterface.CatchInterface.FailureEnum? failure)
+        {
+            var payload = new[] { failure.HasValue ? (byte)failure.Value : AdmissionError };
+            var sentControl = SendLobbyControl(MessageKind.AdmissionRejected, playerId, payload);
+            SendMessage(playerId, MessageKind.AdmissionRejected, payload);
+            if (sentControl)
+                ClosePeer(playerId);
+        }
+
+        private bool SendLobbyControl(MessageKind kind, ulong targetId, byte[] payload)
         {
             using (var stream = new MemoryStream())
             {
@@ -2420,6 +2439,7 @@ namespace oojjrs.oplat.steam
                     writer.Write((byte)kind);
                     writer.Write(targetId);
                     writer.Write(_epoch);
+                    writer.Write(payload);
                 }
 
                 var data = stream.ToArray();
@@ -2464,7 +2484,7 @@ namespace oojjrs.oplat.steam
             var playerId = identity.GetSteamID().m_SteamID;
             SteamNetworkingMessages.CloseChannelWithUser(ref identity, MessageChannel);
             if ((_state == StateEnum.AwaitingAdmission) && (playerId == _originalHostId))
-                _admissionSource?.TrySetResult(false);
+                _admissionSource?.TrySetResult(MyNetInterface.CatchInterface.FailureEnum.Disconnected);
 
             if (((_state == StateEnum.Member) && (playerId == _originalHostId)) || ((_state == StateEnum.Host) && AcceptedPlayerIds.Contains(playerId)))
                 FailSession(new InvalidOperationException("The Steam peer session failed and delivery of accepted messages is uncertain."));
@@ -2518,16 +2538,20 @@ namespace oojjrs.oplat.steam
                     if ((_state == StateEnum.AwaitingAdmission) && (senderId == _originalHostId))
                     {
                         ApplyMemberSnapshot(payload);
-                        var isAccepted = AcceptedPlayerIds.Contains(_localSteamId);
-                        if (isAccepted)
+                        if (AcceptedPlayerIds.Contains(_localSteamId))
+                        {
                             _state = StateEnum.Member;
-
-                        _admissionSource?.TrySetResult(isAccepted);
+                            _admissionSource?.TrySetResult(null);
+                        }
+                        else
+                        {
+                            _admissionSource?.TrySetException(new FormatException("The Steam admission snapshot does not contain the local player."));
+                        }
                     }
                     break;
                 case MessageKind.AdmissionRejected:
                     if ((_state == StateEnum.AwaitingAdmission) && (senderId == _originalHostId))
-                        _admissionSource?.TrySetResult(false);
+                        CompleteAdmissionRejection(payload);
                     break;
                 case MessageKind.RosterChanged:
                     if ((_state == StateEnum.Member) && (senderId == _originalHostId))
@@ -2630,6 +2654,35 @@ namespace oojjrs.oplat.steam
             }
         }
 
+        private void CompleteAdmissionRejection(byte[] payload)
+        {
+            if (payload.Length != 1)
+            {
+                _admissionSource?.TrySetException(new FormatException("Invalid Steam room admission failure payload."));
+                return;
+            }
+
+            if (payload[0] == AdmissionError)
+            {
+                _admissionSource?.TrySetException(new InvalidOperationException("The Steam room host failed to process admission."));
+                return;
+            }
+
+            var failure = (MyNetInterface.CatchInterface.FailureEnum)payload[0];
+            switch (failure)
+            {
+                case MyNetInterface.CatchInterface.FailureEnum.IncorrectPassword:
+                case MyNetInterface.CatchInterface.FailureEnum.NotPermitted:
+                case MyNetInterface.CatchInterface.FailureEnum.RoomFull:
+                case MyNetInterface.CatchInterface.FailureEnum.RoomLocked:
+                    _admissionSource?.TrySetResult(failure);
+                    break;
+                default:
+                    _admissionSource?.TrySetException(new FormatException("Invalid Steam room admission failure code."));
+                    break;
+            }
+        }
+
         private void HandleAdmissionRequest(ulong senderId, byte[] payload)
         {
             if ((senderId == _localSteamId) || BlockedPlayerIds.Contains(senderId) || (IsRawLobbyMember(senderId) == false))
@@ -2642,14 +2695,18 @@ namespace oojjrs.oplat.steam
                 return;
             }
 
-            if (_isLocked || (AcceptedPlayerIds.Count >= _maxPlayers) || (suppliedPassword != (_password ?? string.Empty)))
+            MyNetInterface.CatchInterface.FailureEnum? failure = null;
+            if (_isLocked)
+                failure = MyNetInterface.CatchInterface.FailureEnum.RoomLocked;
+            else if (AcceptedPlayerIds.Count >= _maxPlayers)
+                failure = MyNetInterface.CatchInterface.FailureEnum.RoomFull;
+            else if (suppliedPassword != (_password ?? string.Empty))
+                failure = MyNetInterface.CatchInterface.FailureEnum.IncorrectPassword;
+
+            if (failure.HasValue)
             {
                 BlockedPlayerIds.Add(senderId);
-                var sentControl = SendLobbyControl(MessageKind.AdmissionRejected, senderId);
-                SendMessage(senderId, MessageKind.AdmissionRejected, Array.Empty<byte>());
-                if (sentControl)
-                    ClosePeer(senderId);
-
+                SendAdmissionRejection(senderId, failure);
                 return;
             }
 
@@ -2671,7 +2728,7 @@ namespace oojjrs.oplat.steam
 
                 AcceptedPlayerIds.Remove(senderId);
                 LogicalPlayers.Remove(senderId);
-                SendMessage(senderId, MessageKind.AdmissionRejected, Array.Empty<byte>());
+                SendAdmissionRejection(senderId, null);
                 try
                 {
                     PublishRoster();

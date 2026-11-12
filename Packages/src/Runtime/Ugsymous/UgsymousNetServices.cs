@@ -507,14 +507,69 @@ namespace oojjrs.oplat.ugsymous
                 return;
             }
 
-            await RunAsync(async () =>
+            if (_isBusy)
             {
-                var options = new JoinSessionOptions { Password = config.Password, PlayerProperties = UgsymousNet.ToPlayerProperties(config.PlayerFields, config.PlayerNickname) };
-                options.WithNetworkHandler(_net.Transport);
-                var session = string.IsNullOrWhiteSpace(config.Code) ? await MultiplayerService.Instance.JoinSessionByIdAsync(config.RoomId, options) : await MultiplayerService.Instance.JoinSessionByCodeAsync(config.Code, options);
-                config.CancellationToken.ThrowIfCancellationRequested();
-                result.OnOk(GetRoom(session));
-            }, result);
+                result.OnBusy();
+                return;
+            }
+
+            using (var cancellationSource = _net.CreateCancellationSource(config.CancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                MyNetRoomInterface room = null;
+                MyNetInterface.CatchInterface.FailureEnum? failure = null;
+                Exception caughtException = null;
+                var isBusy = false;
+                _isBusy = true;
+                try
+                {
+                    room = GetRoom(await JoinRoomCoreAsync(config, cancellationToken));
+                }
+                catch (LobbyServiceException exception)
+                {
+                    failure = exception.Reason switch
+                    {
+                        LobbyExceptionReason.IncorrectPassword => MyNetInterface.CatchInterface.FailureEnum.IncorrectPassword,
+                        LobbyExceptionReason.LobbyFull => MyNetInterface.CatchInterface.FailureEnum.RoomFull,
+                        LobbyExceptionReason.LobbyLocked => MyNetInterface.CatchInterface.FailureEnum.RoomLocked,
+                        LobbyExceptionReason.LobbyNotFound => MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom,
+                        LobbyExceptionReason.Forbidden => MyNetInterface.CatchInterface.FailureEnum.NotPermitted,
+                        LobbyExceptionReason.NetworkError or LobbyExceptionReason.BadGateway or LobbyExceptionReason.ServiceUnavailable or LobbyExceptionReason.GatewayTimeout => MyNetInterface.CatchInterface.FailureEnum.Disconnected,
+                        _ => null,
+                    };
+                    isBusy = exception.Reason == LobbyExceptionReason.RateLimited;
+                    caughtException = exception;
+                }
+                catch (SessionException exception)
+                {
+                    failure = exception.Error switch
+                    {
+                        SessionError.SessionNotFound or SessionError.SessionDeleted => MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom,
+                        SessionError.NotAuthorized or SessionError.Forbidden => MyNetInterface.CatchInterface.FailureEnum.NotPermitted,
+                        _ => null,
+                    };
+                    isBusy = exception.Error == SessionError.RateLimitExceeded;
+                    caughtException = exception;
+                }
+                catch (Exception exception)
+                {
+                    caughtException = exception;
+                }
+                finally
+                {
+                    _isBusy = false;
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (isBusy)
+                    result.OnBusy();
+                else if (failure.HasValue)
+                    result.OnFailed(failure.Value);
+                else if (caughtException != null)
+                    result.OnException(new MyNetSessionException("Failed to join UGS room.", caughtException));
+                else
+                    result.OnOk(room);
+            }
         }
 
         Task MyNetRoomServiceInterface.SwitchAsync(MyNetRoomServiceInterface.JoinConfigInterface config, MyNetRoomServiceInterface.JoinResultInterface result)
@@ -607,6 +662,49 @@ namespace oojjrs.oplat.ugsymous
             cancellationToken.ThrowIfCancellationRequested();
             var session = MultiplayerService.Instance.Sessions.Values.FirstOrDefault(value => value.CurrentPlayer?.Id == _net.Account);
             return Task.FromResult(session == null ? null : GetRoom(session));
+        }
+
+        private async Task<ISession> JoinRoomCoreAsync(MyNetRoomServiceInterface.JoinConfigInterface config, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var currentSession = MultiplayerService.Instance.Sessions.Values.FirstOrDefault(value => string.IsNullOrWhiteSpace(config.RoomId) ? string.Equals(value.Code, config.Code.Trim(), StringComparison.OrdinalIgnoreCase) : value.Id == config.RoomId.Trim());
+            if (currentSession != null)
+                return currentSession;
+
+            var joinedRoomIds = await LobbyService.Instance.GetJoinedLobbiesAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            var player = new Unity.Services.Lobbies.Models.Player(_net.Account)
+            {
+                Data = UgsymousNet.ToPlayerProperties(config.PlayerFields, config.PlayerNickname).ToDictionary(property => property.Key, property => new PlayerDataObject((PlayerDataObject.VisibilityOptions)property.Value.Visibility, property.Value.Value)),
+            };
+            var lobby = string.IsNullOrWhiteSpace(config.RoomId) ? await LobbyService.Instance.JoinLobbyByCodeAsync(config.Code.Trim(), new JoinLobbyByCodeOptions { Password = config.Password, Player = player }) : await LobbyService.Instance.JoinLobbyByIdAsync(config.RoomId.Trim(), new JoinLobbyByIdOptions { Password = config.Password, Player = player });
+            ISession session = null;
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                session = await MultiplayerService.Instance.ReconnectToSessionAsync(lobby.Id, new ReconnectSessionOptions().WithNetworkHandler(_net.Transport));
+                cancellationToken.ThrowIfCancellationRequested();
+                return session;
+            }
+            catch (Exception exception)
+            {
+                try
+                {
+                    if (session != null)
+                        await session.LeaveAsync();
+                    else if (joinedRoomIds.Contains(lobby.Id) == false)
+                        await LobbyService.Instance.RemovePlayerAsync(lobby.Id, _net.Account);
+                }
+                catch (LobbyServiceException cleanupException) when ((cleanupException.Reason == LobbyExceptionReason.LobbyNotFound) || (cleanupException.Reason == LobbyExceptionReason.PlayerNotFound))
+                {
+                }
+                catch (Exception cleanupException)
+                {
+                    throw new AggregateException("Failed to join UGS room and remove the partial membership.", exception, cleanupException);
+                }
+
+                throw;
+            }
         }
 
         private async void OnSessionHostChanged(ISession session)

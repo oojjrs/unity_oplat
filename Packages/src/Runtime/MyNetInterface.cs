@@ -14,6 +14,9 @@
                 MessageTooLong,
                 NotFoundRoom,
                 NotPermitted,
+                IncorrectPassword,
+                RoomFull,
+                RoomLocked,
             }
 
             void OnBusy();
