@@ -6,6 +6,20 @@ namespace oojjrs.oplat
 {
     public interface MyNetRoomServiceInterface
     {
+        public readonly struct JoinInfo
+        {
+            public bool IsPasswordRequired { get; }
+            public string RoomId { get; }
+            public string Title { get; }
+
+            public JoinInfo(string roomId, string title, bool isPasswordRequired)
+            {
+                IsPasswordRequired = isPasswordRequired;
+                RoomId = roomId;
+                Title = title;
+            }
+        }
+
         public interface CreateConfigInterface
         {
             CancellationToken CancellationToken { get; }
@@ -46,6 +60,17 @@ namespace oojjrs.oplat
             string RoomId { get; }
         }
 
+        public interface JoinInfoConfigInterface
+        {
+            CancellationToken CancellationToken { get; }
+            string RoomId { get; }
+        }
+
+        public interface JoinInfoResultInterface : MyNetInterface.CatchInterface
+        {
+            void OnOk(JoinInfo info);
+        }
+
         public interface JoinResultInterface : MyNetInterface.CatchInterface
         {
             void OnOk(MyNetRoomInterface room);
@@ -66,6 +91,7 @@ namespace oojjrs.oplat
 
         Task CreateAsync(CreateConfigInterface config, CreateResultInterface result);
         Task ExitAsync(ExitConfigInterface config, ExitResultInterface result);
+        Task GetJoinInfoAsync(JoinInfoConfigInterface config, JoinInfoResultInterface result);
         Task JoinAsync(JoinConfigInterface config, JoinResultInterface result);
         Task SwitchAsync(JoinConfigInterface config, JoinResultInterface result) => JoinAsync(config, result);
         Task UpdateAsync(UpdateConfigInterface config, UpdateResultInterface result);

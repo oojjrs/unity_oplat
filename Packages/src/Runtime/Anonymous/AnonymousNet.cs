@@ -29,6 +29,7 @@ namespace oojjrs.oplat.anonymous
             GetGlobalFloatStat = 34,
             GetGlobalIntStat = 35,
             GetIntStat = 22,
+            GetRoomJoinInfo = 37,
             GetRooms = 4,
             GetStatDefinition = 32,
             GetStatDefinitions = 33,

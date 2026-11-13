@@ -67,6 +67,18 @@ namespace oojjrs.oplat.anonymous
             public string RoomId { get; set; }
         }
 
+        public record RoomJoinInfoRequestArgument
+        {
+            public string RoomId { get; set; }
+        }
+
+        public record RoomJoinInfoResponseArgument
+        {
+            public bool IsPasswordRequired { get; set; }
+            public string RoomId { get; set; }
+            public string Title { get; set; }
+        }
+
         public record StatsRequestArgument
         {
             public double AverageRateSessionLengthSeconds { get; set; }
@@ -303,6 +315,7 @@ namespace oojjrs.oplat.anonymous
                 AnonymousNet.OperationEnum.GetGlobalFloatStat => await HandleStatsAsync(operation, content, session),
                 AnonymousNet.OperationEnum.GetGlobalIntStat => await HandleStatsAsync(operation, content, session),
                 AnonymousNet.OperationEnum.GetIntStat => await HandleStatsAsync(operation, content, session),
+                AnonymousNet.OperationEnum.GetRoomJoinInfo => await GetRoomJoinInfoAsync(content, session),
                 AnonymousNet.OperationEnum.GetRooms => await AnonymousServerGetRooms.RunAsync(RoomState),
                 AnonymousNet.OperationEnum.GetStatDefinition => await HandleStatsAsync(operation, content, session),
                 AnonymousNet.OperationEnum.GetStatDefinitions => await HandleStatsAsync(operation, content, session),
@@ -536,6 +549,24 @@ namespace oojjrs.oplat.anonymous
                 cancellationToken.ThrowIfCancellationRequested();
                 return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.ServerError);
             }
+        }
+
+        private async Task<AnonymousServerResponse> GetRoomJoinInfoAsync(byte[] content, AnonymousServerSession session)
+        {
+            var argument = await DeserializeAsync<RoomJoinInfoRequestArgument>(content);
+            if ((argument == null) || string.IsNullOrWhiteSpace(argument.RoomId))
+                throw new FormatException("Invalid anonymous room join information request.");
+
+            var secret = RoomState.Rooms.Find(value => value.Room.Id == argument.RoomId.Trim());
+            if (secret == null)
+                return AnonymousServerResponse.Create(AnonymousServerResponse.ResultCodeEnum.NotFound);
+
+            return await AnonymousServerResponse.CreateAsync(AnonymousServerResponse.ResultCodeEnum.Success, new RoomJoinInfoResponseArgument()
+            {
+                IsPasswordRequired = (string.IsNullOrEmpty(secret.Password) == false) && (secret.InvitedPlayerIds.Contains(session.Account) == false) && ((secret.Room.Players ?? Array.Empty<AnonymousServerRoom.PlayerData>()).Any(player => player.Id == session.Account) == false),
+                RoomId = secret.Room.Id,
+                Title = secret.Room.Title,
+            });
         }
 
         private async Task<AnonymousServerResponse> InviteFriendAsync(byte[] content, AnonymousServerSession session)

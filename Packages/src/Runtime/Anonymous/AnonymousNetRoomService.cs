@@ -1,11 +1,13 @@
 ﻿using oojjrs.oplat.anonymous.controllers;
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace oojjrs.oplat.anonymous
 {
     internal class AnonymousNetRoomService : MyNetRoomServiceInterface
     {
+        private readonly SemaphoreSlim _joinInfoGate = new(1, 1);
         private readonly AnonymousNet Net;
         private readonly MyNetRoomSwitcher Switcher;
 
@@ -108,6 +110,67 @@ namespace oojjrs.oplat.anonymous
 
                 Net.ClearCurrentRoomForPlayer(roomId, playerId);
                 result.OnOk(roomId, playerId);
+            }
+        }
+
+        async Task MyNetRoomServiceInterface.GetJoinInfoAsync(MyNetRoomServiceInterface.JoinInfoConfigInterface config, MyNetRoomServiceInterface.JoinInfoResultInterface result)
+        {
+            using (var cancellationSource = Net.CreateCancellationSource(config.CancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                if (string.IsNullOrWhiteSpace(config.RoomId))
+                {
+                    result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyRoomId);
+                    return;
+                }
+
+                if (await _joinInfoGate.WaitAsync(0, cancellationToken) == false)
+                {
+                    result.OnBusy();
+                    return;
+                }
+
+                MyNetRoomServiceInterface.JoinInfo info = default;
+                MyNetInterface.CatchInterface.FailureEnum? failure = null;
+                Exception caughtException = null;
+                try
+                {
+                    using (var requestSource = Net.CreateCancellationSource(CancellationToken.None))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await Net.SendAsync(AnonymousNet.OperationEnum.GetRoomJoinInfo, new AnonymousServer.RoomJoinInfoRequestArgument() { RoomId = config.RoomId }, requestSource.Token);
+                        var response = await Net.ReceiveAsync(AnonymousNet.OperationEnum.GetRoomJoinInfo, requestSource.Token);
+                        if (response.ResultCode == AnonymousServerResponse.ResultCodeEnum.NotFound)
+                        {
+                            failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
+                        }
+                        else
+                        {
+                            response.EnsureSuccess();
+                            var argument = await response.GetContentAsync<AnonymousServer.RoomJoinInfoResponseArgument>();
+                            if ((argument == null) || (argument.RoomId != config.RoomId.Trim()))
+                                throw new FormatException("Invalid anonymous room join information response.");
+
+                            info = new(argument.RoomId, argument.Title, argument.IsPasswordRequired);
+                        }
+                    }
+                }
+                catch (Exception exception)
+                {
+                    caughtException = exception;
+                }
+                finally
+                {
+                    _joinInfoGate.Release();
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (failure.HasValue)
+                    result.OnFailed(failure.Value);
+                else if (caughtException != null)
+                    result.OnException(new MyNetSessionException("Failed to get anonymous room join information.", caughtException));
+                else
+                    result.OnOk(info);
             }
         }
 

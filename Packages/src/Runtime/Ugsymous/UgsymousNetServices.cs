@@ -500,6 +500,67 @@ namespace oojjrs.oplat.ugsymous
             }, result);
         }
 
+        async Task MyNetRoomServiceInterface.GetJoinInfoAsync(MyNetRoomServiceInterface.JoinInfoConfigInterface config, MyNetRoomServiceInterface.JoinInfoResultInterface result)
+        {
+            if (string.IsNullOrWhiteSpace(config.RoomId))
+            {
+                result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyRoomId);
+                return;
+            }
+
+            if (_isBusy)
+            {
+                result.OnBusy();
+                return;
+            }
+
+            using (var cancellationSource = _net.CreateCancellationSource(config.CancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                MyNetRoomServiceInterface.JoinInfo info = default;
+                MyNetInterface.CatchInterface.FailureEnum? failure = null;
+                Exception caughtException = null;
+                var isBusy = false;
+                _isBusy = true;
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var lobby = await LobbyService.Instance.GetLobbyAsync(config.RoomId);
+                    info = new(lobby.Id, lobby.Name, lobby.HasPassword && ((lobby.Players == null) || (lobby.Players.Any(player => player.Id == _net.Account) == false)));
+                }
+                catch (LobbyServiceException exception)
+                {
+                    failure = exception.Reason switch
+                    {
+                        LobbyExceptionReason.LobbyNotFound => MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom,
+                        LobbyExceptionReason.Forbidden => MyNetInterface.CatchInterface.FailureEnum.NotPermitted,
+                        LobbyExceptionReason.NetworkError or LobbyExceptionReason.BadGateway or LobbyExceptionReason.ServiceUnavailable or LobbyExceptionReason.GatewayTimeout => MyNetInterface.CatchInterface.FailureEnum.Disconnected,
+                        _ => null,
+                    };
+                    isBusy = exception.Reason == LobbyExceptionReason.RateLimited;
+                    caughtException = exception;
+                }
+                catch (Exception exception)
+                {
+                    caughtException = exception;
+                }
+                finally
+                {
+                    _isBusy = false;
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (isBusy)
+                    result.OnBusy();
+                else if (failure.HasValue)
+                    result.OnFailed(failure.Value);
+                else if (caughtException != null)
+                    result.OnException(new MyNetSessionException("Failed to get UGS room join information.", caughtException));
+                else
+                    result.OnOk(info);
+            }
+        }
+
         async Task MyNetRoomServiceInterface.JoinAsync(MyNetRoomServiceInterface.JoinConfigInterface config, MyNetRoomServiceInterface.JoinResultInterface result)
         {
             if (string.IsNullOrWhiteSpace(config.Code) && string.IsNullOrWhiteSpace(config.RoomId))

@@ -26,6 +26,11 @@ namespace oojjrs.oplat.steam
             return Net.ExitRoomAsync(config, result, false);
         }
 
+        Task MyNetRoomServiceInterface.GetJoinInfoAsync(MyNetRoomServiceInterface.JoinInfoConfigInterface config, MyNetRoomServiceInterface.JoinInfoResultInterface result)
+        {
+            return Net.GetRoomJoinInfoAsync(config, result);
+        }
+
         Task MyNetRoomServiceInterface.JoinAsync(MyNetRoomServiceInterface.JoinConfigInterface config, MyNetRoomServiceInterface.JoinResultInterface result)
         {
             return Net.JoinRoomAsync(config, result, false);

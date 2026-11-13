@@ -2,13 +2,15 @@
 
 ## 현재 요약과 진행 상태
 
-- 마지막 대조: 2026-11-13T18:56:22+09:00. 기존 결정 기록과 로컬 Git 이력, Packages/src/package.json을 확인했다. 현재 버전은 1.13.8이다. 근거: R-20261113-memory-cleanup, R-20261113-invitation-version-commit.
+- 마지막 대조: 2026-11-13T19:17:02+09:00. 현재 패키지 버전은 1.13.9다. 근거: R-20261113-switch-preparation-version.
 - 입장 실패: 공통 FailureEnum의 IncorrectPassword=8, RoomFull=9, RoomLocked=10을 Anonymous·Steam·UGS 콜백에 전달한다. 기존 enum 0~7과 외부 콜백 시그니처는 유지한다. 근거: R-20261112-join-failure-complete.
 - UGS: Lobby 직접 입장 후 Multiplayer 세션 연결, 재입장·RoomId 우선·취소·Busy 시점·예외 메시지 동작은 사용자가 전체 검토 후 유지하기로 했다. 친구 초대·퇴장·방 갱신·플레이어 갱신은 session.Id로 조회한다. 근거: R-20261112-ugs-session-id-lookup, R-20261113-reviewed-content.
 - 초대: Oplat InviteAsync를 거친 Steam·Anonymous 초대는 호스트/서버가 계정을 확인하여 비밀번호 검사만 생략한다. 시간 만료 없이 입장 성공 시 1회 소모하고 방 종료 시 정리한다. 잠금·정원·일반 입장 비밀번호 검사는 유지하며, Steam UI 직접 발송과 UGS는 적용 대상이 아니다. 근거: R-20261113-invitation-lifetime, R-20261113-invitation-admission-complete.
-- 호환성: Steam protocol은 5이며 4와 상호 입장하지 않는다. 공개 InviteAsync·JoinAsync·SwitchAsync 시그니처는 유지한다. 근거: R-20261113-invitation-protocol.
+- 호환성: 새 입장 전 조회 메시지에 따라 Steam protocol은 6이며 5와 상호 입장하지 않는다. InviteAsync·JoinAsync·SwitchAsync·PrepareAsync 시그니처는 유지하고 Room 서비스 조회 API를 추가한다. 근거: R-20261113-invitation-protocol, R-20261113-switch-preparation-implementation.
 - 확인 한계: 기존 기록은 코드 정적 대조·형식·공백 검사 통과를 보고한다. 컴파일·실계정 네트워크·Play Mode 결과는 없으며 이번 메모리 정리로 실행 검증 상태가 바뀌지 않는다.
 - 과거 전체 대화 복원은 완료되지 않았다. 미확인 출처를 조사 완료나 확정 결정으로 간주하지 않으며, 이후 요청과 관련된 주제만 원 출처에서 확인한다. 기존의 전수 조사 재개 상태는 R-20261113-memory-cleanup에서 대체했다.
+
+- 입장 준비: Room.GetJoinInfoAsync가 현재 방을 유지한 채 RoomId·Title·계정별 IsPasswordRequired를 반환한다. Steam·Anonymous는 호스트/서버 초대 권한을 조회만 하며, PrepareAsync의 null 반환은 정상 취소로 처리한다. 소스 구현 완료·실행 미검증. 근거: R-20261113-switch-preparation-complete. 확인: 2026-11-13T19:12:40+09:00.
 
 ## 결정 색인과 출처
 
@@ -109,3 +111,30 @@
 - 초기 복원 기록의 전수 조사 재개 상태를 대체한다. 본문 미확인 69건의 목록 활동 시각은 결정 근거가 아니므로 목록은 제거하고 조사 출처 S1과 미확인 상태를 남겼다. 과거 결정을 복원 완료하거나 철회한 것으로 간주하지 않는다. 필요한 주제가 생기면 관련 출처만 확인한다.
 - 도구로 확인한 현재 사실: 로컬 이력에 실패 분류, UGS 조회, 초대 기능 변경이 존재하고 package.json은 1.13.8이다. 따라서 예전 기록의 진행 중·미반영 상태를 현재 작업으로 이어 쓰지 않도록 요약과 대체 관계를 갱신했다. 코드 동작을 새로 검증한 것은 아니다.
 - 보존한 미해결 사항: 컴파일·실계정 네트워크·Play Mode 실행 결과와 과거 미확인 대화 내용. 정리만으로 성공 결과나 새 제품 결정을 추가하지 않는다.
+
+## R-20261113-switch-preparation-gap
+
+- 기록 시각: 2026-11-13T18:59:33+09:00. 기록자·진단 주체 Codex /root, OOJJRS-PC. 출처: 현재 채팅 01a1d456-5b4b-7df2-ae0c-7817cb3290c4의 사용자 연결 요청과 [멀티플레이 개선 목록 기록 및 비밀번호 입장 구현](codex://threads/01a1c4ef-3255-7540-802f-ca00bdf2bd3b), 턴 01a1d44d-ce5a-7900-b775-444e395c95a0, 최종 항목 msg_08a2a1bb641e025f016af6de71e8c887d08e14882ba3fb9548. 개별 원 발언 시각은 미확인이다.
+- 사용자 결정 확인: 연결 채팅의 사용자 항목 01a1d450-1099-7fb0-911b-c22f4f2951b5는 초대 없이 Steam 친구 직접 참가 시 기존 LobbyForm에서 비밀번호를 입력하는 선택을 확정했다. 기존 초대 권한 지원은 현재 요약과 R-20261113-invitation-admission-complete를 유지한다.
+- 소스로 확인한 사실: MyNetRoomSwitchHandlerInterface.PrepareAsync는 playerId·roomId·취소 토큰만 받고, MyNetRoomSwitcher.HandleRequestAsync는 준비 결과 null을 OnException으로 전달한다. 준비는 SwitchCoreAsync의 기존 방 퇴장보다 먼저 실행된다. 공개 Room/Lobby 서비스에는 대상 방의 계정별 비밀번호 필요 여부를 입장 전에 조회하는 계약이 없다.
+- Codex 진단: 대상 방 제목과 서버/호스트가 판정한 계정별 비밀번호 필요 여부를 퇴장 전에 제공하고, 입력 취소 시 기존 방과 초대 권한을 유지한 채 정상 종료하는 계약이 필요하다. 사전 조회는 초대를 소모하지 않으며 실제 입장 때 잠금·정원·권한을 다시 판정하는 방향을 제안한다. 구체 API 형식·호환성 결정과 구현은 미착수다. 이번에는 요구와 현재 코드를 확인하고 메모리만 갱신했다.
+
+## R-20261113-switch-preparation-implementation
+
+- 기록 시각: 2026-11-13T19:08:34+09:00. 기록자·구현 판단 Codex /root, OOJJRS-PC. 출처: 현재 채팅 01a1d456-5b4b-7df2-ae0c-7817cb3290c4의 사용자 “그 두 기능 구현해”. 개별 발언 시각·항목 ID는 미제공이다. 상태: 구현 진행 중. R-20261113-switch-preparation-gap의 미착수를 대체한다.
+- 구현 결정: 기존 PrepareAsync 시그니처를 유지하고 Room.GetJoinInfoAsync(JoinInfoConfigInterface, JoinInfoResultInterface)를 추가한다. JoinInfo는 RoomId·Title·IsPasswordRequired를 제공한다. 게임은 준비 함수에서 조회 후 입력을 기다리고 null을 반환해 정상 취소할 수 있다. null은 결과 콜백 없이 종료하며 finally에서 전환 게이트를 해제한다. 외부 취소 토큰의 취소 예외 계약은 유지한다.
+- 조회는 Steam·Anonymous의 호스트/서버 초대 권한을 읽기만 하고 UGS는 현재 Lobby 조회 권한과 비밀번호 정책을 유지한다. UGS의 비회원 비공개 방 조회는 서비스 제한을 그대로 반환한다. Steam은 기존 방과 독립된 조회 채널·요청 ID·방 ID·epoch를 사용하고 실제 입장/초대 소모는 하지 않는다. 새 wire 계약에 따라 Steam protocol 5→6을 적용한다. 패키지 버전·Mines 소비 코드는 이번 범위에 포함하지 않는다.
+- 저장소에 연결된 GitHub Projects는 조회 성공 결과 0개다. 문서 새 문구는 추가하지 않으며 기존 API 문서의 null 오류 설명 등은 실제 계약과 차이가 남는다.
+
+## R-20261113-switch-preparation-complete
+
+- 기록 시각: 2026-11-13T19:12:40+09:00. 기록자·구현 및 소스 검토 주체 Codex /root, OOJJRS-PC. 출처·원 요청 주체는 R-20261113-switch-preparation-implementation과 동일하다. 상태: 두 기능의 로컬 소스 구현 완료, 미커밋. 진행 중 상태를 대체한다.
+- 공개 사용법: GetJoinInfoAsync config는 RoomId와 CancellationToken, 성공 콜백은 JoinInfo(RoomId, Title, IsPasswordRequired)다. 기존 PrepareAsync 안에서 호출하고 입력 취소는 null을 반환한다. 이 경우 Join/Exit와 결과 콜백을 호출하지 않고 전환 게이트를 해제한다. 토큰 취소는 기존 OperationCanceledException 계약을 유지한다.
+- Steam: 별도 채널 45832와 요청 ID·대상 호스트·방 ID·epoch를 대응시켜 조회하며 현재 방 필드를 교체하지 않는다. 호스트는 송신 Steam 계정의 확정 초대를 읽고 발송 확정 대기 중인 초대는 처리가 끝날 때까지 응답을 보류한다. 15초 제한, 제한된 대기 요청/peer 집합, 조회 채널만 닫는 정리와 종료 처리를 연결했다. 조회로 초대·구성원 상태를 변경하지 않고 실제 입장 검사는 기존 경로에서 다시 수행한다. 근거 계약: https://partner.steamgames.com/doc/api/ISteamMatchmaking?l=english#RequestLobbyData 와 https://partner.steamgames.com/doc/api/ISteamNetworkingMessages?l=english#CloseChannelWithUser .
+- Anonymous: 인증된 세션 계정으로 초대·기존 멤버 여부를 확인하고 operation 37로 조회한다. 동일 조회 중복은 Busy이며 전송된 응답을 플랫폼 수명 토큰으로 수신한 다음 호출자 취소를 반영해 다음 조회와 응답이 섞이지 않게 한다. UGS는 GetLobbyAsync와 HasPassword를 사용하며 비회원 비공개 Lobby 등 서비스가 거절하는 조회는 기존 분류의 실패로 반환한다. UGS 초대 비밀번호 면제 기능을 추가한 것은 아니다.
+- 검토 범위: 현재 소비자 호출 형태, 세 플랫폼 서비스 구현, 조회 송수신 대응·인증 주체·취소와 자원 수명·초대 비소모 경로를 소스로 대조했다. 컴파일·실계정 네트워크·Unity 실행 결과는 없으며 런타임 성공을 주장하지 않는다. Mines 연동은 해당 채팅의 다음 단계이고 패키지 버전 결정과 문서의 새 API/null 취소 설명은 후속 범위로 남는다. 기존 문서 문구는 변경하지 않았다.
+
+## R-20261113-switch-preparation-version
+
+- 기록 시각: 2026-11-13T19:17:02+09:00. 기록자·버전 판단 주체 Codex /root, OOJJRS-PC. 출처: 현재 채팅 01a1d456-5b4b-7df2-ae0c-7817cb3290c4의 사용자 “올려”와 R-20261113-switch-preparation-complete. 개별 원 발언 시각과 항목 ID는 미제공이다.
+- 버전 결정: 기존 Runtime 파일에 입장 전 조회 API와 준비 취소를 추가했으므로 UnityO 패키지 규칙의 patch를 적용해 1.13.8에서 1.13.9로 올린다. Steam protocol 6은 5와 호환되지 않는다.

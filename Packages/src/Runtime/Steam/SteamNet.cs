@@ -34,6 +34,8 @@ namespace oojjrs.oplat.steam
             InvitationSent = 16,
             InvitationRecorded = 17,
             InvitationCanceled = 18,
+            JoinInfoRequest = 19,
+            JoinInfoResponse = 20,
         }
 
         private enum StateEnum
@@ -164,6 +166,7 @@ namespace oojjrs.oplat.steam
         private const int FieldCountMax = 128;
         private const int FieldKeyByteCountMax = 256;
         private const int FieldValueByteCountMax = 4096;
+        private const int JoinInfoChannel = 45832;
         private const int LaunchCommandLineByteCountMax = 32768;
         private const int LobbySearchResultCountMax = 50;
         private const int MessageByteCountMax = 64 * 1024;
@@ -173,7 +176,7 @@ namespace oojjrs.oplat.steam
         private const int MetadataValueByteCountMax = Constants.k_cubChatMetadataMax - 1;
         private const int MinimumPollingDelaySeconds = 1;
         private const int PlayerCountMax = 250;
-        private const int ProtocolVersion = 5;
+        private const int ProtocolVersion = 6;
         private const int RosterChunkCharacterCount = 7000;
         private const int RosterChunkCountMax = 16;
         private const uint ChatMagic = 0x4f504c48;
@@ -204,6 +207,8 @@ namespace oojjrs.oplat.steam
         private readonly Queue<MyNetRequest> IncomingRequests = new();
         private readonly Queue<MyNetResponse> IncomingResponses = new();
         private readonly HashSet<ulong> _invitedPlayerIds = new();
+        private readonly Dictionary<ulong, float> _joinInfoPeers = new();
+        private readonly Dictionary<Guid, (ulong PlayerId, ulong LobbyId, string Epoch, float ExpiresAt)> _joinInfoRequests = new();
         private readonly Dictionary<ulong, RosterPlayerData> LogicalPlayers = new();
         private readonly object OutgoingRequestLock = new();
         private readonly Queue<MyNetRequest> OutgoingRequests = new();
@@ -234,6 +239,11 @@ namespace oojjrs.oplat.steam
         private bool _isLobbyOperation;
         private bool _isLobbyPolling;
         private bool _isLocked;
+        private string _joinInfoEpoch;
+        private ulong _joinInfoHostId;
+        private ulong _joinInfoLobbyId;
+        private Guid _joinInfoRequestId;
+        private TaskCompletionSource<MyNetRoomServiceInterface.JoinInfo> _joinInfoSource;
         private CancellationTokenSource _lifetimeSource;
         private Callback<LobbyChatMsg_t> _lobbyChatMessageCallback;
         private Callback<LobbyChatUpdate_t> _lobbyChatUpdateCallback;
@@ -375,6 +385,10 @@ namespace oojjrs.oplat.steam
                 source.TrySetCanceled();
 
             PendingLobbyData.Clear();
+            foreach (var peer in _joinInfoPeers.Keys.ToArray())
+                CloseJoinInfoPeer(peer);
+
+            _joinInfoRequests.Clear();
             DisposeSafely(_gameLobbyJoinRequestedCallback);
             DisposeSafely(_gameRichPresenceJoinRequestedCallback);
             DisposeSafely(_lobbyChatMessageCallback);
@@ -415,7 +429,9 @@ namespace oojjrs.oplat.steam
 
             EnsureMainThread();
             DeliverPendingLaunchJoinRequest();
-            ReceiveMessages();
+            ReceiveMessages(MessageChannel);
+            ReceiveMessages(JoinInfoChannel);
+            UpdateJoinInfoRequests();
             FlushResponses();
             FlushPendingBroadcasts();
             HandleResponses();
@@ -1080,6 +1096,112 @@ namespace oojjrs.oplat.steam
                     result.OnException(new MyNetSessionException("Failed to join Steam room.", caughtException));
                 else
                     result.OnOk(room);
+            }
+        }
+
+        public async Task GetRoomJoinInfoAsync(MyNetRoomServiceInterface.JoinInfoConfigInterface config, MyNetRoomServiceInterface.JoinInfoResultInterface result)
+        {
+            EnsureInitialized();
+            if (string.IsNullOrWhiteSpace(config.RoomId))
+            {
+                result.OnFailed(MyNetInterface.CatchInterface.FailureEnum.EmptyRoomId);
+                return;
+            }
+
+            using (var cancellationSource = CreateCancellationSource(config.CancellationToken))
+            {
+                var cancellationToken = cancellationSource.Token;
+                if (await WaitForRoomOperationAsync(true, cancellationToken) == false)
+                {
+                    result.OnBusy();
+                    return;
+                }
+
+                MyNetRoomServiceInterface.JoinInfo info = default;
+                MyNetInterface.CatchInterface.FailureEnum? failure = null;
+                Exception caughtException = null;
+                var isBusy = false;
+                try
+                {
+                    info = await GetRoomJoinInfoCoreAsync(config.RoomId, cancellationToken);
+                }
+                catch (BusyException)
+                {
+                    isBusy = true;
+                }
+                catch (FailureException exception)
+                {
+                    failure = exception.Failure;
+                }
+                catch (Exception exception)
+                {
+                    caughtException = exception;
+                }
+                finally
+                {
+                    OperationGate.Release();
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (isBusy)
+                    result.OnBusy();
+                else if (failure.HasValue)
+                    result.OnFailed(failure.Value);
+                else if (caughtException != null)
+                    result.OnException(new MyNetSessionException("Failed to get Steam room join information.", caughtException));
+                else
+                    result.OnOk(info);
+            }
+        }
+
+        private async Task<MyNetRoomServiceInterface.JoinInfo> GetRoomJoinInfoCoreAsync(string roomId, CancellationToken cancellationToken)
+        {
+            var lobby = ParseLobby(roomId, null);
+            if ((lobby == _currentLobby) && AcceptedPlayerIds.Contains(_localSteamId))
+                return new(lobby.m_SteamID.ToString(), _title, false);
+
+            using (var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            {
+                timeoutSource.CancelAfter(AdmissionTimeoutMilliseconds);
+                try
+                {
+                    if (await RequestLobbyDataAsync(lobby, timeoutSource.Token) == false)
+                        throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
+
+                    if ((SteamMatchmaking.GetLobbyData(lobby, MetadataSchema) != ProtocolVersion.ToString()) || ReadBooleanLobbyData(lobby, MetadataClosed))
+                        throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
+
+                    if (TryParsePlayerId(SteamMatchmaking.GetLobbyData(lobby, MetadataHost), out var host) == false)
+                        throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
+
+                    _joinInfoEpoch = SteamMatchmaking.GetLobbyData(lobby, MetadataEpoch);
+                    if (string.IsNullOrWhiteSpace(_joinInfoEpoch) || (Encoding.UTF8.GetByteCount(_joinInfoEpoch) > 64))
+                        throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom);
+
+                    _joinInfoHostId = host.m_SteamID;
+                    _joinInfoLobbyId = lobby.m_SteamID;
+                    _joinInfoRequestId = Guid.NewGuid();
+                    _joinInfoSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _joinInfoPeers[_joinInfoHostId] = Time.realtimeSinceStartup + AdmissionTimeoutMilliseconds / 1000f;
+                    if (SendJoinInfoMessage(_joinInfoHostId, MessageKind.JoinInfoRequest, _joinInfoLobbyId, _joinInfoEpoch, _joinInfoRequestId.ToByteArray()) == false)
+                        throw new FailureException(MyNetInterface.CatchInterface.FailureEnum.Disconnected);
+
+                    using (timeoutSource.Token.Register(() => _joinInfoSource.TrySetCanceled()))
+                        return await _joinInfoSource.Task;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested == false)
+                {
+                    throw new TimeoutException("Steam room join information timed out.");
+                }
+                finally
+                {
+                    CloseJoinInfoPeer(_joinInfoHostId);
+                    _joinInfoEpoch = null;
+                    _joinInfoHostId = 0;
+                    _joinInfoLobbyId = 0;
+                    _joinInfoRequestId = Guid.Empty;
+                    _joinInfoSource = null;
+                }
             }
         }
 
@@ -2571,9 +2693,17 @@ namespace oojjrs.oplat.steam
 
                 var accepted = false;
                 if ((_state == StateEnum.Host) || (_state == StateEnum.Creating))
-                    accepted = BlockedPlayerIds.Contains(steamId.m_SteamID) == false && IsRawLobbyMember(steamId.m_SteamID);
+                {
+                    if ((BlockedPlayerIds.Contains(steamId.m_SteamID) == false) && (IsRawLobbyMember(steamId.m_SteamID) || (_joinInfoPeers.Count < MessageQueueCountMax)))
+                    {
+                        accepted = true;
+                        _joinInfoPeers[steamId.m_SteamID] = Time.realtimeSinceStartup + AdmissionTimeoutMilliseconds / 1000f;
+                    }
+                }
                 else if ((_state == StateEnum.AwaitingAdmission) || (_state == StateEnum.Member))
+                {
                     accepted = steamId.m_SteamID == _originalHostId;
+                }
 
                 if (accepted)
                     SteamNetworkingMessages.AcceptSessionWithUser(ref identity);
@@ -2589,6 +2719,10 @@ namespace oojjrs.oplat.steam
             var identity = callback.m_info.m_identityRemote;
             var playerId = identity.GetSteamID().m_SteamID;
             SteamNetworkingMessages.CloseChannelWithUser(ref identity, MessageChannel);
+            CloseJoinInfoPeer(playerId);
+            if (playerId == _joinInfoHostId)
+                _joinInfoSource?.TrySetException(new FailureException(MyNetInterface.CatchInterface.FailureEnum.Disconnected));
+
             if ((_state == StateEnum.AwaitingAdmission) && (playerId == _originalHostId))
                 _admissionSource?.TrySetResult(MyNetInterface.CatchInterface.FailureEnum.Disconnected);
 
@@ -2596,10 +2730,10 @@ namespace oojjrs.oplat.steam
                 FailSession(new InvalidOperationException("The Steam peer session failed and delivery of accepted messages is uncertain."));
         }
 
-        private void ReceiveMessages()
+        private void ReceiveMessages(int channel)
         {
             var pointers = new IntPtr[MessagesPerFrameMax];
-            var count = SteamNetworkingMessages.ReceiveMessagesOnChannel(MessageChannel, pointers, pointers.Length);
+            var count = SteamNetworkingMessages.ReceiveMessagesOnChannel(channel, pointers, pointers.Length);
 
             for (var index = 0; index < count; ++index)
             {
@@ -2612,7 +2746,10 @@ namespace oojjrs.oplat.steam
 
                     var data = new byte[message.m_cbSize];
                     Marshal.Copy(message.m_pData, data, 0, data.Length);
-                    HandleMessage(message.m_identityPeer.GetSteamID().m_SteamID, data);
+                    if (channel == JoinInfoChannel)
+                        HandleJoinInfoMessage(message.m_identityPeer.GetSteamID().m_SteamID, data);
+                    else
+                        HandleMessage(message.m_identityPeer.GetSteamID().m_SteamID, data);
                 }
                 catch (Exception exception)
                 {
@@ -2623,6 +2760,117 @@ namespace oojjrs.oplat.steam
                     if (pointer != IntPtr.Zero)
                         SteamNetworkingMessage_t.Release(pointer);
                 }
+            }
+        }
+
+        private void CloseJoinInfoPeer(ulong playerId)
+        {
+            if ((playerId == 0) || (playerId == _localSteamId))
+                return;
+
+            _joinInfoPeers.Remove(playerId);
+            var identity = default(SteamNetworkingIdentity);
+            identity.SetSteamID(new CSteamID(playerId));
+            SteamNetworkingMessages.CloseChannelWithUser(ref identity, JoinInfoChannel);
+        }
+
+        private void HandleJoinInfoMessage(ulong senderId, byte[] data)
+        {
+            if ((TryParsePlayerId(senderId.ToString(), out _) == false) || (TryReadMessage(data, out var kind, out var lobbyId, out var epoch, out var payload) == false))
+                return;
+
+            if (kind == MessageKind.JoinInfoRequest)
+            {
+                if ((payload.Length != 16) || (senderId == _localSteamId) || (_joinInfoRequests.Count >= MessageQueueCountMax) || ((_joinInfoPeers.ContainsKey(senderId) == false) && (_joinInfoPeers.Count >= MessageQueueCountMax)))
+                    return;
+
+                var requestId = new Guid(payload);
+                if ((requestId == Guid.Empty) || (_joinInfoRequests.TryGetValue(requestId, out var existing) && (existing.PlayerId != senderId)))
+                    return;
+
+                var expiresAt = Time.realtimeSinceStartup + AdmissionTimeoutMilliseconds / 1000f;
+                _joinInfoRequests[requestId] = (senderId, lobbyId, epoch, expiresAt);
+                _joinInfoPeers[senderId] = expiresAt;
+            }
+            else if ((kind == MessageKind.JoinInfoResponse) && (_joinInfoSource != null) && (senderId == _joinInfoHostId) && (lobbyId == _joinInfoLobbyId) && (epoch == _joinInfoEpoch))
+            {
+                using (var stream = new MemoryStream(payload, false))
+                {
+                    using (var reader = new BinaryReader(stream, Encoding.UTF8))
+                    {
+                        if (new Guid(reader.ReadBytes(16)) != _joinInfoRequestId)
+                            return;
+
+                        var failure = reader.ReadByte();
+                        var isPasswordRequired = reader.ReadBoolean();
+                        var title = reader.ReadString();
+                        if (stream.Position != stream.Length)
+                            return;
+
+                        if (failure == byte.MaxValue)
+                            _joinInfoSource.TrySetResult(new(lobbyId.ToString(), title, isPasswordRequired));
+                        else if (Enum.IsDefined(typeof(MyNetInterface.CatchInterface.FailureEnum), (int)failure))
+                            _joinInfoSource.TrySetException(new FailureException((MyNetInterface.CatchInterface.FailureEnum)failure));
+                    }
+                }
+            }
+        }
+
+        private bool SendJoinInfoMessage(ulong playerId, MessageKind kind, ulong lobbyId, string epoch, byte[] payload)
+        {
+            var data = WriteMessage(kind, lobbyId, epoch, payload);
+            var identity = default(SteamNetworkingIdentity);
+            identity.SetSteamID(new CSteamID(playerId));
+            var handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+            try
+            {
+                return SteamNetworkingMessages.SendMessageToUser(ref identity, handle.AddrOfPinnedObject(), checked((uint)data.Length), Constants.k_nSteamNetworkingSend_Reliable | Constants.k_nSteamNetworkingSend_AutoRestartBrokenSession, JoinInfoChannel) == EResult.k_EResultOK;
+            }
+            finally
+            {
+                handle.Free();
+            }
+        }
+
+        private void UpdateJoinInfoRequests()
+        {
+            foreach (var pair in _joinInfoRequests.ToArray())
+            {
+                var request = pair.Value;
+                if (Time.realtimeSinceStartup >= request.ExpiresAt)
+                {
+                    _joinInfoRequests.Remove(pair.Key);
+                    continue;
+                }
+
+                MyNetInterface.CatchInterface.FailureEnum? failure = null;
+                if ((_state != StateEnum.Host) || (request.LobbyId != _currentLobby.m_SteamID) || (request.Epoch != _epoch) || (SteamMatchmaking.GetLobbyOwner(_currentLobby).m_SteamID != _localSteamId))
+                    failure = MyNetInterface.CatchInterface.FailureEnum.NotFoundRoom;
+                else if (BlockedPlayerIds.Contains(request.PlayerId))
+                    failure = MyNetInterface.CatchInterface.FailureEnum.NotPermitted;
+                else if (_pendingInvitations.Values.Any(value => value.PlayerId == request.PlayerId))
+                    continue;
+
+                using (var stream = new MemoryStream())
+                {
+                    using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
+                    {
+                        writer.Write(pair.Key.ToByteArray());
+                        writer.Write(failure.HasValue ? (byte)failure.Value : byte.MaxValue);
+                        writer.Write((failure.HasValue == false) && (string.IsNullOrEmpty(_password) == false) && (_invitedPlayerIds.Contains(request.PlayerId) == false) && (AcceptedPlayerIds.Contains(request.PlayerId) == false));
+                        writer.Write(failure.HasValue ? string.Empty : _title);
+                    }
+
+                    SendJoinInfoMessage(request.PlayerId, MessageKind.JoinInfoResponse, request.LobbyId, request.Epoch, stream.ToArray());
+                }
+
+                _joinInfoRequests.Remove(pair.Key);
+            }
+
+            foreach (var peer in _joinInfoPeers.ToArray())
+            {
+                if (Time.realtimeSinceStartup >= peer.Value)
+                    CloseJoinInfoPeer(peer.Key);
             }
         }
 
@@ -3088,7 +3336,7 @@ namespace oojjrs.oplat.steam
             if ((_currentLobby.m_SteamID == 0) || (playerId == 0) || (playerId == _localSteamId))
                 return false;
 
-            var data = WriteMessage(kind, payload);
+            var data = WriteMessage(kind, _currentLobby.m_SteamID, _epoch, payload);
             var identity = default(SteamNetworkingIdentity);
             identity.SetSteamID(new CSteamID(playerId));
             var handle = GCHandle.Alloc(data, GCHandleType.Pinned);
@@ -3114,7 +3362,7 @@ namespace oojjrs.oplat.steam
             }
         }
 
-        private byte[] WriteMessage(MessageKind kind, byte[] payload)
+        private static byte[] WriteMessage(MessageKind kind, ulong lobbyId, string epoch, byte[] payload)
         {
             payload ??= Array.Empty<byte>();
             using (var stream = new MemoryStream())
@@ -3124,8 +3372,8 @@ namespace oojjrs.oplat.steam
                     writer.Write(MessageMagic);
                     writer.Write((byte)ProtocolVersion);
                     writer.Write((byte)kind);
-                    writer.Write(_currentLobby.m_SteamID);
-                    writer.Write(_epoch);
+                    writer.Write(lobbyId);
+                    writer.Write(epoch);
                     writer.Write(payload.Length);
                     writer.Write(payload);
                 }
@@ -3155,7 +3403,7 @@ namespace oojjrs.oplat.steam
                         return false;
 
                     kind = (MessageKind)reader.ReadByte();
-                    if ((kind < MessageKind.AdmissionRequest) || (kind > MessageKind.InvitationCanceled))
+                    if ((kind < MessageKind.AdmissionRequest) || (kind > MessageKind.JoinInfoResponse))
                         return false;
 
                     lobbyId = reader.ReadUInt64();

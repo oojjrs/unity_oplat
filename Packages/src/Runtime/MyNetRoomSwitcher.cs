@@ -164,9 +164,9 @@ namespace oojjrs.oplat
                 var preparation = await handler.PrepareAsync(playerId, roomId, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (preparation == null)
-                    operationResult = OperationResult.FromException("Room switch preparation returned no configuration.", new InvalidOperationException());
-                else
-                    operationResult = await SwitchCoreAsync(new RequestJoinConfig(cancellationToken, roomId, preparation));
+                    return;
+
+                operationResult = await SwitchCoreAsync(new RequestJoinConfig(cancellationToken, roomId, preparation));
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
